@@ -22,23 +22,41 @@ OSVERSION=${OSVERSION:=@OSVERSION@}
 
 REPOSITORY=https://github.com/vortexgpgpu/vortex-toolchain-prebuilt/raw/${TOOLCHAIN_REV}
 
+# Download <name>.tar.bz2 from <dir>, published whole or as the parts
+# ci/toolchain_prebuilt.sh's `split -b 50M` wrote (.partaa, .partab, ...),
+# and leave it whole in the current directory. Parts are fetched in order
+# until the server answers 404 (wget exit 8), so the count follows the
+# release instead of being hard-coded here. A missing first part, or any
+# other wget failure, is an error.
+fetch_parts()
+{
+    local name=$1 dir=$2 x rc
+    rm -f $name.tar.bz2 $name.tar.bz2.parta*
+    for x in {a..z}; do
+        rc=0
+        wget $REPOSITORY/$dir/$name.tar.bz2.parta$x || rc=$?
+        if [ $rc -ne 0 ]; then
+            rm -f $name.tar.bz2.parta$x
+            if [ $rc -eq 8 ] && [ $x != a ]; then
+                break
+            fi
+            echo "error: $name: cannot fetch $REPOSITORY/$dir/$name.tar.bz2.parta$x (wget exit $rc)"
+            exit 1
+        fi
+    done
+    cat $name.tar.bz2.parta* > $name.tar.bz2
+    rm -f $name.tar.bz2.parta*
+}
+
 riscv32()
 {
     # The focal build only needs glibc 2.14, so EL9 reuses it (the centos/7
     # bundle is GCC 13, whose newlib no longer defines HAVE_INITFINI_ARRAY).
     osdir=$OSVERSION
     case $OSVERSION in
-    "centos/7") parts=$(eval echo {a..l}) ;;
-    "ubuntu/bionic") parts=$(eval echo {a..j}) ;;
-    "rhel/9")   osdir=ubuntu/focal; parts=$(eval echo {a..k}) ;;
-    *)          parts=$(eval echo {a..k}) ;;
+    "rhel/9")   osdir=ubuntu/focal ;;
     esac
-    rm -f riscv32-gnu-toolchain.tar.bz2.parta*
-    for x in $parts
-    do
-        wget $REPOSITORY/riscv32-gnu-toolchain/$osdir/riscv32-gnu-toolchain.tar.bz2.parta$x
-    done
-    cat riscv32-gnu-toolchain.tar.bz2.parta* > riscv32-gnu-toolchain.tar.bz2
+    fetch_parts riscv32-gnu-toolchain riscv32-gnu-toolchain/$osdir
     tar -xvf riscv32-gnu-toolchain.tar.bz2
     mkdir -p $TOOLDIR && rm -rf $TOOLDIR/riscv32-gnu-toolchain && mv riscv32-gnu-toolchain $TOOLDIR
     rm -rf riscv32-gnu-toolchain.tar.bz2*
@@ -49,16 +67,9 @@ riscv64()
     # See riscv32: EL9 reuses the focal build.
     osdir=$OSVERSION
     case $OSVERSION in
-    "centos/7") parts=$(eval echo {a..l}) ;;
-    "rhel/9")   osdir=ubuntu/focal; parts=$(eval echo {a..j}) ;;
-    *)          parts=$(eval echo {a..j}) ;;
+    "rhel/9")   osdir=ubuntu/focal ;;
     esac
-    rm -f riscv64-gnu-toolchain.tar.bz2.parta*
-    for x in $parts
-    do
-        wget $REPOSITORY/riscv64-gnu-toolchain/$osdir/riscv64-gnu-toolchain.tar.bz2.parta$x
-    done
-    cat riscv64-gnu-toolchain.tar.bz2.parta* > riscv64-gnu-toolchain.tar.bz2
+    fetch_parts riscv64-gnu-toolchain riscv64-gnu-toolchain/$osdir
     tar -xvf riscv64-gnu-toolchain.tar.bz2
     mkdir -p $TOOLDIR && rm -rf $TOOLDIR/riscv64-gnu-toolchain && mv riscv64-gnu-toolchain $TOOLDIR
     rm -rf riscv64-gnu-toolchain riscv64-gnu-toolchain.tar.bz2*
@@ -66,17 +77,7 @@ riscv64()
 
 llvm()
 {
-    case $OSVERSION in
-    "centos/7") parts=$(eval echo {a..c}) ;;
-    *)          parts=$(eval echo {a..c}) ;;
-    esac
-    echo $parts
-    rm -f llvm-vortex.tar.bz2.parta*
-    for x in $parts
-    do
-        wget $REPOSITORY/llvm-vortex/$OSVERSION/llvm-vortex.tar.bz2.parta$x
-    done
-    cat llvm-vortex.tar.bz2.parta* > llvm-vortex.tar.bz2
+    fetch_parts llvm-vortex llvm-vortex/$OSVERSION
     tar -xvf llvm-vortex.tar.bz2
     mkdir -p $TOOLDIR && rm -rf $TOOLDIR/llvm-vortex && mv llvm-vortex $TOOLDIR
     rm -rf llvm-vortex llvm-vortex.tar.bz2*
@@ -149,23 +150,7 @@ mesa()
 
 verilator()
 {
-    # Tracks what ci/toolchain_prebuilt.sh's `split -b 50M` actually produced
-    # for this release: 5.050 compresses to ~114 MB, so three parts. A letter too
-    # many here is a 404 on the wget below; too few silently truncates the
-    # archive, and a stale part left behind in the prebuilt repo corrupts the one
-    # `cat parta*` rebuilds. This count and the published parts move together --
-    # re-check it whenever the verilator prebuilt is refreshed.
-    case $OSVERSION in
-    "ubuntu/focal"|"rhel/9") parts=$(eval echo {a..c}) ;;
-    *)                       parts=$(eval echo {a..a}) ;;
-    esac
-    echo $parts
-    rm -f verilator.tar.bz2.parta*
-    for x in $parts
-    do
-        wget $REPOSITORY/verilator/$OSVERSION/verilator.tar.bz2.parta$x
-    done
-    cat verilator.tar.bz2.parta* > verilator.tar.bz2
+    fetch_parts verilator verilator/$OSVERSION
     tar -xvf verilator.tar.bz2
     mkdir -p $TOOLDIR && rm -rf $TOOLDIR/verilator && mv verilator $TOOLDIR
     rm -rf verilator verilator.tar.bz2*
@@ -174,19 +159,7 @@ verilator()
 # circt-opt, firtool), packaged in parts as verilator is.
 circt()
 {
-    # The count of what ci/toolchain_prebuilt.sh's `split -b 50M` produced for
-    # this release, as for verilator: re-check it whenever the circt prebuilt
-    # is refreshed. v3.0.1's bundle is 51.2 MB, one part.
-    case $OSVERSION in
-    *)  parts=$(eval echo {a..a}) ;;
-    esac
-    echo $parts
-    rm -f circt.tar.bz2.parta*
-    for x in $parts
-    do
-        wget $REPOSITORY/circt/$OSVERSION/circt.tar.bz2.parta$x
-    done
-    cat circt.tar.bz2.parta* > circt.tar.bz2
+    fetch_parts circt circt/$OSVERSION
     tar -xvf circt.tar.bz2
     mkdir -p $TOOLDIR && rm -rf $TOOLDIR/circt && mv circt $TOOLDIR
     rm -rf circt circt.tar.bz2*
@@ -214,17 +187,7 @@ beacon()
 
 yosys()
 {
-    case $OSVERSION in
-    "centos/7") parts=$(eval echo {a..a}) ;;
-    *)          parts=$(eval echo {a..a}) ;;
-    esac
-    echo $parts
-    rm -f yosys.tar.bz2.parta*
-    for x in $parts
-    do
-        wget $REPOSITORY/yosys/$OSVERSION/yosys.tar.bz2.parta$x
-    done
-    cat yosys.tar.bz2.parta* > yosys.tar.bz2
+    fetch_parts yosys yosys/$OSVERSION
     tar -xvf yosys.tar.bz2
     mkdir -p $TOOLDIR && rm -rf $TOOLDIR/yosys && mv yosys $TOOLDIR
     rm -rf yosys yosys.tar.bz2*
