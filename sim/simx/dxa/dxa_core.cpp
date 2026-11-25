@@ -723,8 +723,10 @@ private:
     constexpr uint64_t kRowMask = ~uint64_t(DxaCore::LMEM_ROW_SIZE - 1);
     uint64_t beat_row = UINT64_MAX;
   #ifdef VX_CFG_DXA_SCATTER_COALESCE
-    // Each LMEM DMA channel takes one block write per beat.
+    // Each LMEM DMA channel takes one block write per beat; a tiled scatter
+    // beat ends at beat_e_end, the first element past its run.
     uint32_t used_halves = 0;
+    uint32_t beat_e_end  = UINT32_MAX;
   #endif
 
     for (uint32_t emitted = 0; emitted < DxaCore::LMEM_PORTS_PER_CORE; ++emitted) {
@@ -813,10 +815,24 @@ private:
       // A contiguous span is one write; a scatter span writes element e0.
       const bool     beat_scatter = lw.scatter;
     #ifdef VX_CFG_DXA_SCATTER_COALESCE
-      // Coalesced scatter: one write carries every consecutive element of
-      // the line that lands in this block, under a byte mask (the loop below
-      // stops at the first element outside the block or the beat's row).
-      const uint32_t e_end = num_elems;
+      // Tiled (Flat/BlockMajor) destinations advance by a power-of-two step
+      // (Flat only within an n-block), so a beat carries the run of
+      // consecutive elements that land in this LMEM row, as the RTL drains
+      // it; K-major keeps one element per beat. The loop below also stops at
+      // the end of this block.
+      const bool coalesce = beat_scatter && tiled;
+      if (beat_e_end == UINT32_MAX) {
+        beat_e_end = num_elems;
+        if (beat_scatter && !tiled) {
+          beat_e_end = e0 + 1;
+        } else if (coalesce && DestLayout(lw.dest_layout) == DestLayout::Flat) {
+          uint32_t n_in = (lw.tile_n_base + e0) % t_tcN;
+          beat_e_end = std::min(num_elems, e0 + (t_tcN - n_in));
+        }
+      } else if (e0 >= beat_e_end) {
+        break; // the run ended at an n-block boundary
+      }
+      const uint32_t e_end = beat_scatter ? std::min(num_elems, beat_e_end) : num_elems;
     #else
       const uint32_t e_end = beat_scatter ? (e0 + 1) : num_elems;
     #endif
@@ -887,9 +903,12 @@ private:
         break; // a scatter beat writes one element
       }
     #else
-      // A coalesced scatter beat goes on to the line's next block run if it
-      // lies in the same LMEM row and on a free channel (checked above).
-      (void)beat_scatter;
+      // A coalesced run goes on to its next block if that lies in the same
+      // LMEM row and on a free channel (checked above); it never spans two
+      // lines or two multicast receivers.
+      if (beat_scatter && (!coalesce || is_last_elem)) {
+        break;
+      }
     #endif
     } // per-tick row-beat emission loop
   }
