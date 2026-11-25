@@ -48,15 +48,16 @@ module VX_decode import
     reg is_wstall;
 
 `ifdef VX_CFG_EXT_RWIN_ENABLE
-    // A vx_rwin fetched with the instruction after it is applied and that
-    // instruction decoded in the same step (fused fetch).
+    // A vx_rwin or vx_rpfx fetched with the instruction after it is applied
+    // and that instruction decoded in the same step (fused fetch).
     wire [31:0] instr0 = fetch_if.data.instr;
-    wire is_rwin0 = (instr0[6:0] == INST_EXT3) && (instr0[31:25] == 7'h01);
+    wire is_pfx0  = (instr0[6:0] == INST_EXT3) && (instr0[31:25] == 7'h02);
+    wire is_rwin0 = ((instr0[6:0] == INST_EXT3) && (instr0[31:25] == 7'h01)) || is_pfx0;
     `ifndef VX_CFG_EXT_C_ENABLE
     wire [31:0] instr2 = fetch_if.data.instr2;
-    // the pair fuses unless the second word is absent or another vx_rwin
+    // the pair fuses unless the second word is absent or another window write
     wire rwin_fused = is_rwin0 && (instr2 != 32'd0)
-                   && ~((instr2[6:0] == INST_EXT3) && (instr2[31:25] == 7'h01));
+                   && ~((instr2[6:0] == INST_EXT3) && (instr2[31:25] == 7'h01 || instr2[31:25] == 7'h02));
     wire [31:0] instr = rwin_fused ? instr2 : instr0;
     `else
     wire rwin_fused = 1'b0;
@@ -264,18 +265,30 @@ module VX_decode import
 
 `ifdef VX_CFG_EXT_RWIN_ENABLE
     // vx_rwin (custom-2, funct7 1) sets the warp's windows for the rd, rs1,
-    // rs2 and rs3 fields; decode consumes it, so it never reaches the ibuffer
+    // rs2 and rs3 fields; vx_rpfx (funct7 2) gives them to the next instruction
+    // only. Decode consumes both, so neither reaches the ibuffer.
     localparam RWIN_W = 4 * RWIN_BITS;
-    // a fused vx_rwin yields the instruction after it; an unfused one is dropped
+    // a fused write yields the instruction after it; an unfused one is dropped
     wire is_rwin = is_rwin0 && ~rwin_fused;
     wire [RWIN_W-1:0] rwin_new = {instr0[12 +: RWIN_BITS], instr0[20 +: RWIN_BITS], instr0[15 +: RWIN_BITS], instr0[7 +: RWIN_BITS]};
     reg [`VX_CFG_NUM_WARPS-1:0][RWIN_W-1:0] rwin_r;
-    wire [RWIN_W-1:0] rwin_cur = rwin_fused ? rwin_new : rwin_r[fetch_if.data.wid];
+    // an unfused prefix waits for its warp's next instruction
+    reg [`VX_CFG_NUM_WARPS-1:0][RWIN_W-1:0] pfx_r;
+    reg [`VX_CFG_NUM_WARPS-1:0] pfx_valid_r;
+    wire [RWIN_W-1:0] rwin_cur = rwin_fused ? rwin_new
+                               : (pfx_valid_r[fetch_if.data.wid] ? pfx_r[fetch_if.data.wid] : rwin_r[fetch_if.data.wid]);
     always @(posedge clk) begin
         if (reset) begin
-            rwin_r <= '0;
-        end else if (fetch_if.valid && fetch_if.ready && is_rwin0) begin
-            rwin_r[fetch_if.data.wid] <= rwin_new;
+            rwin_r      <= '0;
+            pfx_valid_r <= '0;
+        end else if (fetch_if.valid && fetch_if.ready) begin
+            if (is_rwin0 && ~is_pfx0) begin
+                rwin_r[fetch_if.data.wid] <= rwin_new;
+            end
+            pfx_valid_r[fetch_if.data.wid] <= is_pfx0 && ~rwin_fused;
+            if (is_pfx0) begin
+                pfx_r[fetch_if.data.wid] <= rwin_new;
+            end
         end
     end
     // each field's window is applied as the field is extracted, beside the
