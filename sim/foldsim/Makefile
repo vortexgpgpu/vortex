@@ -12,8 +12,10 @@ SRC_DIR := $(VORTEX_HOME)/sim/foldsim
 FOLDSIM_RTL_DIR := $(FOLDSIM_SHELL)/rtl
 WORK_DIR := $(DESTDIR)/foldsim_emul
 GEN_SV := $(WORK_DIR)/gen/foldsim_sim.sv
-# The kernel's memory ports, as the image's flow derived them.
+# The kernel's memory ports, as the image's flow derived them, and its source
+# list (the simulator, the shell's endpoints and the kernel's generated top).
 KERNEL_VH := $(WORK_DIR)/gen/foldsim_kernel.vh
+KERNEL_SRCS := $(WORK_DIR)/kernel_srcs.f
 
 CONFIG_FILE := $(DESTDIR)/foldsim_emul_config.stamp
 
@@ -36,9 +38,7 @@ VL_FLAGS += -j $(THREADS)
 TOP := foldsim_afu
 # The simulation models of the Xilinx floating-point cores the simulator may
 # instantiate (its FPU of type DSP): Verilator cannot run their netlists.
-RTL_SRCS := $(SRC_DIR)/xilinx_fp_models.sv $(GEN_SV) $(FOLDSIM_RTL_DIR)/foldsim_token.sv \
-            $(FOLDSIM_RTL_DIR)/foldsim_mem_bmap.sv $(FOLDSIM_RTL_DIR)/foldsim_mem_bank.sv \
-            $(FOLDSIM_RTL_DIR)/foldsim_mem.sv $(FOLDSIM_RTL_DIR)/foldsim_ctrl.sv $(FOLDSIM_RTL_DIR)/foldsim_afu.sv
+RTL_SRCS := $(SRC_DIR)/xilinx_fp_models.sv -f $(KERNEL_SRCS)
 SRCS := $(FOLDSIM_SHELL)/emul/foldsim_emul.cpp $(DPI_DIR)/dpi_float.cpp $(DPI_DIR)/dpi_util.cpp \
         $(SW_COMMON_DIR)/softfloat_ext.cpp $(SW_COMMON_DIR)/rvfloats.cpp
 
@@ -60,7 +60,7 @@ $(GEN_SV): force
 $(DESTDIR)/$(PROJECT): $(GEN_SV) $(SRCS) $(SRC_DIR)/xilinx_fp_models.sv $(wildcard $(FOLDSIM_RTL_DIR)/*) \
 		$(FOLDSIM_SHELL)/include/foldsim_emul.h $(CONFIG_FILE)
 	$(VERILATOR_PATH)/bin/verilator --build --exe $(VL_FLAGS) --cc $(RTL_SRCS) --top-module $(TOP) \
-		$(SRCS) -CFLAGS '$(CXXFLAGS) -DFOLDSIM_MEM_PORTS='$$(sed -n 's/^`define FOLDSIM_MEM_PORTS //p' $(KERNEL_VH)) \
+		$(SRCS) -CFLAGS '$(CXXFLAGS) -DFOLDSIM_MEM_MASTERS='$$(sed -n 's/^`define FOLDSIM_MEM_MASTERS //p' $(KERNEL_VH)) \
 		-LDFLAGS '$(LDFLAGS)' --Mdir $@.obj_dir -o $@
 
 $(CONFIG_FILE): force

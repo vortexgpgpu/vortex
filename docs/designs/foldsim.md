@@ -226,17 +226,24 @@ chosen per image from a Verilator run.
 
 ## 4. The kernel
 
-The shell's `rtl/foldsim_afu.sv` has the native V80 kernel's ports but for
-the host-memory master: `s_axi_control` and one device-memory master
+The kernel's top, `gen/foldsim_afu.sv`, has the native V80 kernel's ports but
+for the host-memory master: `s_axi_control` and one device-memory master
 `m_axi_mem_<p>` per memory port of the target, each linked to the `MEM` HBM
-aperture (the linker gives each its own way in). The target has as many
+aperture (the linker gives each its own way in). Foldsim's own flow writes it
+and the rest of the kernel (`foldsim_flow.py`, beside the driver): `afu` fills
+the shell's `rtl/foldsim_afu.sv.in` with the control endpoint bound to the
+target's ports, which carry the endpoint's own names (`reset`, `start`,
+`busy`, `dcr_req_*`, `dcr_rsp_*`); `kernel-vh` writes `gen/foldsim_kernel.vh`;
+`kernel-srcs` writes the source list (`kernel_srcs.f`) the image and the
+in-process simulator (`sim/foldsim`) both build from. The target has as many
 memory ports as its configuration has platform memory banks
 (`VX_CFG_PLATFORM_MEMORY_NUM_BANKS`: 1, 2, 4 or 8; `VX_config.toml`'s 2 unless
-`CONFIGS` sets it); the flow writes their number, the shift to a port's
-channel, their AXI id width and `FOLDSIM_MEM_REPEAT`, which lists the ports
-whose names carry their index, into `gen/foldsim_kernel.vh` (spelled out, as
-Vivado's IP packager does not paste an expanded macro argument into a macro
-name). It instantiates `foldsim_sim`, a
+`CONFIGS` sets it); `hw/syn/foldsim` passes their number, the shift to a
+port's channel and their AXI id width, and the header holds them, their
+device-memory masters (`FOLDSIM_MEM_MASTERS`) and the repeat macros that list
+the ports whose names carry their index (spelled out, as Vivado's IP packager
+does not paste an expanded macro argument into a macro name). It instantiates
+`foldsim_sim`, a
 memory endpoint per port and the control endpoint, all models of the target's
 surroundings that take one token per channel per target cycle
 (`foldsim_token.sv`):
