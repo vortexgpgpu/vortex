@@ -14,9 +14,9 @@
 `include "VX_define.vh"
 
 // Synthesis wrapper of the warp-wide local memory at the configured core
-// shape: one warp request port per LSU block, and the row-wide DMA port. The
-// requests arrive through a register each, as from the LSU blocks' local-path
-// buffers and the DMA arbiter in the core; out-of-context synthesis leaves
+// shape: one warp request port per LSU block, and the row-wide DMA write and
+// read ports. The requests arrive through a register each, as from the LSU
+// blocks' local-path buffers and the DMA agents; out-of-context synthesis leaves
 // paths from the ports untimed, so this is what puts the unit's request
 // decoding on the timing report.
 module VX_lmem_unit_top import VX_gpu_pkg::*; #(
@@ -31,7 +31,7 @@ module VX_lmem_unit_top import VX_gpu_pkg::*; #(
     parameter WORD_WIDTH   = WORD_SIZE * 8,
     parameter DMA_ADDR_WIDTH = ADDR_WIDTH - `CLOG2(NUM_BANKS),
     parameter DMA_DATA_SIZE  = NUM_BANKS * WORD_SIZE,
-    parameter DMA_TAG_WIDTH  = LMEM_DMA_TAG_WIDTH
+    parameter DMA_TAG_WIDTH  = LMEM_DMA_RD_TAG_W
 ) (
     input wire clk,
     input wire reset,
@@ -54,7 +54,17 @@ module VX_lmem_unit_top import VX_gpu_pkg::*; #(
     output wire [NUM_BLOCKS-1:0][TAG_WIDTH-1:0]                    rsp_tag,
     input  wire [NUM_BLOCKS-1:0]                                   rsp_ready,
 
-    // DMA requests
+    // DMA row writes
+    input  wire                                                    dma_wr_valid,
+    input  wire                                                    dma_wr_rw,
+    input  wire [DMA_ADDR_WIDTH-1:0]                               dma_wr_addr,
+    input  wire [DMA_DATA_SIZE*8-1:0]                              dma_wr_data,
+    input  wire [DMA_DATA_SIZE-1:0]                                dma_wr_byteen,
+    input  wire [MEM_ATTR_WIDTH-1:0]                               dma_wr_attr,
+    input  wire [DMA_TAG_WIDTH-1:0]                                dma_wr_tag,
+    output wire                                                    dma_wr_ready,
+
+    // DMA row reads
     input  wire                                                    dma_req_valid,
     input  wire                                                    dma_req_rw,
     input  wire [DMA_ADDR_WIDTH-1:0]                               dma_req_addr,
@@ -63,7 +73,7 @@ module VX_lmem_unit_top import VX_gpu_pkg::*; #(
     input  wire [DMA_TAG_WIDTH-1:0]                                dma_req_tag,
     output wire                                                    dma_req_ready,
 
-    // DMA responses
+    // DMA row-read responses
     output wire                                                    dma_rsp_valid,
     output wire [DMA_DATA_SIZE*8-1:0]                              dma_rsp_data,
     output wire [DMA_TAG_WIDTH-1:0]                                dma_rsp_tag,
@@ -82,7 +92,13 @@ module VX_lmem_unit_top import VX_gpu_pkg::*; #(
         .DATA_SIZE  (NUM_BANKS * WORD_SIZE),
         .TAG_WIDTH  (DMA_TAG_WIDTH),
         .ADDR_WIDTH (DMA_ADDR_WIDTH)
-    ) dma_bus_if();
+    ) dma_wr_if();
+
+    VX_mem_bus_if #(
+        .DATA_SIZE  (NUM_BANKS * WORD_SIZE),
+        .TAG_WIDTH  (DMA_TAG_WIDTH),
+        .ADDR_WIDTH (DMA_ADDR_WIDTH)
+    ) dma_rd_if();
 
     for (genvar k = 0; k < NUM_BLOCKS; ++k) begin : g_blocks
         wire [NUM_LANES-1:0][LSU_ADDR_WIDTH-1:0] lsu_addr;
@@ -114,21 +130,39 @@ module VX_lmem_unit_top import VX_gpu_pkg::*; #(
     VX_elastic_buffer #(
         .DATAW   (DMA_REQ_DATAW),
         .SIZE    (1)
-    ) dma_req_buf (
+    ) dma_wr_buf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (dma_wr_valid),
+        .ready_in  (dma_wr_ready),
+        .data_in   ({dma_wr_rw, dma_wr_addr, dma_wr_data, dma_wr_byteen, dma_wr_attr, dma_wr_tag}),
+        .data_out  (dma_wr_if.req_data),
+        .valid_out (dma_wr_if.req_valid),
+        .ready_out (dma_wr_if.req_ready)
+    );
+
+    `UNUSED_VAR (dma_wr_if.rsp_valid)
+    `UNUSED_VAR (dma_wr_if.rsp_data)
+    assign dma_wr_if.rsp_ready = 1'b0;
+
+    VX_elastic_buffer #(
+        .DATAW   (DMA_REQ_DATAW),
+        .SIZE    (1)
+    ) dma_rd_buf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (dma_req_valid),
         .ready_in  (dma_req_ready),
         .data_in   ({dma_req_rw, dma_req_addr, dma_req_data, dma_req_byteen, MEM_ATTR_WIDTH'(0), dma_req_tag}),
-        .data_out  (dma_bus_if.req_data),
-        .valid_out (dma_bus_if.req_valid),
-        .ready_out (dma_bus_if.req_ready)
+        .data_out  (dma_rd_if.req_data),
+        .valid_out (dma_rd_if.req_valid),
+        .ready_out (dma_rd_if.req_ready)
     );
 
-    assign dma_rsp_valid              = dma_bus_if.rsp_valid;
-    assign dma_rsp_data               = dma_bus_if.rsp_data.data;
-    assign dma_rsp_tag                = dma_bus_if.rsp_data.tag;
-    assign dma_bus_if.rsp_ready       = dma_rsp_ready;
+    assign dma_rsp_valid              = dma_rd_if.rsp_valid;
+    assign dma_rsp_data               = dma_rd_if.rsp_data.data;
+    assign dma_rsp_tag                = dma_rd_if.rsp_data.tag;
+    assign dma_rd_if.rsp_ready        = dma_rsp_ready;
 
     VX_lmem_unit #(
         .INSTANCE_ID (INSTANCE_ID),
@@ -139,7 +173,8 @@ module VX_lmem_unit_top import VX_gpu_pkg::*; #(
         .WORD_SIZE   (WORD_SIZE),
         .ADDR_WIDTH  (ADDR_WIDTH),
         .TAG_WIDTH   (TAG_WIDTH),
-        .DMA_ENABLE  (1),
+        .DMA_WR_ENABLE (1),
+        .DMA_RD_ENABLE (1),
         .DMA_TAG_WIDTH (DMA_TAG_WIDTH),
         .AMO_ENABLE  (`VX_CFG_EXT_A_ENABLED)
     ) lmem_unit (
@@ -149,7 +184,8 @@ module VX_lmem_unit_top import VX_gpu_pkg::*; #(
         `UNUSED_PIN (lmem_perf),
     `endif
         .lsu_mem_if (lsu_mem_if),
-        .dma_bus_if (dma_bus_if)
+        .dma_wr_if  (dma_wr_if),
+        .dma_rd_if  (dma_rd_if)
     );
 
 endmodule

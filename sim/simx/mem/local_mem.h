@@ -38,7 +38,7 @@ public:
     uint32_t num_blocks;  // LSU blocks, one warp request port each
     uint32_t num_lanes;   // lanes of a warp request
     uint32_t B;           // log2 number of banks
-    uint32_t dma_clients; // row-wide DMA masters, served round-robin
+    uint32_t dma_clients; // row-wide DMA agents, each only writing or only reading
   };
 
   struct PerfStats {

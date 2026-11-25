@@ -76,6 +76,17 @@
     "configs": "-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
+  "dxa:perf_gate-wgmma-dxa-lsu2:rtlsim": {
+    "32": {
+      "cycles": 39409,
+      "instrs": 6840
+    },
+    "app": "sgemm_tcu_wg_dxa",
+    "args": "-m 128 -n 128 -k 64",
+    "config_hash": "356c9b06ad8350ee",
+    "configs": "-DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=2 -DVX_CFG_NUM_FPU_BLOCKS=1 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_NUM_THREADS=32",
+    "driver": "rtlsim"
+  },
   "dxa:perf_gate-wgmma-dxa-mcast-nt16:rtlsim": {
     "32": {
       "cycles": 79428,

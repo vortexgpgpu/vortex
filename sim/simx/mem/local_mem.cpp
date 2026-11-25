@@ -109,8 +109,8 @@ protected:
   Selection a_sel_;
   Selection b_sel_;
   bool      write_waiting_r_;
-  bool      dma_slot_;
-  uint32_t  dma_last_grant_;
+  bool      dma_slot_;          // a DMA request was seen the cycle before
+  bool      dma_rd_first_;      // the shared port's round-robin choice
   mutable PerfStats perf_stats_;
 
   uint64_t to_local_addr(uint64_t addr) const {
@@ -247,60 +247,105 @@ protected:
     return false;
   }
 
-  // Serve one DMA client's row access. Clients are served round-robin,
-  // starting after the last one served.
-  void dma_fire() {
-    for (uint32_t i = 0; i < config_.dma_clients; ++i) {
-      uint32_t c = (dma_last_grant_ + 1 + i) % config_.dma_clients;
-      bool pending = false;
-      bool rsp_ready = true;
-      for (uint32_t p = 0; p < DMA_PORTS; ++p) {
-        auto& in = simobject_->DmaInputs.at(c * DMA_PORTS + p);
-        if (in.empty()) {
-          continue;
-        }
-        pending = true;
-        if (!in.peek().is_write() && simobject_->DmaOutputs.at(c * DMA_PORTS + p).full()) {
-          rsp_ready = false;
-        }
+  bool dma_client_pending(uint32_t c) const {
+    for (uint32_t p = 0; p < DMA_PORTS; ++p) {
+      if (!simobject_->DmaInputs.at(c * DMA_PORTS + p).empty()) {
+        return true;
       }
-      if (!pending) {
+    }
+    return false;
+  }
+
+  // A client's row: a write, or a read with room for its response.
+  bool dma_client_ready(uint32_t c, bool* is_write) const {
+    bool ready = true;
+    for (uint32_t p = 0; p < DMA_PORTS; ++p) {
+      auto& in = simobject_->DmaInputs.at(c * DMA_PORTS + p);
+      if (in.empty()) {
         continue;
       }
-      if (!rsp_ready) {
-        return;
+      *is_write = in.peek().is_write();
+      if (!*is_write && simobject_->DmaOutputs.at(c * DMA_PORTS + p).full()) {
+        ready = false;
       }
-      for (uint32_t p = 0; p < DMA_PORTS; ++p) {
-        auto& in = simobject_->DmaInputs.at(c * DMA_PORTS + p);
-        if (in.empty()) {
-          continue;
-        }
-        auto& req = in.peek();
-        uint64_t line_addr = to_local_addr(req.addr) & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
-        if (req.is_write()) {
-          for (uint32_t b = 0; req.data && b < VX_CFG_MEM_BLOCK_SIZE; ++b) {
-            if (req.byteen & (1ull << b)) {
-              uint8_t value = (*req.data)[b];
-              ram_.write(&value, line_addr + b, 1);
-            }
+    }
+    return ready;
+  }
+
+  // Serve one DMA client's row access.
+  void dma_serve(uint32_t c) {
+    for (uint32_t p = 0; p < DMA_PORTS; ++p) {
+      auto& in = simobject_->DmaInputs.at(c * DMA_PORTS + p);
+      if (in.empty()) {
+        continue;
+      }
+      auto& req = in.peek();
+      uint64_t line_addr = to_local_addr(req.addr) & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
+      if (req.is_write()) {
+        for (uint32_t b = 0; req.data && b < VX_CFG_MEM_BLOCK_SIZE; ++b) {
+          if (req.byteen & (1ull << b)) {
+            uint8_t value = (*req.data)[b];
+            ram_.write(&value, line_addr + b, 1);
           }
-#if VX_CFG_EXT_A_ENABLED
-          amo_unit_.invalidate(to_local_addr(req.addr), req.hart_id);
-#endif
-        } else {
-          MemRsp rsp{req.tag, req.hart_id, req.uuid};
-          auto rsp_data = make_mem_block();
-          ram_.read(rsp_data->data(), line_addr, VX_CFG_MEM_BLOCK_SIZE);
-          rsp.data = rsp_data;
-          // The request arrived over a registered channel; the read data
-          // returns the cycle after it was issued.
-          simobject_->DmaOutputs.at(c * DMA_PORTS + p).send(rsp, 0);
         }
-        DT(4, simobject_->name() << "-dma" << c << " req : " << req);
-        in.pop();
+#if VX_CFG_EXT_A_ENABLED
+        amo_unit_.invalidate(to_local_addr(req.addr), req.hart_id);
+#endif
+      } else {
+        MemRsp rsp{req.tag, req.hart_id, req.uuid};
+        auto rsp_data = make_mem_block();
+        ram_.read(rsp_data->data(), line_addr, VX_CFG_MEM_BLOCK_SIZE);
+        rsp.data = rsp_data;
+        // The request arrived over a registered channel; the read data
+        // returns the cycle after it was issued.
+        simobject_->DmaOutputs.at(c * DMA_PORTS + p).send(rsp, 0);
       }
-      dma_last_grant_ = c;
-      return;
+      DT(4, simobject_->name() << "-dma" << c << " req : " << req);
+      in.pop();
+    }
+  }
+
+  // Serve the DMA clients, the cycle after a DMA request was seen. Each client only
+  // writes (DXA) or only reads (TCU). With several LSU blocks a row read has
+  // the banks' second port and goes through beside a row write; with one, the
+  // banks are single-ported and the two alternate. Reads go first: a read of
+  // the row written in the same cycle sees the old data.
+  void dma_fire() {
+    uint32_t n = config_.dma_clients;
+    std::vector<bool> can(n, false);
+    std::vector<bool> is_write(n, false);
+    uint32_t num_can = 0;
+    for (uint32_t c = 0; c < n; ++c) {
+      bool w = false;
+      can.at(c) = this->dma_client_pending(c) && this->dma_client_ready(c, &w);
+      is_write.at(c) = w;
+      num_can += can.at(c);
+    }
+    bool shared = (config_.num_blocks == 1);
+    if (shared && num_can > 0) {
+      // the side served last yields to the other
+      if (num_can > 1) {
+        for (uint32_t c = 0; c < n; ++c) {
+          if (can.at(c) && (is_write.at(c) == dma_rd_first_)) {
+            can.at(c) = false;
+          }
+        }
+      }
+      for (uint32_t c = 0; c < n; ++c) {
+        if (can.at(c)) {
+          dma_rd_first_ = is_write.at(c);
+        }
+      }
+    }
+    for (uint32_t c = 0; c < n; ++c) {
+      if (can.at(c) && !is_write.at(c)) {
+        this->dma_serve(c);
+      }
+    }
+    for (uint32_t c = 0; c < n; ++c) {
+      if (can.at(c) && is_write.at(c)) {
+        this->dma_serve(c);
+      }
     }
   }
 
@@ -440,7 +485,7 @@ public:
     , arb_last_(engines_.size(), 0)
     , write_waiting_r_(false)
     , dma_slot_(false)
-    , dma_last_grant_(0)
+    , dma_rd_first_(false)
   {
     for (auto& e : engines_) {
       e.pending = BitVector<>(config.num_lanes);
@@ -469,7 +514,7 @@ public:
     b_sel_ = Selection();
     write_waiting_r_ = false;
     dma_slot_ = false;
-    dma_last_grant_ = config_.dma_clients ? (config_.dma_clients - 1) : 0;
+    dma_rd_first_ = false;
   }
 
   void tick() {

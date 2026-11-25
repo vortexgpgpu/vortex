@@ -63,33 +63,49 @@
     }
   },
   "lmem": {
+    "accepted": {
+      "against": "d6e0c68bd846d1bb7f79bd3139fdf44e7473cb82",
+      "regressions": [
+        {
+          "after": 18,
+          "before": 17,
+          "kind": "ties",
+          "name": "tied_bits"
+        }
+      ]
+    },
     "clock_mhz": 1000,
     "config_hash": "8190e614d4e4d3b6",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_A_ENABLE",
     "dut": "lmem",
     "result": {
       "build_time_s": 25,
-      "cells": 120110,
-      "endpoints": 18134,
+      "cells": 120850,
+      "endpoints": 18144,
       "env": {
         "circt": "CIRCT 892a65a01",
         "foldsim": "foldsim d8350bc0f",
         "pdk": "asap7",
         "xlen": 32
       },
-      "ff": 23721,
+      "ff": 24329,
       "fmax_mhz": 1564.9,
       "macros": 32,
       "max_stages": 17,
       "overhead_ps": 231,
       "period_ps": 639,
       "stage_ps": 24,
-      "tied_bits": 17,
+      "tied_bits": 18,
       "tied_ports": [
         {
           "bits": 17,
-          "port": "dma_req_buf.data_in",
+          "port": "dma_rd_buf.data_in",
           "width": 607
+        },
+        {
+          "bits": 1,
+          "port": "lmem_unit.dma_wr_if_rsp_ready",
+          "width": 1
         }
       ]
     }

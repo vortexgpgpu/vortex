@@ -1995,13 +1995,13 @@ package VX_gpu_pkg;
         logic                                                       eop;
     } lsu_rsp_data_t;
 
-    // DXA lmem tag and attr widths for DMA arb.
+    // DXA lmem tag and attr widths on the LMEM DMA row-write port.
     localparam DXA_LMEM_ATTR_W = (BAR_ADDR_W + 1);
     localparam DXA_LMEM_ENGINE_TAG_W = UUID_WIDTH + 1;
     localparam DXA_LMEM_TAG_W = DXA_LMEM_ENGINE_TAG_W + NC_BITS;
     localparam DXA_LMEM_OUT_TAG_W = DXA_LMEM_TAG_W + `ARB_SEL_BITS(`VX_CFG_NUM_DXA_CORES, 1);
 
-    // TCU lmem tag and attr widths for DMA arb.
+    // TCU lmem tag and attr widths on the LMEM DMA row-read port.
     // Masters into the TCU LMEM port: BLOCK_SIZE abufs + 1 shared bbuf.
     // (Sparse metadata does not fetch from LMEM — it preloads into the
     // VX_tcu_sp_meta SRAM via TCU_LD ahead of the MMA dispatch.)
@@ -2016,11 +2016,8 @@ package VX_gpu_pkg;
     localparam LMEM_DMA_DATA_SIZE  = `VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE;
     localparam LMEM_DMA_ADDR_WIDTH = `VX_CFG_LMEM_LOG_SIZE - `CLOG2(`VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE);
     localparam LMEM_DMA_ATTR_W     = `MAX(DXA_LMEM_ATTR_W, TCU_LMEM_ATTR_W);
-    localparam LMEM_DMA_DXA_IDX    = 0;
-    localparam LMEM_DMA_TCU_IDX    = LMEM_DMA_DXA_IDX + `VX_CFG_EXT_DXA_ENABLED;
-    localparam LMEM_DMA_INPUTS     = `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_TCU_WGMMA_ENABLED;
-    localparam LMEM_DMA_IN_TAG_MAX = `MAX(DXA_LMEM_OUT_TAG_W, TCU_LMEM_TAG_W);
-    localparam LMEM_DMA_TAG_WIDTH  = LMEM_DMA_IN_TAG_MAX + `ARB_SEL_BITS(LMEM_DMA_INPUTS, 1);
+    localparam LMEM_DMA_WR_TAG_W   = DXA_LMEM_OUT_TAG_W;  // DXA row writes
+    localparam LMEM_DMA_RD_TAG_W   = TCU_LMEM_TAG_W;      // TCU row reads
 
     // Alignment of every CTA's LMEM slot, and so of its LMEM base. A DMA agent
     // moves whole bank rows: a block-major WGMMA operand must start one, and

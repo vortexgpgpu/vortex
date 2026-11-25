@@ -122,14 +122,14 @@ queue out to `NUM_DXA_UNITS` workers.
    walk replays each receiver's writes at `+r·smem_stride` — **serial**,
    `popcount(mask)` beats/word — and the last write per receiver sets
    `attr = {notify, bar_addr + (idx<<NB_BITS)}`.
-9. **LMEM + completion.** Writes go through the `VX_mem_unit` LMEM-DMA
-   priority arbiter (DXA = idx 0, TCU = idx 1). `VX_dxa_completion` snoops
+9. **LMEM + completion.** Writes go to the LMEM's DMA row-write port; the
+   TCU reads on the row-read port. `VX_dxa_completion` snoops
    the bank fire, reads the attr, and releases barriers via `txbar_bus_if`;
    software `arrive_and_wait` unblocks the consumer.
 
 **K-major / TCU tie-in.** `dest_kmajor` produces the transposed SMEM
 layout `smem[i0·tile1 + i1]` that the WGMMA B-tile path consumes directly
-from LMEM (the DXA and TCU share the LMEM-DMA port). K-major drains ~8×
+from LMEM (on the LMEM's DMA row-read port). K-major drains ~8×
 slower (1 element/beat) but is amortized over many WGMMA micro-ops.
 
 ---

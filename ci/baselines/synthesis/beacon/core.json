@@ -173,13 +173,24 @@
     }
   },
   "lmem": {
+    "accepted": {
+      "against": "d6e0c68bd846d1bb7f79bd3139fdf44e7473cb82",
+      "regressions": [
+        {
+          "after": 18,
+          "before": 17,
+          "kind": "ties",
+          "name": "tied_bits"
+        }
+      ]
+    },
     "clock_mhz": 300,
     "config_hash": "a9e601a9611711f5",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_A_ENABLE",
     "dut": "lmem",
     "result": {
       "bram": 16.0,
-      "build_time_s": 25,
+      "build_time_s": 60,
       "deep_endpoints": 0,
       "deepest_paths": [
         "9  lmem_unit/g_data_store_0.g_amo.amo_old_r[0] -> lmem_unit/g_data_store_0.g_dual_port.lmem_store/g_bram.g_wren.ram.wd[0]",
@@ -194,27 +205,32 @@
         "9  lmem_unit/g_data_store_0.g_amo.amo_old_r[0] -> lmem_unit/g_data_store_0.g_dual_port.lmem_store/g_bram.g_wren.ram.wd[9]"
       ],
       "dsp": 0,
-      "endpoints": 17366,
+      "endpoints": 17376,
       "env": {
         "circt": "CIRCT 892a65a01",
         "device": "xcu55c-fsvh2892-2L-e",
         "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 14361,
+      "ff": 14969,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 18594,
+      "lut": 18853,
       "lutram": 726,
       "max_levels": 9,
-      "pred_fmax_mhz": 324.3,
+      "pred_fmax_mhz": 324.0,
       "risk_endpoints": 0,
-      "tied_bits": 17,
+      "tied_bits": 18,
       "tied_ports": [
         {
           "bits": 17,
-          "port": "dma_req_buf.data_in",
+          "port": "dma_rd_buf.data_in",
           "width": 607
+        },
+        {
+          "bits": 1,
+          "port": "lmem_unit.dma_wr_if_rsp_ready",
+          "width": 1
         }
       ],
       "units": {

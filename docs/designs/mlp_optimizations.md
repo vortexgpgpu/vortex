@@ -39,7 +39,7 @@ Every MLP feature of Phase 1 and Phase 2, plus the earlier features this design 
 | P1 | [Targeted fences](#targeted-fences) | Device-scope token for memory fences; I/O fences drain without a walk | `3f27ba402`, `18b6fe521` | none | on | N | printf 13.6×, fence −55% | n/m |
 | P1 | [CP DMA through the LLC](#command-processor-dma-through-the-llc) | The command processor's DMA is a client of the shared LLC | `1d3db49b6`, `cc7bb17cc`, `bbad636e3`, `f93df327f`, default `60d79470a` | `VX_CFG_CP_LLC_CLIENT` | on (acts only with one shared LLC) | N | multikernel −42.7%, dogfood −30% | est. +2–3k LUT (not synthesized) |
 | P1 | [Dcache read merge](#dcache-read-merge) | Same-word reads of one LSU block share one bank access | `4e1d2a7ec`, `2342ffdcd`, port 0 `d6be497d7` | `VX_CFG_DCACHE_READ_MERGE` | on | N | sgemm −6.5% to −17.2% | n/m |
-| P1 | [LMEM DMA round-robin](#local-memory-dma-round-robin) | DXA writes and TCU reads share the LMEM DMA port round-robin | `c96140253` | none | on | N | WGMMA+DXA −10.2%, sparse −11.6% | 1 bit |
+| P1 | [LMEM DMA round-robin](#local-memory-dma-round-robin) | DXA writes and TCU reads alternate round-robin where they share a bank port (one LSU block) | `c96140253` | none | on | N | WGMMA+DXA −10.2%, sparse −11.6% | 1 bit |
 | P1 | [Per-block LSU memory paths](#per-block-lsu-memory-paths) | Each LSU block owns its memory path; TCU blocks their metadata ports | `8e2aa619c`, `304e0db17`, `8410590f4`, `47844854f`, `fc0a35bb4`, `0c603f49b` | none | on | N | cycle-identical; bandwidth scales with blocks | n/m |
 | P1 | [Non-power-of-two warps per slice](#non-power-of-two-gpu-shapes) | %, / and * instead of bit slices in OPC, IPDOM, mhartid | `e311957d9`, `365895a61` | none | on | N | enables 48-warp rtx5080 | pow2 netlists unchanged |
 | P1 | [Many AXI transactions in flight](#many-axi-transactions-in-flight) | AXI limit removed, responses routed by ID | `45e6a2356` | none | on | N | xrtsim 4-core sgemv 1.30× | n/m |
@@ -449,7 +449,7 @@ Atomics with `.aq`/`.rl` get these steps around them. All of it is skipped when 
 - A request retires before the next one starts, so the banks see every lane in program order.
 - With several LSU blocks, a second, read-only engine uses the banks' second port (`VX_1rw1r_ram`), so two warps' reads go through each cycle. Stores and atomics use the first engine alone and are ordered against every read.
 - Each block's response leaves from its own register; the response queue is bypassed when it is empty, so no latency is added.
-- The DMA port (DXA writes, TCU reads) takes whole bank rows, in the cycle after its request is seen.
+- Two DMA ports, one for row writes (DXA) and one for row reads (TCU), take whole bank rows, in the cycle after the request is seen. With several LSU blocks a row read uses the banks' second port, so a DXA write and a TCU read go through in the same cycle; with one LSU block the banks are single-ported and the two alternate. A read of the row written in the same cycle returns undefined data: the kernel's barrier keeps a stage from being read while the DXA fills it.
 - SimX (`LocalMem`) models the same passes, engines and response registers.
 
 **Gain:**
@@ -490,9 +490,9 @@ Atomics with `.aq`/`.rl` get these steps around them. All of it is skipped when 
 
 ![LMEM DMA round-robin](../assets/img/mlp_lmem_round_robin.svg)
 
-**Problem.** Two clients share the local-memory DMA port: the DXA engine, which writes tiles into shared memory, and the tensor core, which reads WGMMA operands from it. The DXA had fixed priority. One tiled-scatter transfer held the port for about 540 cycles, and a tensor-core batch caught behind it stalled for about 510. That stall delayed the warpgroup barrier, and the barrier delayed the next DXA request.
+**Problem.** Two clients share the local-memory banks: the DXA engine, which writes tiles into shared memory, and the tensor core, which reads WGMMA operands from it. The DXA had fixed priority. One tiled-scatter transfer held the port for about 540 cycles, and a tensor-core batch caught behind it stalled for about 510. That stall delayed the warpgroup barrier, and the barrier delayed the next DXA request.
 
-**How it works.** The port grants round-robin, so a tensor-core read waits at most one DXA write. It costs one bit of state, and a single-client configuration is unchanged.
+**How it works.** Where the two share a bank port (one LSU block), it grants round-robin, so a tensor-core read waits at most one DXA write. It costs one bit of state, and a single-client configuration is unchanged. With several LSU blocks the TCU reads on the banks' second port and never waits for the DXA.
 
 **Gain (rtlsim):** WGMMA with DXA −10.2%, sparse WGMMA with DXA −11.6%.
 

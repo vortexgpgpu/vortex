@@ -37,32 +37,21 @@
     }
   },
   "tensor": {
-    "accepted": {
-      "against": "26d2bc4b5409a35a111e8316ac3a87d07b15fc80",
-      "regressions": [
-        {
-          "after": 4,
-          "before": 6,
-          "kind": "ties",
-          "name": "tied_bits"
-        }
-      ]
-    },
     "clock_mhz": 1000,
     "config_hash": "2992cc36d736afff",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "tensor",
     "result": {
-      "build_time_s": 65,
-      "cells": 860583,
-      "endpoints": 89468,
+      "build_time_s": 75,
+      "cells": 860401,
+      "endpoints": 89473,
       "env": {
         "circt": "CIRCT 892a65a01",
         "foldsim": "foldsim d8350bc0f",
         "pdk": "asap7",
         "xlen": 32
       },
-      "ff": 188243,
+      "ff": 188303,
       "fmax_mhz": 977.5,
       "macros": 28,
       "max_stages": 33,
