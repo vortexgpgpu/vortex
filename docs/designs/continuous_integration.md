@@ -547,10 +547,11 @@ number into a location. They are never gated.
 | job | does |
 |---|---|
 | `plan` | applies the event policy and the escalations, runs `testcase.py matrix` and `lint`, emits the cells; on a push to master that touches a synthesis input, arms the ASIC gate (§4.5) |
+| `boundaries` | the source-layering guards (`ci/check_config_boundary.sh`, `check_sw_sim_boundary.sh`, `check_simx_mt_boundary.sh`) on every event; static greps, so no build and no tier: a guard that ran only inside a test cell would run only when that cell's tier is planned |
 | `setup` | warms the toolchain and third-party caches once; a no-op on a cache hit |
 | `build` | one build tree per XLEN, uploaded as an artifact |
 | `tests` | one job per cell: `pytest ci -m "<expression>"`, JUnit out |
-| `complete` | the single required check |
+| `complete` | the single required check; fails when any job it needs fails, `boundaries` included |
 | `change-impact` | advisory: classifies the diff R0..R3 with the base revision's `ci/change_impact.py` and policy ([code-review-policy.md](../review/code-review-policy.md)), writes the class to the job summary; read-only, never fails, and no job needs it |
 
 `setup` exists so that a cold cache prepares the toolchain once, not once per

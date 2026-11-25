@@ -149,6 +149,24 @@ jobs:
           python3 ci/testcase.py lint
 
   # ---------------------------------------------------------------------------
+  # boundaries — the source-layering guards, on every event. They are static
+  # greps over the tree, so they need no build and gate no test cell: a test
+  # cell runs only when its tier is planned.
+  # ---------------------------------------------------------------------------
+  boundaries:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: VX_config.h stays out of sw/ and tests/
+        run: bash ci/check_config_boundary.sh
+      - name: sw/{kernel,runtime} and sim/, hw/ stay apart
+        run: bash ci/check_sw_sim_boundary.sh
+      - name: SimX model code carries no threading
+        run: bash ci/check_simx_mt_boundary.sh
+
+  # ---------------------------------------------------------------------------
   # change-impact — advisory R0..R3 class of the diff
   # (docs/review/code-review-policy.md). The classifier and its policy come from
   # the base revision, or from the default branch without a usable base. It
@@ -426,7 +444,7 @@ jobs:
 
   complete:
     runs-on: ubuntu-22.04
-    needs: [plan, setup, build, tests]
+    needs: [plan, boundaries, setup, build, tests]
     if: always()
     steps:
       - name: Gate

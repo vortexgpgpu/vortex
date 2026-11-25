@@ -12,12 +12,12 @@
 // limitations under the License.
 
 // The pitch of the equal per-CTA LMEM slots the CTA dispatcher partitions LMEM
-// into.
+// into. VX_CFG_* come from the includer: VX_config.h in SimX, the resolved -D
+// flags in the runtime (VX_config.h is private to hardware and the simulators).
 
 #pragma once
 
 #include <stdint.h>
-#include <VX_config.h>
 
 namespace vortex {
 
