@@ -84,7 +84,7 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
   atomics stay behind `+xvortexldstwide` and `+xvortexamod`, so code built with plain `+xvortex` uses no new instructions.
 - **Toolchain pinned to v3.0.3** (`TOOLCHAIN_REV`): v3.0.2 plus CIRCT, Foldsim, Beacon (new) and SLASH from their
   [orcaslab](https://github.com/orcaslab) `main` branches (CIRCT ab733d13d, Foldsim 50551085, Beacon 4060e3af4, SLASH
-  9dfca58b7), built on Ubuntu 22.04 with GCC 11.4. The Beacon baselines are re-recorded with them: no build got deeper (top
+  29eb84fb), built on Ubuntu 22.04 with GCC 11.4. The Beacon baselines are re-recorded with them: no build got deeper (top
   and vm 23 to 21 levels), area moved by a few percent (CIRCT 892a65a01 to ab733d13d), and core's watch list (>= 8 levels)
   grew 6% with its >= 12-level end points unchanged.
 - **Dcache read-merge pairs realign.** A pair of same-word merge ports whose parts a bank served a cycle apart waits for its partner,
