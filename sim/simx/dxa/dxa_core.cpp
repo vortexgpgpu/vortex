@@ -722,6 +722,10 @@ private:
 
     constexpr uint64_t kRowMask = ~uint64_t(DxaCore::LMEM_ROW_SIZE - 1);
     uint64_t beat_row = UINT64_MAX;
+  #ifdef VX_CFG_DXA_SCATTER_COALESCE
+    // Each LMEM DMA channel takes one block write per beat.
+    uint32_t used_halves = 0;
+  #endif
 
     for (uint32_t emitted = 0; emitted < DxaCore::LMEM_PORTS_PER_CORE; ++emitted) {
       slot = w.drain_slot;
@@ -788,6 +792,12 @@ private:
       if (lmem_ch.full()) {
         break; // backpressure
       }
+    #ifdef VX_CFG_DXA_SCATTER_COALESCE
+      if ((used_halves >> half) & 1u) {
+        break; // this row half's channel already carries a write this beat
+      }
+      used_halves |= (1u << half);
+    #endif
 
       // Build LMEM MemReq with TLM payload.
       MemReq req;
@@ -802,7 +812,14 @@ private:
 
       // A contiguous span is one write; a scatter span writes element e0.
       const bool     beat_scatter = lw.scatter;
+    #ifdef VX_CFG_DXA_SCATTER_COALESCE
+      // Coalesced scatter: one write carries every consecutive element of
+      // the line that lands in this block, under a byte mask (the loop below
+      // stops at the first element outside the block or the beat's row).
+      const uint32_t e_end = num_elems;
+    #else
       const uint32_t e_end = beat_scatter ? (e0 + 1) : num_elems;
+    #endif
       uint32_t ee = e0;
       for (; ee < e_end; ++ee) {
         uint64_t dest_byte = dest_byte_of(ee);
@@ -865,9 +882,15 @@ private:
           w.drain_slot = UINT32_MAX;
         }
       }
+    #ifndef VX_CFG_DXA_SCATTER_COALESCE
       if (beat_scatter) {
         break; // a scatter beat writes one element
       }
+    #else
+      // A coalesced scatter beat goes on to the line's next block run if it
+      // lies in the same LMEM row and on a free channel (checked above).
+      (void)beat_scatter;
+    #endif
     } // per-tick row-beat emission loop
   }
 
