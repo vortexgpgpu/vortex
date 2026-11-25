@@ -945,13 +945,19 @@ tfloat32_t f32_to_tf32(float32_t a) {
   return res;
 }
 
+// An E8M0 block scale, 2^(sf - 127). 0xFF is NaN, and so is every element it
+// scales.
+static float e8m0_scale(uint8_t sf) {
+  if (sf == 0xff) {
+    return std::numeric_limits<float>::quiet_NaN();
+  }
+  return std::ldexp(1.0f, static_cast<int32_t>(sf) - 127);
+}
+
 float32_t mxfp8_to_f32(mxfloat8_t a) {
   uint32_t fflags = 0;
   auto base_value = cvt_custom_to_f32(a.v, 4, 3, softfloat_roundingMode, &fflags);
-  // e8m0 scale factor: unbiased exponent (bias = 127)
-  int32_t scale_exp = (int32_t)a.sf - 127;
-  float scale_factor = std::ldexp(1.0f, scale_exp);
-  float out = base_value * scale_factor;
+  float out = base_value * e8m0_scale(a.sf);
   softfloat_exceptionFlags |= fflags;
   float32_t res;
   res.v = vortex::bit_cast<uint32_t>(out);
@@ -975,8 +981,7 @@ mxfloat8_t f32_to_mxfp8(float32_t a, sfexp8_t scale_factor) {
 float32_t mxbf8_to_f32(mxbfloat8_t a) {
   uint32_t fflags = 0;
   auto base_value = cvt_custom_to_f32(a.v, 5, 2, softfloat_roundingMode, &fflags);
-  int32_t scale_exp = static_cast<int32_t>(a.sf) - 127;
-  float out = base_value * std::ldexp(1.0f, scale_exp);
+  float out = base_value * e8m0_scale(a.sf);
   softfloat_exceptionFlags |= fflags;
   float32_t res;
   res.v = vortex::bit_cast<uint32_t>(out);
@@ -996,9 +1001,8 @@ mxbfloat8_t f32_to_mxbf8(float32_t a, sfexp8_t scale_factor) {
 float32_t mxfp4_to_f32(mxfloat4_t a) {
   float4_t base = {static_cast<uint8_t>(a.v & 0x0f)};
   float base_value = vortex::bit_cast<float>(f4e2m1_to_f32(base).v);
-  int32_t scale_exp = static_cast<int32_t>(a.sf) - 127;
   float32_t res;
-  res.v = vortex::bit_cast<uint32_t>(base_value * std::ldexp(1.0f, scale_exp));
+  res.v = vortex::bit_cast<uint32_t>(base_value * e8m0_scale(a.sf));
   return res;
 }
 
