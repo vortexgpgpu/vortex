@@ -82,6 +82,11 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
   FireSim and SLASH forks moved to the [orcaslab](https://github.com/orcaslab) organization (`main` branches).
 - **Toolchain pinned to v3.0.2** (`TOOLCHAIN_REV`): LLVM f44a6bb2af4c, with PoCL rebuilt on it. Wide loads/stores and 64-bit
   atomics stay behind `+xvortexldstwide` and `+xvortexamod`, so code built with plain `+xvortex` uses no new instructions.
+- **Toolchain pinned to v3.0.3** (`TOOLCHAIN_REV`): v3.0.2 plus CIRCT, Foldsim, Beacon (new) and SLASH from their
+  [orcaslab](https://github.com/orcaslab) `main` branches (CIRCT ab733d13d, Foldsim 50551085, Beacon 4060e3af4, SLASH
+  9dfca58b7), built on Ubuntu 22.04 with GCC 11.4. The Beacon baselines are re-recorded with them: no build got deeper (top
+  and vm 23 to 21 levels), area moved by a few percent (CIRCT 892a65a01 to ab733d13d), and core's watch list (>= 8 levels)
+  grew 6% with its >= 12-level end points unchanged.
 - **Dcache read-merge pairs realign.** A pair of same-word merge ports whose parts a bank served a cycle apart waits for its partner,
   so the pair's later uniform reads merge again; a pair that waited on each other is released. Groups of 4 ports do not realign.
   *Why:* the drift was lost on every following uniform load: vecadd on 4 LSU blocks -11.3% in rtlsim, and its SimX/RTL gap over 7

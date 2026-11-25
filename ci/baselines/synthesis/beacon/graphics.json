@@ -1,30 +1,13 @@
 {
   "gfx": {
-    "accepted": {
-      "against": "26d2bc4b5409a35a111e8316ac3a87d07b15fc80",
-      "regressions": [
-        {
-          "after": 14,
-          "before": null,
-          "kind": "new",
-          "name": "graphics/g_raster_core_0.raster_core/raster_slices_0.raster_earlyz/quad_zprod.d"
-        },
-        {
-          "after": 1071,
-          "before": 1073,
-          "kind": "ties",
-          "name": "tied_bits"
-        }
-      ]
-    },
     "clock_mhz": 250,
-    "config_hash": "d39e5baadbeea03c",
+    "config_hash": "5084f817b43a8bcd",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "gfx",
     "result": {
       "bram": 183.5,
-      "build_time_s": 155,
-      "deep_endpoints": 1738,
+      "build_time_s": 80,
+      "deep_endpoints": 1707,
       "deepest_paths": [
         "19  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/g1_idx.d[4]",
         "19  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/lvl_q_arr.ra[4]",
@@ -40,19 +23,19 @@
       "dsp": 1140,
       "endpoints": 314280,
       "env": {
-        "circt": "CIRCT 892a65a01",
+        "beacon": "beacon 4060e3af4",
+        "circt": "CIRCT ab733d13d",
         "device": "xcu55c-fsvh2892-2L-e",
-        "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
       "ff": 400445,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 319803,
+      "lut": 318978,
       "lutram": 14119,
       "max_levels": 19,
       "pred_fmax_mhz": 264.7,
-      "risk_endpoints": 471,
+      "risk_endpoints": 470,
       "tied_bits": 1071,
       "tied_ports": [
         {
@@ -100,7 +83,7 @@
         "g_rtu_core_*_rtu_core/scheduler/commit_fifo/g_depth_n_dp_ram": 9,
         "g_rtu_core_*_rtu_core/scheduler/commit_fifo/pending_size": 9,
         "g_rtu_core_*_rtu_core/scheduler/ctx_arbiter": 18,
-        "g_rtu_core_*_rtu_core/scheduler/ctx_store": 14,
+        "g_rtu_core_*_rtu_core/scheduler/ctx_store": 13,
         "g_rtu_core_*_rtu_core/scheduler/g_box_pe_box_pe": 12,
         "g_rtu_core_*_rtu_core/scheduler/g_box_pe_box_pe/sr_corner": 12,
         "g_rtu_core_*_rtu_core/scheduler/g_box_pe_box_pe/sr_tag": 8,
@@ -184,36 +167,19 @@
         "tcache/g_cache_wrap_*_cache_wrap/g_cache_cache/g_banks_*_bank/reg_s1": 10
       },
       "uram": 0,
-      "watch_endpoints": 17007,
+      "watch_endpoints": 16218,
       "watch_levels": 8
     }
   },
   "gfxvm": {
-    "accepted": {
-      "against": "26d2bc4b5409a35a111e8316ac3a87d07b15fc80",
-      "regressions": [
-        {
-          "after": 14,
-          "before": null,
-          "kind": "new",
-          "name": "graphics/g_raster_core_0.raster_core/raster_slices_0.raster_earlyz/quad_zprod.d"
-        },
-        {
-          "after": 1073,
-          "before": 1075,
-          "kind": "ties",
-          "name": "tied_bits"
-        }
-      ]
-    },
     "clock_mhz": 250,
-    "config_hash": "dda6e15b71ddde55",
+    "config_hash": "bfe27014952a572d",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "gfxvm",
     "result": {
       "bram": 183.5,
-      "build_time_s": 160,
-      "deep_endpoints": 1889,
+      "build_time_s": 90,
+      "deep_endpoints": 1858,
       "deepest_paths": [
         "19  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/g1_idx.d[4]",
         "19  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/lvl_q_arr.ra[4]",
@@ -227,21 +193,21 @@
         "18  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/ctx_arbiter/g_model1.reqs_mask.d[29]"
       ],
       "dsp": 1140,
-      "endpoints": 328937,
+      "endpoints": 328940,
       "env": {
-        "circt": "CIRCT 892a65a01",
+        "beacon": "beacon 4060e3af4",
+        "circt": "CIRCT ab733d13d",
         "device": "xcu55c-fsvh2892-2L-e",
-        "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
-      "ff": 415294,
+      "ff": 415297,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 331144,
+      "lut": 330311,
       "lutram": 14557,
       "max_levels": 19,
-      "pred_fmax_mhz": 256.3,
-      "risk_endpoints": 475,
+      "pred_fmax_mhz": 255.6,
+      "risk_endpoints": 474,
       "tied_bits": 1073,
       "tied_ports": [
         {
@@ -305,7 +271,7 @@
         "g_rtu_core_*_rtu_core/scheduler/commit_fifo/g_depth_n_dp_ram": 9,
         "g_rtu_core_*_rtu_core/scheduler/commit_fifo/pending_size": 9,
         "g_rtu_core_*_rtu_core/scheduler/ctx_arbiter": 18,
-        "g_rtu_core_*_rtu_core/scheduler/ctx_store": 14,
+        "g_rtu_core_*_rtu_core/scheduler/ctx_store": 13,
         "g_rtu_core_*_rtu_core/scheduler/g_box_pe_box_pe": 12,
         "g_rtu_core_*_rtu_core/scheduler/g_box_pe_box_pe/sr_corner": 12,
         "g_rtu_core_*_rtu_core/scheduler/g_box_pe_box_pe/sr_tag": 8,
@@ -398,18 +364,18 @@
         "ummu/tlb/mshr/reqpool": 10
       },
       "uram": 0,
-      "watch_endpoints": 18305,
+      "watch_endpoints": 17575,
       "watch_levels": 8
     }
   },
   "om": {
     "clock_mhz": 300,
-    "config_hash": "77548cea392ad6f4",
+    "config_hash": "313db8246ed39b0f",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "om",
     "result": {
       "bram": 0.0,
-      "build_time_s": 15,
+      "build_time_s": 5,
       "deep_endpoints": 96,
       "deepest_paths": [
         "13  om_core/om_dcr/rt_dcrs[28] -> om_core/om_blend/pipe_reg1/g_pipe.g_partial_reset.pipe_free.d[6]",
@@ -426,15 +392,15 @@
       "dsp": 10,
       "endpoints": 5135,
       "env": {
-        "circt": "CIRCT 892a65a01",
+        "beacon": "beacon 4060e3af4",
+        "circt": "CIRCT ab733d13d",
         "device": "xcu55c-fsvh2892-2L-e",
-        "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
       "ff": 4456,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 5702,
+      "lut": 4880,
       "lutram": 367,
       "max_levels": 13,
       "pred_fmax_mhz": 364.6,
@@ -468,12 +434,12 @@
   },
   "raster": {
     "clock_mhz": 300,
-    "config_hash": "d7eb4dbaa81c9162",
+    "config_hash": "22cd275cd57e1338",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "raster",
     "result": {
       "bram": 8.0,
-      "build_time_s": 15,
+      "build_time_s": 5,
       "deep_endpoints": 49,
       "deepest_paths": [
         "14  raster_core/raster_dcr/dcrs[0] -> raster_core/raster_mem/mem_req_addr.d[24]",
@@ -490,9 +456,9 @@
       "dsp": 14,
       "endpoints": 12264,
       "env": {
-        "circt": "CIRCT 892a65a01",
+        "beacon": "beacon 4060e3af4",
+        "circt": "CIRCT ab733d13d",
         "device": "xcu55c-fsvh2892-2L-e",
-        "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
       "ff": 12083,
@@ -531,13 +497,13 @@
   },
   "rtu": {
     "clock_mhz": 300,
-    "config_hash": "192a0f6be80d47c0",
+    "config_hash": "a55ab5fc9a763d9c",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "rtu",
     "result": {
       "bram": 16.5,
-      "build_time_s": 45,
-      "deep_endpoints": 848,
+      "build_time_s": 20,
+      "deep_endpoints": 813,
       "deepest_paths": [
         "15  rtu_core/scheduler/ray_q[128] -> rtu_core/scheduler/tri_pe/q_a.d[32]",
         "15  rtu_core/scheduler/ray_q[128] -> rtu_core/scheduler/tri_pe/q_a.d[33]",
@@ -553,9 +519,9 @@
       "dsp": 140,
       "endpoints": 77820,
       "env": {
-        "circt": "CIRCT 892a65a01",
+        "beacon": "beacon 4060e3af4",
+        "circt": "CIRCT ab733d13d",
         "device": "xcu55c-fsvh2892-2L-e",
-        "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
       "ff": 170567,
@@ -564,7 +530,7 @@
       "lut": 130242,
       "lutram": 1945,
       "max_levels": 15,
-      "pred_fmax_mhz": 304.5,
+      "pred_fmax_mhz": 312.7,
       "risk_endpoints": 0,
       "tied_bits": 0,
       "tied_ports": [],
@@ -584,18 +550,18 @@
         "rtu_core/scheduler/window_store": 8
       },
       "uram": 0,
-      "watch_endpoints": 2351,
+      "watch_endpoints": 1559,
       "watch_levels": 8
     }
   },
   "tex": {
     "clock_mhz": 300,
-    "config_hash": "c5618d37aa830fc6",
+    "config_hash": "20f38cf1124cb9a6",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "tex",
     "result": {
       "bram": 0.0,
-      "build_time_s": 70,
+      "build_time_s": 30,
       "deep_endpoints": 0,
       "deepest_paths": [
         "11  tex_core/tex_addr/pipe_reg0/g_pipe.g_partial_reset.pipe_free[4197] -> tex_core/tex_addr/pipe_reg1/g_pipe.g_partial_reset.pipe_free.d[831]",
@@ -612,9 +578,9 @@
       "dsp": 896,
       "endpoints": 97089,
       "env": {
-        "circt": "CIRCT 892a65a01",
+        "beacon": "beacon 4060e3af4",
+        "circt": "CIRCT ab733d13d",
         "device": "xcu55c-fsvh2892-2L-e",
-        "foldsim": "foldsim d8350bc0f",
         "xlen": 32
       },
       "ff": 96949,
