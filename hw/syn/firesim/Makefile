@@ -8,7 +8,7 @@
 # names the card for run-firesim; the runtime's xrtsim/avedsim targets need no
 # image at all.
 #
-# FireSim itself is the vortexgpgpu/firesim fork, consumed through FIRESIM_PATH
+# FireSim itself is the orcaslab/firesim fork, consumed through FIRESIM_PATH
 # and pinned by FIRESIM_REV in VERSION: every change Vortex needs in FireSim is a
 # commit there, and the checkout must contain the pinned one. The Chisel targets,
 # harnesses and the card's platform config live here and are staged into it. The
@@ -541,7 +541,7 @@ run-metasim:
 check-firesim:
 	@test -d $(FIRESIM_PATH)/sim || { \
 		echo "FireSim checkout not found at $(FIRESIM_PATH)"; \
-		echo "clone vortexgpgpu/firesim there (see docs/building_toolchain.md)"; \
+		echo "clone orcaslab/firesim there (see docs/building_toolchain.md)"; \
 		exit 1; }
 	@git -C $(FIRESIM_PATH) merge-base --is-ancestor $(FIRESIM_REV) HEAD 2>/dev/null || { \
 		echo "FireSim checkout at $(FIRESIM_PATH) does not contain FIRESIM_REV=$(FIRESIM_REV)"; \

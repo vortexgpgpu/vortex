@@ -292,7 +292,7 @@ and without synthesis.
 
 | | `fpga_gate` | `asic_gate` | `logic_gate` |
 |---|---|---|---|
-| flow | Vivado synthesis, place and route | Yosys (slang frontend) → ABC → OpenSTA, on ASAP7 | CIRCT → `foldsim-estimate-timing` (logic levels as Vivado counts them on `DEVICE`'s family; ASAP7 cell stages with `--tool beacon_asic`) and `foldsim-estimate-area` (its cells, memories and DSPs) |
+| flow | Vivado synthesis, place and route | Yosys (slang frontend) → ABC → OpenSTA, on ASAP7 | CIRCT → Beacon (`beacon-estimate-timing`) (logic levels as Vivado counts them on `DEVICE`'s family; ASAP7 cell stages with `--tool beacon_asic`) and `foldsim-estimate-area` (its cells, memories and DSPs) |
 | design tree | `hw/syn/xilinx/dut` | `hw/syn/yosys/dut` | `hw/syn/xilinx/dut` (`fpga_gate`'s builds) and `hw/syn/yosys/dut` (`asic_gate`'s), target `beacon` |
 | gated | `fmax_mhz` against the target clock, `lut` against `lut_budget` | `fmax_mhz` against the target clock, `cell_area_um2` against `area_budget_um2` | FPGA: `max_levels` against the baseline, the deepest end point of every RTL unit, and `lut`, `ff`, `lutram`, `bram`, `uram`, `dsp` against the baseline. ASIC: `ff` and `cells` against the baseline, predicted `fmax_mhz` against the target clock (wide band). Both: the harness's tied bits against the baseline, and on a pull request every register and resource against the merge base |
 | also recorded | `wns_ns`, `lutram`, `ff`, `bram`, `uram`, `dsp`, critical paths, high-fanout nets | `wns_ns`, `tns_ns`, `seq_area_um2`, `sram_area_um2`, `cell_count`, `power_mw` | end point bits at ≥ 12 and ≥ 8 levels, the deepest paths, the calibrated `p_fmax`; ASIC: stages, period, SRAM macros |
@@ -393,7 +393,7 @@ so the flow reports the signed worst slack instead.
 
 #### What `logic_gate` asserts
 
-Beacon ([beacon.md](beacon.md)) counts logic levels, not
+Beacon ([beacon.md](https://github.com/orcaslab/beacon/blob/main/docs/beacon.md)) counts logic levels, not
 slack: it does not see wires, so it gates depth, which it predicts (Spearman
 0.50–0.93 against Vivado per register on the V80 gates), and leaves Fmax to
 `fpga_gate`. It counts them for the family of
@@ -415,11 +415,11 @@ calibration exists for the U55C only. A
 | no resource of the design (`lut`, `ff`, `lutram`, `bram`, `uram`, `dsp`) more than 5 % above its baseline | area found in minutes, not in a nightly Vivado run; a memory that moves between distributed and block RAM moves two columns, and `beacon_area.txt` names each memory's placement |
 | the harness ties as many instance-input bits to constants as at its baseline (`tied`) | synthesis folds the logic behind a tied input and Beacon does not, so a harness edit makes `fpga_gate`/`asic_gate` measure a different design while Beacon's numbers stay put; the change needs a reviewed budget, then a re-record |
 | ASIC (`gate_asic`): flip-flops and cells within 5 % of the baseline | a memory that leaves its SRAM macro, or one Yosys must build from flip-flops, found before the nightly `asic_gate` |
-| ASIC: predicted Fmax no more than 32 % below `clock_mhz` | a backstop for a path far too deep to close; Beacon's period runs 0.59–1.05 × OpenSTA's, so a tighter band fails designs that close ([beacon.md §6.2](beacon.md)) |
+| ASIC: predicted Fmax no more than 32 % below `clock_mhz` | a backstop for a path far too deep to close; Beacon's period runs 0.59–1.05 × OpenSTA's, so a tighter band fails designs that close ([beacon.md §6.2](https://github.com/orcaslab/beacon/blob/main/docs/beacon.md)) |
 | on a pull request: no register at or above the watch threshold (8 levels; ASIC: the stages that fit 90 % of the period, 28 at 1 GHz) 4 or more levels (stages) deeper than on the merge base, none newly at the fix threshold, no resource past 5 %, the same tied bits; a reference that failed fails (`REF-FAIL`) | a baseline the pull request re-records cannot hide the pull request's own deltas |
 
 Beside the assertions, each build reports what levels miss: the learned
-calibration ([beacon.md §7.1](beacon.md)) scores every register from its
+calibration ([beacon.md §7.1](https://github.com/orcaslab/beacon/blob/main/docs/beacon.md)) scores every register from its
 levels, width, fan-out and span, and `beacon_risk.txt` lists the slowest
 predicted, with the design's predicted Fmax and its count of likely failures
 as the `p_fmax` and `risk` columns. They are recorded, not gated: held out,
@@ -482,7 +482,7 @@ flow's `beacon/report.txt` and `beacon/area.txt`) as the
 Depth has no tolerance: the same RTL and tools give the same levels. Area is
 as deterministic, but a feature adds some by design, so it has `fpga_gate`'s
 LUT tolerance; its LUTs are the area mapping's scaled to Vivado's average
-([beacon.md §4.5](beacon.md)), so it gates their change, not a budget. A new CIRCT
+([beacon.md §4.5](https://github.com/orcaslab/beacon/blob/main/docs/beacon.md)), so it gates their change, not a budget. A new CIRCT
 or foldsim can map the same RTL differently, so both versions are in the config
 hash and a tool change reads `STALE`. `make -C hw/syn/xilinx/dut <dut>-beacon`
 runs Beacon on one DUT by hand; its `beacon_paths.txt` lists every deep path op by op,

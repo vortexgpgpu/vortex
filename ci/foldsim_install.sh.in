@@ -35,8 +35,8 @@ set -e
 
 TOOLDIR=${TOOLDIR:=@TOOLDIR@}
 
-FOLDSIM_REPO=${FOLDSIM_REPO:=https://github.com/vortexgpgpu/foldsim.git}
-FOLDSIM_REV=${FOLDSIM_REV:=vortex_3.x}
+FOLDSIM_REPO=${FOLDSIM_REPO:=https://github.com/orcaslab/foldsim.git}
+FOLDSIM_REV=${FOLDSIM_REV:=main}
 
 CIRCT_PREFIX=${CIRCT_PREFIX:=$TOOLDIR/circt}
 FOLDSIM_SRC=${FOLDSIM_SRC:=$TOOLDIR/foldsim-src}
@@ -64,6 +64,8 @@ if git -C "$FOLDSIM_SRC" rev-parse -q --verify "refs/remotes/origin/$FOLDSIM_REV
 else
     git -C "$FOLDSIM_SRC" checkout --detach "$FOLDSIM_REV^{commit}"
 fi
+# Foldsim builds Beacon (orcaslab/beacon) from its third_party/beacon submodule.
+git -C "$FOLDSIM_SRC" submodule update --init --recursive
 
 # ----------------------------------------------------------------------
 # 2. Configure, build and test

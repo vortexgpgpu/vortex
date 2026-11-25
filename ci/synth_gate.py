@@ -198,7 +198,7 @@ class Tool:
         return _make_var(_catalog(dut_root), dut + self.top_var)
 
     def diff_levels(self, build, metrics):
-        """(watch, fix) thresholds for `beacon.py diff` against a reference."""
+        """(watch, fix) thresholds for `beacon diff` against a reference."""
         return metrics.get("watch_levels") or 8, metrics.get("fix_levels") or 12
 
     def incomplete(self, metrics):
@@ -242,16 +242,54 @@ def dut_names(dut_root):
 
 # --- Beacon, both targets ----------------------------------------------------
 
+def beacon_tool():
+    """The Beacon driver (orcaslab/beacon's `beacon`), resolved the way
+    hw/syn/common.mk resolves it: $BEACON, else $BEACON_PATH/bin/beacon, else
+    the toolchain's $TOOLDIR/beacon/bin/beacon, else `beacon` on the PATH."""
+    if os.environ.get("BEACON"):
+        return os.environ["BEACON"]
+    tooldir = os.environ.get("TOOLDIR") or os.path.expanduser("~/tools")
+    root = os.environ.get("BEACON_PATH") or os.path.join(tooldir, "beacon")
+    binary = os.path.join(root, "bin", "beacon")
+    if os.path.exists(binary):
+        return binary
+    return shutil.which("beacon") or binary
+
+
+_BEACON_MODULE = None
+
+
+def beacon_module():
+    """The Beacon driver as a Python module (its run readers: const_ties,
+    netlist_top, score_run), loaded from the installed driver."""
+    global _BEACON_MODULE
+    if _BEACON_MODULE is None:
+        import importlib.machinery
+        import importlib.util
+        path = os.path.realpath(beacon_tool())
+        if not os.path.exists(path):
+            raise BuildError("no Beacon driver at %s: install orcaslab/beacon "
+                             "(ci/toolchain_install.sh --beacon) or set "
+                             "BEACON_PATH" % path)
+        sys.path.insert(0, os.path.dirname(path))
+        loader = importlib.machinery.SourceFileLoader("beacon", path)
+        spec = importlib.util.spec_from_loader("beacon", loader)
+        module = importlib.util.module_from_spec(spec)
+        loader.exec_module(module)
+        _BEACON_MODULE = module
+    return _BEACON_MODULE
+
+
 def harness_ties(work):
     """The instance-input bits the DUT top ties to constants, from the Beacon
-    run's netlist (ci/beacon.py ties): the count and the ports that carry
+    run's netlist (`beacon ties`): the count and the ports that carry
     the most. A finished run always has its netlist, so a missing or
     unreadable one is a build error, never a count of zero."""
     run = os.path.join(work, "beacon")
     netlist = os.path.join(run, "netlist.mlir")
     if not os.path.exists(netlist):
         raise BuildError("no %s to count the harness's constant ties in" % netlist)
-    import beacon
+    beacon = beacon_module()
     try:
         rows = beacon.const_ties(netlist, beacon.netlist_top(run))
     except ValueError as e:
@@ -528,9 +566,10 @@ class Beacon(Tool):
     """Beacon: logic levels per RTL unit and the design's area
     (hw/syn/xilinx/dut, target `beacon`).
 
-    foldsim-estimate-timing ranks every register-to-register path of the CIRCT
-    netlist the Xilinx flow elaborates by its logic levels, counted as Vivado
-    counts them on DEVICE's family; foldsim-estimate-area counts its LUTs,
+    Beacon (orcaslab/beacon: beacon-estimate-timing) ranks every
+    register-to-register path of the CIRCT netlist the Xilinx flow elaborates
+    by its logic levels, counted as Vivado counts them on DEVICE's family;
+    beacon-estimate-area counts its LUTs,
     flip-flops, distributed and block RAM, UltraRAM and DSPs, placing each
     memory as Vivado infers it. It needs no Vivado and no licence and takes
     seconds per DUT, so it can run on every change where the Fmax gate runs
@@ -582,17 +621,16 @@ class Beacon(Tool):
     mem_gb = {"gfx": 9.5, "gfxvm": 10.0}
     job_label = "make"
 
-    # The netlist exists once foldsim-opt starts mapping it; a typo in a define
-    # or an include dies in gen_sources.sh or circt_elaborate.sh before that.
-    elab_done = "foldsim-beacon-map"
+    # The netlist exists once `beacon run` starts mapping it; a typo in a
+    # define or an include dies in gen_sources.sh or circt_elaborate.sh before
+    # that.
+    elab_done = "beacon run"
     elab_label = "elaboration"
     phases = (
         ("gen_sources.sh", "sources"),
         ("circt_elaborate.sh", "elaboration"),
         (elab_done, "mapping"),
-        ("foldsim-estimate-timing", "levels"),
-        ("foldsim-estimate-area", "area"),
-        ("beacon_summary.py", "reporting"),
+        ("beacon summary", "reporting"),
     )
     error_re = re.compile(r"^(?:ERROR|FATAL|Error)\b|: error:|^\S+: \*\*\* ")
 
@@ -600,27 +638,28 @@ class Beacon(Tool):
     PATHS = "beacon_paths.txt"
     AREA = "beacon_area.txt"
     RISK = "beacon_risk.txt"
-    # The learned calibration per device family (docs/designs/beacon.md 7.1).
-    CALIBRATIONS = {"xcu55c": "beacon_calibration_u55c.json"}
+    # The learned calibration per device family (Beacon's docs/beacon.md 7.1),
+    # installed with Beacon in its calibrations/.
+    CALIBRATIONS = {"xcu55c": "u55c.json"}
     RISK_ROWS = 40
 
     def env(self, args):
         return {"circt": tool_version("circt-verilog", "--version",
                                       package="circt", line_prefix="CIRCT"),
-                "foldsim": tool_version("foldsim-opt", "--version",
-                                        package="foldsim",
-                                        line_prefix="foldsim"),
+                "beacon": tool_version("beacon-opt", "--version",
+                                       package="beacon",
+                                       line_prefix="beacon"),
                 "device": os.environ.get("DEVICE", "xcu55c-fsvh2892-2L-e"),
                 "xlen": args.xlen}
 
     def hash_key(self, env):
-        # The levels are the model's: a new foldsim or CIRCT can map the same
+        # The levels are the model's: a new Beacon or CIRCT can map the same
         # RTL to other levels, and another device's family counts them
         # differently; either must read as STALE, not as a regression.
-        return [env["circt"], env["foldsim"], env["device"], str(env["xlen"])]
+        return [env["circt"], env["beacon"], env["device"], str(env["xlen"])]
 
     def env_warning(self, build, env):
-        for key, label in (("foldsim", "foldsim"), ("circt", "CIRCT")):
+        for key, label in (("beacon", "Beacon"), ("circt", "CIRCT")):
             ref = build.get("baseline_env", {}).get(key)
             if ref and env.get(key) and ref != env[key]:
                 return ("baseline was recorded on %s %s, running %s -- this "
@@ -670,8 +709,9 @@ class Beacon(Tool):
         run = os.path.join(work, "beacon")
         if cal is None or not os.path.isdir(run):
             return {}
-        import beacon
-        with open(os.path.join(source_root(), "hw", "scripts", cal)) as fh:
+        beacon = beacon_module()
+        with open(os.path.join(os.path.dirname(os.path.realpath(beacon_tool())),
+                               "calibrations", cal)) as fh:
             model = json.load(fh)
         rows, pathless = beacon.score_run(run, model)
         if not rows:
@@ -771,9 +811,9 @@ class BeaconAsic(Tool):
     target=$(PDK)): asic_gate's builds, DUT for DUT and config for config, in
     minutes instead of hours.
 
-    foldsim-estimate-timing counts cell stages (docs/designs/beacon.md 4.3)
-    and converts the deepest path to a period with the library's delays;
-    foldsim-estimate-area counts cells, flip-flops and SRAM macros, a memory
+    Beacon's beacon-estimate-timing counts cell stages (Beacon's
+    docs/beacon.md 4.3) and converts the deepest path to a period with the
+    library's delays; beacon-estimate-area counts cells, flip-flops and SRAM macros, a memory
     without a macro as flip-flops. Flip-flops and cells are held to the
     baseline (5 %), so a memory that leaves its SRAM macro, or one Yosys must
     build from flip-flops, fails here before the nightly synthesis. The
@@ -820,13 +860,11 @@ class BeaconAsic(Tool):
     weights = {"top": 600, "gfx": 600, "core": 300, "tensor": 300, "vm": 300}
     fallback_weight = 120
     job_label = "make"
-    elab_done = "foldsim-beacon-map"
+    elab_done = "beacon run"
     phases = (
         ("gen_sources.sh", "sources"),
         ("circt_elaborate.sh", "elaboration"),
         (elab_done, "mapping"),
-        ("foldsim-estimate-timing", "stages"),
-        ("foldsim-estimate-area", "area"),
         ("asic-summary", "reporting"),
     )
     error_re = re.compile(r"^(?:ERROR|FATAL|Error)\b|: error:|^\S+: \*\*\* ")
@@ -837,14 +875,14 @@ class BeaconAsic(Tool):
     def env(self, args):
         return {"circt": tool_version("circt-verilog", "--version",
                                       package="circt", line_prefix="CIRCT"),
-                "foldsim": tool_version("foldsim-opt", "--version",
-                                        package="foldsim",
-                                        line_prefix="foldsim"),
+                "beacon": tool_version("beacon-opt", "--version",
+                                       package="beacon",
+                                       line_prefix="beacon"),
                 "pdk": os.environ.get("PDK", "asap7"),
                 "xlen": args.xlen}
 
     def hash_key(self, env):
-        return [env["circt"], env["foldsim"], env["pdk"], str(env["xlen"])]
+        return [env["circt"], env["beacon"], env["pdk"], str(env["xlen"])]
 
     def env_warning(self, build, env):
         return Beacon.env_warning(self, build, env)
@@ -853,7 +891,7 @@ class BeaconAsic(Tool):
     work_dir = Yosys.work_dir
 
     def diff_levels(self, build, metrics):
-        """(watch, fix) stages for `beacon.py diff`: the most that fit 90 %
+        """(watch, fix) stages for `beacon diff`: the most that fit 90 %
         and 100 % of the target period, plus one, with the run's own delays
         (period = overhead + stages x stage)."""
         period = 1e6 / float(build["clock_mhz"])
@@ -873,8 +911,7 @@ class BeaconAsic(Tool):
 
     def build_command(self, dut_root, work, build, env, args):
         os.makedirs(work, exist_ok=True)
-        script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                              "beacon.py")
+        script = beacon_tool()
         make = " ".join(shlex.quote(a) for a in self._make(dut_root, build, "beacon"))
         return ["sh", "-c", "%s && echo asic-summary && %s %s asic-summary %s %s"
                 % (make, shlex.quote(sys.executable), shlex.quote(script),
@@ -2027,7 +2064,7 @@ def regression_reason(reg, tool, fix):
 
 def compare_against(results, ref_dir, tool, env, root, rev=None, absent=()):
     """Each finished build's Beacon run against the same build in ref_dir
-    (ci/beacon.py diff): register by register, area by resource, and the
+    (`beacon diff`): register by register, area by resource, and the
     harness's constant ties. Sets each result's `against`: its verdict,
     the regressions, and the reasons.
 
@@ -2040,7 +2077,7 @@ def compare_against(results, ref_dir, tool, env, root, rev=None, absent=()):
     --against-rev, stored in the baseline entry) reads ACCEPTED until that
     acceptance reaches the reference (live_acceptance). One the re-record
     did not see fails."""
-    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "beacon.py")
+    script = beacon_tool()
     label = rev[:12] if rev else ref_dir
     rows = []
     for r in results:
@@ -2096,7 +2133,7 @@ def compare_against(results, ref_dir, tool, env, root, rev=None, absent=()):
             doc = None
         if rc not in (0, 1, 3) or doc is None:
             against.update(verdict="BUILD-FAIL",
-                           reasons=["beacon.py diff failed (exit %d): %s" % (rc, out)])
+                           reasons=["beacon diff failed (exit %d): %s" % (rc, out)])
             rows.append((b["id"], "BUILD-FAIL", "-"))
             continue
         regs = [dict(kind="deeper", name=d["register"], before=d["before"],
@@ -2261,7 +2298,7 @@ def main(argv=None, default_tool="xilinx"):
                     help="Beacon only: the build tree of a reference run, "
                          "typically the parent revision's; each build's end "
                          "points are compared register by register, its "
-                         "area by resource and unit (ci/beacon.py diff), and "
+                         "area by resource and unit (beacon diff), and "
                          "its harness's constant ties, with the same build "
                          "there; a register that got deeper, area grown past "
                          "the tolerance, or changed ties fail the run")

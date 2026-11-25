@@ -1,0 +1,91 @@
+#!/bin/bash
+
+# Copyright © 2019-2023
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Beacon install: the logic-level and area screen of ci/logic_gate.py and the
+# `<dut>-beacon` targets (the `beacon` driver and beacon-opt).
+#
+# Beacon is its own project (https://github.com/orcaslab/beacon) and builds on
+# CIRCT, as Foldsim does: it
+# needs the CIRCT installation ci/circt_install.sh leaves in $TOOLDIR/circt
+# (libraries, headers and CMake packages, not only the prebuilt's tools). This
+# script is the *producer* of the Beacon prebuilt: build here (once per
+# OSVERSION, in that OS's container, after ci/circt_install.sh), then
+# `ci/toolchain_prebuilt.sh --beacon` packages $TOOLDIR/beacon and
+# `ci/toolchain_install.sh --beacon` fetches it. Most users install the
+# prebuilt and never run this script.
+#
+# Release, assertions off, libstdc++ linked statically. Needs git, cmake >=
+# 3.20, ninja, lit (pip) and a C++17 compiler; installs nothing system-wide.
+#
+# Idempotent: re-running rebuilds only what changed.
+
+# exit when any command fails
+set -e
+
+TOOLDIR=${TOOLDIR:=@TOOLDIR@}
+
+BEACON_REPO=${BEACON_REPO:=https://github.com/orcaslab/beacon.git}
+BEACON_REV=${BEACON_REV:=main}
+
+CIRCT_PREFIX=${CIRCT_PREFIX:=$TOOLDIR/circt}
+BEACON_SRC=${BEACON_SRC:=$TOOLDIR/beacon-src}
+BEACON_PREFIX=${BEACON_PREFIX:=$TOOLDIR/beacon}
+BEACON_BUILD=$BEACON_SRC/build
+
+if [ ! -f "$CIRCT_PREFIX/lib/cmake/circt/CIRCTConfig.cmake" ]; then
+    echo "error: no CIRCT installation in $CIRCT_PREFIX (CIRCTConfig.cmake)."
+    echo "       run ci/circt_install.sh first, or set CIRCT_PREFIX."
+    exit 1
+fi
+
+# ----------------------------------------------------------------------
+# 1. Fetch
+# ----------------------------------------------------------------------
+# BEACON_REV is a branch, taken at its tip on origin, or a tag or a commit: the
+# checkout is detached either way, so a re-run never stays on a stale local
+# branch.
+if [ ! -d "$BEACON_SRC/.git" ]; then
+    git clone "$BEACON_REPO" "$BEACON_SRC"
+fi
+git -C "$BEACON_SRC" fetch --force --tags origin
+if git -C "$BEACON_SRC" rev-parse -q --verify "refs/remotes/origin/$BEACON_REV^{commit}" >/dev/null; then
+    git -C "$BEACON_SRC" checkout --detach "origin/$BEACON_REV"
+else
+    git -C "$BEACON_SRC" checkout --detach "$BEACON_REV^{commit}"
+fi
+
+# ----------------------------------------------------------------------
+# 2. Configure, build and test
+# ----------------------------------------------------------------------
+# An installed LLVM has no llvm-lit; the tests take lit from PATH (pip's
+# `lit`) unless LIT names one.
+LIT=${LIT:-$(command -v lit || command -v llvm-lit || true)}
+if [ -z "$LIT" ]; then
+    echo "error: no lit for Beacon's tests: pip install lit, or set LIT."
+    exit 1
+fi
+cmake -G Ninja -S "$BEACON_SRC" -B "$BEACON_BUILD" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX="$BEACON_PREFIX" \
+    -DCIRCT_DIR="$CIRCT_PREFIX/lib/cmake/circt" \
+    -DMLIR_DIR="$CIRCT_PREFIX/lib/cmake/mlir" \
+    -DLLVM_DIR="$CIRCT_PREFIX/lib/cmake/llvm" \
+    -DLLVM_EXTERNAL_LIT="$LIT" \
+    -DLLVM_STATIC_LINK_CXX_STDLIB=ON
+ninja -C "$BEACON_BUILD"
+ninja -C "$BEACON_BUILD" check-beacon
+cmake --install "$BEACON_BUILD"
+
+echo "Beacon installed in $BEACON_PREFIX"

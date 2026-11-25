@@ -27,7 +27,7 @@ endif
 # them so that asynchronous RAM reads map to block RAM (gen_sources.sh -F,
 # hw/scripts/ram_fold.py), and each tool elaborates them itself (Yosys with its
 # slang frontend, read_slang). Only the CIRCT models elaborate them with CIRCT:
-# Beacon through circt_elaborate.sh, Foldsim in its own flow.
+# Beacon (orcaslab/beacon) through circt_elaborate.sh, Foldsim in its own flow.
 CIRCT_PATH ?= $(TOOLDIR)/circt
 YOSYS_PATH ?= $(TOOLDIR)/yosys
 STA_PATH   ?= $(TOOLDIR)/sta
@@ -40,6 +40,11 @@ CIRCT_OPT     ?= $(CIRCT_PATH)/bin/circt-opt
 FIRTOOL       ?= $(CIRCT_PATH)/bin/firtool
 FOLDSIM       ?= $(FOLDSIM_PATH)/bin/foldsim
 FOLDSIM_OPT   ?= $(FOLDSIM_PATH)/bin/foldsim-opt
+# Beacon, the logic-level and area screen: its own project
+# (https://github.com/orcaslab/beacon), installed in $(TOOLDIR)/beacon
+# (ci/toolchain_install.sh --beacon) or named by BEACON_PATH.
+BEACON_PATH ?= $(TOOLDIR)/beacon
+BEACON      ?= $(BEACON_PATH)/bin/beacon
 FOLDSIM_LIFT_TOOL ?= $(FOLDSIM_PATH)/bin/foldsim-lift
 YOSYS ?= $(YOSYS_PATH)/bin/yosys
 STA   ?= $(STA_PATH)/bin/sta
@@ -47,4 +52,4 @@ VERILATOR ?= $(VERILATOR_PATH)/bin/verilator
 # a python3 with pyslang 11 or 12 (pip install "pyslang>=11,<13")
 RAM_FOLD_PYTHON ?= python3
 
-export CIRCT_PATH FOLDSIM_PATH FOLDSIM_SHELL FOLDSIM_LIFT_TOOL YOSYS_PATH STA_PATH VERILATOR_PATH CIRCT_VERILOG CIRCT_OPT FIRTOOL FOLDSIM FOLDSIM_OPT YOSYS STA VERILATOR RAM_FOLD_PYTHON
+export CIRCT_PATH FOLDSIM_PATH FOLDSIM_SHELL FOLDSIM_LIFT_TOOL BEACON_PATH BEACON YOSYS_PATH STA_PATH VERILATOR_PATH CIRCT_VERILOG CIRCT_OPT FIRTOOL FOLDSIM FOLDSIM_OPT YOSYS STA VERILATOR RAM_FOLD_PYTHON
