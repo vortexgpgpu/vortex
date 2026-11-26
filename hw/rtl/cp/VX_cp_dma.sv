@@ -23,7 +23,7 @@
 //
 // Transfers are streamed in <=4 KB chunks; each chunk is one AXI INCR burst
 // (up to MAX_BURST 512-bit beats) so no burst crosses a 4 KB address
-// boundary. A chunk is read fully into buf_r, then written out — sequential,
+// boundary. A chunk is read fully into chunk_buf, then written out — sequential,
 // not pipelined.
 //
 // FSM:
@@ -34,14 +34,14 @@
 //              operand with its physical address              -> S_SETUP
 //   S_SETUP  : size 0 -> S_DONE; else size the chunk          -> S_REQ_AR
 //   S_REQ_AR : drive AR on the read port; arready             -> S_READ
-//   S_READ   : capture rdata beats into buf_r; last beat      -> S_REQ_AW
+//   S_READ   : capture rdata beats into chunk_buf; last beat  -> S_REQ_AW
 //   S_REQ_AW : drive AW on the write port; awready            -> S_WRITE
-//   S_WRITE  : drive W beats from buf_r; last beat            -> S_WAIT_B
+//   S_WRITE  : drive W beats from chunk_buf; last beat        -> S_WAIT_B
 //   S_WAIT_B : bvalid -> host-direction: validate the chunk   -> S_FLUSH_AR
 //              device-direction: advance chunk                -> S_SETUP
 //   S_FLUSH_AR/S_FLUSH_R : host-direction only -- read back the last line of
 //              the chunk just written and COMPARE it against the copy still
-//              held in buf_r; mismatch re-issues the read     -> S_SETUP
+//              held in chunk_buf; mismatch re-issues the read -> S_SETUP
 //   S_DONE   : pulse `done` for one cycle                     -> S_IDLE
 //
 // WHY THE VALIDATING FLUSH EXISTS. On the V80's HBM host path, a write's
@@ -115,7 +115,7 @@ module VX_cp_dma
   logic [63:0]          rem_beats;        // 64 B beats still to move
   logic [BCNT_W-1:0]    chunk_beats;      // beats in the current chunk
   logic [BIDX_W-1:0]    beat_idx;
-  logic [CL_BITS-1:0]   buf_r [MAX_BURST];
+  logic [CL_BITS-1:0]   buf_rdata;
 
   // Beats from a 64 B-aligned address to the next 4 KB boundary. `cl_idx`
   // is the cache-line index inside the 4 KB page (addr[11:6], 0..63).
@@ -201,6 +201,23 @@ module VX_cp_dma
   wire               rd_rvalid  = rd_from_host ? axi_host.rvalid  : axi_dev.rvalid;
   wire [CL_BITS-1:0] rd_rdata   = rd_from_host ? axi_host.rdata   : axi_dev.rdata;
 
+  // The chunk buffer is read at the write beat, except in S_FLUSH_R, which
+  // compares the read-back against the chunk's last line.
+  VX_dp_ram #(
+    .DATAW (CL_BITS),
+    .SIZE  (MAX_BURST)
+  ) chunk_buf (
+    .clk   (clk),
+    .reset (reset),
+    .read  (1'b1),
+    .write (~reset && rd_rvalid && rd_rready),
+    .wren  (1'b1),
+    .waddr (beat_idx),
+    .wdata (rd_rdata),
+    .raddr ((state == S_FLUSH_R) ? BIDX_W'(chunk_beats - BCNT_W'(1)) : beat_idx),
+    .rdata (buf_rdata)
+  );
+
   // ---- Logical write channel ----
   wire               wr_awvalid = (state == S_REQ_AW);
   wire               wr_wvalid  = (state == S_WRITE);
@@ -283,7 +300,6 @@ module VX_cp_dma
         end
         S_READ: begin
           if (rd_rvalid && rd_rready) begin
-            buf_r[beat_idx] <= rd_rdata;
             if (last_beat) begin
               beat_idx <= '0;
               state    <= S_REQ_AW;
@@ -326,9 +342,9 @@ module VX_cp_dma
         S_FLUSH_R: begin
           if (axi_host.rvalid && axi_host.rready) begin
             // Validate: the read-back must equal the line still held in
-            // buf_r. Stale data means the write has not reached the memory
+            // chunk_buf. Stale data means the write has not reached the memory
             // controller yet -- re-issue the read until it has.
-            state <= (axi_host.rdata == buf_r[BIDX_W'(chunk_beats - BCNT_W'(1))])
+            state <= (axi_host.rdata == buf_rdata)
                        ? S_SETUP : S_FLUSH_AR;
           end
         end
@@ -369,7 +385,7 @@ module VX_cp_dma
     axi_host.awsize  = 3'd6;
     axi_host.awburst = 2'b01;
     axi_host.wvalid  = wr_wvalid  &  wr_to_host;
-    axi_host.wdata   = buf_r[beat_idx];
+    axi_host.wdata   = buf_rdata;
     axi_host.wstrb   = '1;
     axi_host.wlast   = last_beat;
     axi_host.bready  = wr_bready  &  wr_to_host;
@@ -390,7 +406,7 @@ module VX_cp_dma
     axi_dev.awsize   = 3'd6;
     axi_dev.awburst  = 2'b01;
     axi_dev.wvalid   = wr_wvalid  & ~wr_to_host;
-    axi_dev.wdata    = buf_r[beat_idx];
+    axi_dev.wdata    = buf_rdata;
     axi_dev.wstrb    = '1;
     axi_dev.wlast    = last_beat;
     axi_dev.bready   = wr_bready  & ~wr_to_host;
