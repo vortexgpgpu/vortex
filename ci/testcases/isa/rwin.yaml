@@ -1,0 +1,35 @@
+# Register windows: 256 registers per thread named through per-operand windows
+# (vx_rwin) and the one-shot vx_rpfx prefix. The `rwin` app checks the window
+# rules by hand-written asm (x0 is zero only in window 0, x32/x64/... are real,
+# windows reach the FP set, fused and unfused vx_rwin); rp_softmax is compiled
+# with windows on, so the window pass's code runs on both drivers.
+category: isa
+defaults:
+  configs: -DVX_CFG_EXT_RWIN_ENABLE
+  xlen: [32]
+  tier: smoke
+  touches: [hw/rtl/core/VX_decode.sv, hw/rtl/VX_define.vh, sim/simx/decode.cpp, sim/simx/instr.h, sim/simx/core.cpp]
+  known_issue: "window codegen (-riscv-vortex-max-regs, -riscv-vortex-rwin-prefix) is not in the prebuilt LLVM until the TOOLCHAIN_REV refresh"
+tests:
+- id: rwin
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: rwin
+
+# ---------------------------------------------------------------------------
+# check: model_parity — SimX vs rtlsim on compiled window code.
+# ---------------------------------------------------------------------------
+- id: parity-rwin-softmax
+  check: model_parity
+  via: blackbox
+  app: rp_softmax
+  args: -r32 -n256
+  env: {CHUNK: 64}
+# The compiler gives instructions their windows with vx_rpfx where that is
+# cheaper than switching: fused and unfused prefixes, and the per-warp pending one.
+- id: parity-rwin-prefix
+  check: model_parity
+  via: blackbox
+  app: rp_softmax
+  args: -r32 -n256
+  env: {CHUNK: 64, RWIN_LLVM_FLAGS: "-mllvm -riscv-vortex-rwin-prefix"}
