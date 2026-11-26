@@ -489,6 +489,7 @@ uint32_t xn = 64;
 uint32_t xk = 64;
 uint32_t xr = 1; // repeat count: relaunch the same kernel N times on one device session
 bool xz = false;  // bf8: zeros next to small values in K pairs of A row 0
+bool xu = false;  // fp16: subnormals in A row 0
 
 vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
@@ -504,12 +505,12 @@ kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
   std::cout << "Vortex Sgemm TCU Test." << std::endl;
-  std::cout << "Usage: [-m: m] [-n N] [-k: K] [-r: repeat] [-z: bf8 zero pairs] [-h: help]" << std::endl;
+  std::cout << "Usage: [-m: m] [-n N] [-k: K] [-r: repeat] [-z: bf8 zero pairs] [-u: fp16 subnormals] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "m:n:k:r:i:o:hsz")) != -1) {
+  while ((c = getopt(argc, argv, "m:n:k:r:i:o:hszu")) != -1) {
     switch (c) {
     case 'm':
       xm = atoi(optarg);
@@ -525,6 +526,9 @@ static void parse_args(int argc, char **argv) {
       break;
     case 'z':
       xz = true;
+      break;
+    case 'u':
+      xu = true;
       break;
     case 'h':
       show_usage();
@@ -557,6 +561,10 @@ int main(int argc, char *argv[]) {
   parse_args(argc, argv);
   if (xz && !std::is_same<vt::ITYPE, vt::bf8>::value) {
     std::cout << "Error: -z requires ITYPE=bf8!" << std::endl;
+    return -1;
+  }
+  if (xu && !std::is_same<vt::ITYPE, vt::fp16>::value) {
+    std::cout << "Error: -u requires ITYPE=fp16!" << std::endl;
     return -1;
   }
 
@@ -659,6 +667,14 @@ int main(int argc, char *argv[]) {
         h_A[k] = (k & 1) ? 0x13 : 0x00;
       for (uint32_t i = 0; i < sizeB; ++i)
         h_B[i] = ((i / N) & 1) ? 0x13 : 0x7b;
+    }
+  }
+
+  if constexpr (std::is_same<vt::ITYPE, vt::fp16>::value) {
+    if (xu) {
+      // Row 0 of A holds fp16 subnormals, 2^-24 up to 1023 * 2^-24.
+      for (uint32_t k = 0; k < K; ++k)
+        h_A[k] = uint16_t(1 + (k * 97) % 0x3ff);
     }
   }
 
