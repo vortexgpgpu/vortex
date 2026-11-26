@@ -203,7 +203,7 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
     // ── the hold table (two-word mode) ─────────────────────────────────────
     reg [MAX_OPEN-1:0]                       open_valid;
     reg [MAX_OPEN-1:0][`VX_CFG_XLEN-1:0]     open_rec;
-    reg [MAX_OPEN-1:0][31:0]                 open_colour;
+    wire [31:0]                              hit_colour;
 
     // match this word against an open colour record
     wire [MAX_OPEN-1:0] hit_vec;
@@ -243,7 +243,7 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
     // (OM_CORE_LANES = 1): a fragment's colour+depth accesses drain through the
     // ocache at bank rate, so a wider transport buys no fill rate. The fill-rate
     // levers are NUM_OM_CORES and OCACHE_NUM_BANKS, not the request width.
-    wire [31:0] frag_colour = s2_is_depth ? open_colour[hit_idx] : s2_word;
+    wire [31:0] frag_colour = s2_is_depth ? hit_colour : s2_word;
     wire [31:0] frag_depth  = s2_is_depth ? s2_word : 32'd0;
     `UNUSED_VAR (frag_depth)   // only the low VX_OM_DEPTH_BITS reach the om_bus
 
@@ -279,6 +279,23 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
     // An allocating word is never refused (the table cannot fill), so the only
     // back-pressure is the om_bus itself, through the record stage.
     wire s2_fire = rec_valid && (fire ? om_ready : 1'b1);
+
+    VX_dp_ram #(
+        .DATAW  (32),
+        .SIZE   (MAX_OPEN),
+        .LUTRAM (1)
+    ) open_colour_ram (
+        .clk   (clk),
+        .reset (reset),
+        .read  (1'b1),
+        .write (~reset && s2_fire && alloc),
+        .wren  (1'b1),
+        .waddr (free_idx),
+        .wdata (s2_word),
+        .raddr (hit_idx),
+        .rdata (hit_colour)
+    );
+
     assign s2_ready = fire ? om_ready : 1'b1;
 
     // The beat is held until its last word has entered the record stage.
@@ -298,7 +315,6 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
             if (s2_fire && alloc) begin
                 open_valid[free_idx]  <= 1'b1;
                 open_rec[free_idx]    <= s2_record_idx;
-                open_colour[free_idx] <= s2_word;
             end
             if (s2_fire && s2_is_pair && s2_is_depth && hit) begin
                 open_valid[hit_idx] <= 1'b0;
