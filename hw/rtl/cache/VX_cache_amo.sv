@@ -928,12 +928,26 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
 
         reg [MSHR_SIZE-1:0]      ptw_flag;   // entry awaits a passthru fill
         reg [WORD_SEL_WIDTH-1:0] ptw_wsel [MSHR_SIZE];
-        reg [WORD_WIDTH-1:0]     ptw_word [MSHR_SIZE];
 
         wire [WORDS_PER_SECTOR-1:0][WORD_WIDTH-1:0] mem_rsp_words = mem_rsp_data;
 
         assign is_passthru_fill_sel = is_fill_sel && ptw_flag[mem_rsp_id];
-        assign amo_ptw_word_st1     = ptw_word[mshr_id_st1];
+
+        VX_dp_ram #(
+            .DATAW  (WORD_WIDTH),
+            .SIZE   (MSHR_SIZE),
+            .LUTRAM (1)
+        ) ptw_word_ram (
+            .clk   (clk),
+            .reset (reset),
+            .read  (1'b1),
+            .write (~reset && mem_rsp_fire && ptw_flag[mem_rsp_id]),
+            .wren  (1'b1),
+            .waddr (mem_rsp_id),
+            .wdata (mem_rsp_words[ptw_wsel[mem_rsp_id]]),
+            .raddr (mshr_id_st1),
+            .rdata (amo_ptw_word_st1)
+        );
 
         always @(posedge clk) begin
             if (reset) begin
@@ -946,7 +960,6 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
                 end
                 // latch the result word on the passthru fill, clear the flag
                 if (mem_rsp_fire && ptw_flag[mem_rsp_id]) begin
-                    ptw_word[mem_rsp_id] <= mem_rsp_words[ptw_wsel[mem_rsp_id]];
                     ptw_flag[mem_rsp_id] <= 1'b0;
                 end
             end
