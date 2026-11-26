@@ -286,36 +286,6 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define ARB_SEL_BITS(I, O)  ((I > O) ? `CLOG2(`CDIV(I, O)) : 0)
-
-///////////////////////////////////////////////////////////////////////////////
-
-`define CACHE_MEM_TAG_WIDTH(mshr_size, num_banks, mem_ports, uuid_width) \
-        (uuid_width + `CLOG2(mshr_size) + `CLOG2(`CDIV(num_banks, mem_ports)))
-
-`define CACHE_BYPASS_TAG_WIDTH(num_reqs, mem_ports, line_size, word_size, tag_width) \
-        (`CLOG2(`CDIV(num_reqs, mem_ports)) + `CLOG2(line_size / word_size) + tag_width)
-
-`define CACHE_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, mem_ports, line_size, word_size, tag_width, uuid_width) \
-        (`MAX(`CACHE_MEM_TAG_WIDTH(mshr_size, num_banks, mem_ports, uuid_width), `CACHE_BYPASS_TAG_WIDTH(num_reqs, mem_ports, line_size, word_size, tag_width)) + 1)
-
-///////////////////////////////////////////////////////////////////////////////
-
-`define CACHE_CLUSTER_CORE_ARB_TAG(tag_width, num_inputs, num_caches) \
-        (tag_width + `ARB_SEL_BITS(num_inputs, `UP(num_caches)))
-
-`define CACHE_CLUSTER_MEM_ARB_TAG(tag_width, num_caches) \
-        (tag_width + `ARB_SEL_BITS(`UP(num_caches), 1))
-
-`define CACHE_CLUSTER_MEM_TAG_WIDTH(mshr_size, num_banks, mem_ports, num_caches, uuid_width) \
-        `CACHE_CLUSTER_MEM_ARB_TAG(`CACHE_MEM_TAG_WIDTH(mshr_size, num_banks, mem_ports, uuid_width), num_caches)
-
-`define CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(num_reqs, mem_ports, line_size, word_size, tag_width, num_inputs, num_caches) \
-        `CACHE_CLUSTER_MEM_ARB_TAG(`CACHE_BYPASS_TAG_WIDTH(num_reqs, mem_ports, line_size, word_size, `CACHE_CLUSTER_CORE_ARB_TAG(tag_width, num_inputs, num_caches)), num_caches)
-
-`define CACHE_CLUSTER_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, mem_ports, line_size, word_size, tag_width, num_inputs, num_caches, uuid_width) \
-        `CACHE_CLUSTER_MEM_ARB_TAG(`CACHE_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, mem_ports, line_size, word_size, `CACHE_CLUSTER_CORE_ARB_TAG(tag_width, num_inputs, num_caches), uuid_width), num_caches)
-
 `define TO_FULL_ADDR(x) {x, (`VX_CFG_MEM_ADDR_WIDTH-$bits(x))'(0)}
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -442,19 +412,6 @@
         end \
     end else begin \
         assign dst.``field = src[0].``field; \
-    end \
-    /* verilator lint_on GENUNNAMED */
-
-`define ASSIGN_BLOCKED_WID(dst, src, block_idx, block_size) \
-    /* verilator lint_off GENUNNAMED */ \
-    if (block_size != 1) begin \
-        if (block_size != `VX_CFG_NUM_WARPS) begin \
-            assign dst = {src[NW_WIDTH-1:`CLOG2(block_size)], `CLOG2(block_size)'(block_idx)}; \
-        end else begin \
-            assign dst = NW_WIDTH'(block_idx); \
-        end \
-    end else begin \
-        assign dst = src; \
     end \
     /* verilator lint_on GENUNNAMED */
 

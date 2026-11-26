@@ -49,7 +49,7 @@ module VX_rtu_bus_arb import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     VX_rtu_bus_if.master    bus_out_if [NUM_OUTPUTS]
 );
     localparam CORES_PER_RTU = NUM_INPUTS / NUM_OUTPUTS;
-    localparam LOG_NUM_REQS  = `ARB_SEL_BITS(CORES_PER_RTU, 1);
+    localparam LOG_NUM_REQS  = arb_sel_bits(CORES_PER_RTU, 1);
     localparam SEL_W         = `UP(LOG_NUM_REQS);
 
     // The arm MAY be buffered: a beat names its owner ({src, wid}) and the RTU

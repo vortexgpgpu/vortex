@@ -81,9 +81,9 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
 );
     localparam NUM_CACHES = `UP(NUM_UNITS);
     localparam PASSTHRU   = (NUM_UNITS == 0);
-    localparam ARB_TAG_WIDTH = TAG_WIDTH + `ARB_SEL_BITS(NUM_INPUTS, NUM_CACHES);
-    localparam CACHE_MEM_TAG_WIDTH = `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, MEM_PORTS, UUID_WIDTH);
-    localparam BYPASS_TAG_WIDTH = `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, MEM_PORTS, SECTOR_SIZE, WORD_SIZE, ARB_TAG_WIDTH);
+    localparam ARB_TAG_WIDTH = TAG_WIDTH + arb_sel_bits(NUM_INPUTS, NUM_CACHES);
+    localparam CACHE_MEM_TAG_WIDTH = cache_mem_tag_width(MSHR_SIZE, NUM_BANKS, MEM_PORTS, UUID_WIDTH);
+    localparam BYPASS_TAG_WIDTH = cache_bypass_tag_width(NUM_REQS, MEM_PORTS, SECTOR_SIZE, WORD_SIZE, ARB_TAG_WIDTH);
     localparam NC_TAG_WIDTH = `MAX(CACHE_MEM_TAG_WIDTH, BYPASS_TAG_WIDTH) + 1;
     localparam MEM_TAG_WIDTH = PASSTHRU ? BYPASS_TAG_WIDTH : (NC_ENABLE ? NC_TAG_WIDTH : CACHE_MEM_TAG_WIDTH);
     `STATIC_ASSERT(NUM_INPUTS >= NUM_CACHES, ("invalid parameter"))
@@ -210,7 +210,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
         ) arb_core_bus_tmp_if[NUM_CACHES]();
         VX_mem_bus_if #(
             .DATA_SIZE (SECTOR_SIZE),
-            .TAG_WIDTH (MEM_TAG_WIDTH + `ARB_SEL_BITS(NUM_CACHES, 1))
+            .TAG_WIDTH (MEM_TAG_WIDTH + arb_sel_bits(NUM_CACHES, 1))
         ) mem_bus_tmp_if[1]();
         for (genvar j = 0; j < NUM_CACHES; ++j) begin : g_arb_core_bus_tmp_if
             `ASSIGN_VX_MEM_BUS_IF (arb_core_bus_tmp_if[j], cache_mem_bus_if[j * MEM_PORTS + i]);

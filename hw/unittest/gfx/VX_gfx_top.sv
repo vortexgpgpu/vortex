@@ -390,7 +390,7 @@ module VX_gfx_top import VX_gpu_pkg::*
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
     localparam RTU_CORES_PER_RTU = NC / `VX_CFG_NUM_RTU_CORES;
-    localparam RTU_SRC_WIDTH     = `UP(`ARB_SEL_BITS(RTU_CORES_PER_RTU, 1));
+    localparam RTU_SRC_WIDTH     = `UP(arb_sel_bits(RTU_CORES_PER_RTU, 1));
 
     VX_rtu_bus_if #(
         .NUM_LANES (SFU_LANES),

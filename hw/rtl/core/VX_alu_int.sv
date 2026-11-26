@@ -394,7 +394,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
         end
     end
     wire [NW_WIDTH-1:0] br_wid;
-    `ASSIGN_BLOCKED_WID (br_wid, result_if.data.header.wid, block_idx, `VX_CFG_NUM_ALU_BLOCKS)
+    assign br_wid = blocked_wid(result_if.data.header.wid, NW_WIDTH'(block_idx), `VX_CFG_NUM_ALU_BLOCKS);
     if (`VX_CFG_NUM_ALU_BLOCKS == 1) begin : g_block_idx_unused
         `UNUSED_VAR (block_idx)
     end

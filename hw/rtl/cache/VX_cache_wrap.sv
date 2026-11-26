@@ -85,8 +85,8 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     output wire             req_empty
 );
     `STATIC_ASSERT(NUM_BANKS == (1 << `CLOG2(NUM_BANKS)), ("invalid parameter"))
-    localparam CACHE_MEM_TAG_WIDTH = `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, MEM_PORTS, UUID_WIDTH);
-    localparam BYPASS_TAG_WIDTH = `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, MEM_PORTS, SECTOR_SIZE, WORD_SIZE, TAG_WIDTH);
+    localparam CACHE_MEM_TAG_WIDTH = cache_mem_tag_width(MSHR_SIZE, NUM_BANKS, MEM_PORTS, UUID_WIDTH);
+    localparam BYPASS_TAG_WIDTH = cache_bypass_tag_width(NUM_REQS, MEM_PORTS, SECTOR_SIZE, WORD_SIZE, TAG_WIDTH);
     localparam NC_TAG_WIDTH = `MAX(CACHE_MEM_TAG_WIDTH, BYPASS_TAG_WIDTH) + 1;
     localparam MEM_TAG_WIDTH = PASSTHRU ? BYPASS_TAG_WIDTH : (NC_ENABLE ? NC_TAG_WIDTH : CACHE_MEM_TAG_WIDTH);
     localparam BYPASS_ENABLE = (NC_ENABLE || PASSTHRU);

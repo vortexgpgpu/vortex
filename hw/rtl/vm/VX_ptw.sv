@@ -28,7 +28,7 @@ module VX_ptw import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     parameter ID_WIDTH        = `CLOG2(`VX_CFG_L2_TLB_MSHR_SIZE),
     // Cache-facing PTE-port tag width (must hold the mem-bus {uuid,value}
     // struct); the walker index rides its top bits.
-    parameter MEM_TAG_WIDTH   = DCACHE_TAG_WIDTH_BASE + `ARB_SEL_BITS(`VX_CFG_PTW_NUM_WALKERS, 1)
+    parameter MEM_TAG_WIDTH   = DCACHE_TAG_WIDTH_BASE + arb_sel_bits(`VX_CFG_PTW_NUM_WALKERS, 1)
 ) (
     input wire clk,
     input wire reset,
@@ -44,7 +44,7 @@ module VX_ptw import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 );
     localparam WID_W        = `UP(`CLOG2(NUM_WALKERS));
     // The arb appends the walker index on top of each walker's base tag.
-    localparam WALKER_TAG_W = MEM_TAG_WIDTH - `ARB_SEL_BITS(NUM_WALKERS, 1);
+    localparam WALKER_TAG_W = MEM_TAG_WIDTH - arb_sel_bits(NUM_WALKERS, 1);
     localparam PAGE_LOG2    = `VX_VM_PAGE_LOG2_SIZE;
     localparam RSP_ID_W     = `UP(ID_WIDTH);
     localparam RSP_DATAW    = RSP_ID_W + 1 + TLB_LEVEL_WIDTH + TLB_PPN_WIDTH + TLB_FLAGS_WIDTH;

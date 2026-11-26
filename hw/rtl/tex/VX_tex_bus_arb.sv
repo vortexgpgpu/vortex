@@ -31,7 +31,7 @@ module VX_tex_bus_arb import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     VX_tex_bus_if.master    bus_out_if [NUM_OUTPUTS]
 );
 
-    localparam LOG_NUM_REQS = `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS);
+    localparam LOG_NUM_REQS = arb_sel_bits(NUM_INPUTS, NUM_OUTPUTS);
     localparam SEL_COUNT    = `MIN(NUM_INPUTS, NUM_OUTPUTS);
     localparam SEL_W        = `UP(`CLOG2(`CDIV(`MAX(NUM_INPUTS, NUM_OUTPUTS), SEL_COUNT)));
     localparam REQ_DATAW    = TAG_WIDTH + NUM_LANES * (1 + 2 * 32 + TEX_LODF_BITS) + TEX_STAGE_BITS;

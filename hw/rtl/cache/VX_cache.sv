@@ -90,7 +90,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     localparam REQ_SEL_WIDTH   = `UP(`CS_REQ_SEL_BITS);
     localparam WORD_SEL_WIDTH  = `UP(`CS_WORD_SEL_BITS);
     localparam MSHR_ADDR_WIDTH = `LOG2UP(MSHR_SIZE);
-    localparam MEM_TAG_WIDTH   = `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, MEM_PORTS, UUID_WIDTH);
+    localparam MEM_TAG_WIDTH   = cache_mem_tag_width(MSHR_SIZE, NUM_BANKS, MEM_PORTS, UUID_WIDTH);
     localparam WORDS_PER_LINE  = LINE_SIZE / WORD_SIZE;
     localparam WORD_WIDTH      = WORD_SIZE * 8;
     localparam WORD_SEL_BITS   = `CLOG2(WORDS_PER_LINE);

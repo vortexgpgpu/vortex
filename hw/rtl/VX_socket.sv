@@ -625,7 +625,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     // bits, which is what keeps two cores' identically numbered warps apart in the
     // RTU's ray staging (see VX_rtu_bus_if.req_data_t.src).
     localparam RTU_CORES_PER_RTU = `VX_CFG_SOCKET_SIZE / `VX_CFG_NUM_RTU_CORES;
-    localparam RTU_SRC_WIDTH     = `UP(`ARB_SEL_BITS(RTU_CORES_PER_RTU, 1));
+    localparam RTU_SRC_WIDTH     = `UP(arb_sel_bits(RTU_CORES_PER_RTU, 1));
 
     VX_rtu_bus_if #(
         .NUM_LANES (`VX_CFG_NUM_SFU_LANES),
