@@ -247,13 +247,23 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
         );
 
         if (CP_ON_L2 != 0) begin : g_l2
-            `ASSIGN_VX_MEM_BUS_IF (per_cluster_cp_mem_if[0], cp_mem_if);
+            VX_mem_bus_connect per_cluster_cp_mem_0_connect (
+                .bus_in_if  (cp_mem_if),
+                .bus_out_if (per_cluster_cp_mem_if[0])
+            );
         end else begin : g_l3
-            `ASSIGN_VX_MEM_BUS_IF (per_cluster_mem_bus_if[L3_CP_IDX], cp_mem_if);
-            `INIT_VX_MEM_BUS_IF (per_cluster_cp_mem_if[0])
+            VX_mem_bus_connect per_cluster_mem_bus_l3_cp_idx_connect (
+                .bus_in_if  (cp_mem_if),
+                .bus_out_if (per_cluster_mem_bus_if[L3_CP_IDX])
+            );
+            VX_mem_bus_idle_master per_cluster_cp_mem_0_idle (
+                .bus_if (per_cluster_cp_mem_if[0])
+            );
         end
         for (genvar c = 1; c < `VX_CFG_NUM_CLUSTERS; ++c) begin : g_cp_mem_legs
-            `INIT_VX_MEM_BUS_IF (per_cluster_cp_mem_if[c])
+            VX_mem_bus_idle_master per_cluster_cp_mem_idle (
+                .bus_if (per_cluster_cp_mem_if[c])
+            );
         end
     end else begin : g_no_cp_mem
         assign cp_mem_req_ready = 1'b0;
@@ -264,7 +274,9 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
         assign kmu_start   = start;
         assign cp_mem_busy = 1'b0;
         for (genvar c = 0; c < `VX_CFG_NUM_CLUSTERS; ++c) begin : g_cp_mem_legs
-            `INIT_VX_MEM_BUS_IF (per_cluster_cp_mem_if[c])
+            VX_mem_bus_idle_master per_cluster_cp_mem_idle (
+                .bus_if (per_cluster_cp_mem_if[c])
+            );
         end
     end
 
@@ -369,12 +381,20 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
     );
 
     if (PTW_ON_L2 == 0) begin : g_ptw_llc_client
-        `ASSIGN_VX_MEM_BUS_IF (per_cluster_mem_bus_if[L3_PTW_IDX], dev_ptw_mem_if);
+        VX_mem_bus_connect per_cluster_mem_bus_l3_ptw_idx_connect (
+            .bus_in_if  (dev_ptw_mem_if),
+            .bus_out_if (per_cluster_mem_bus_if[L3_PTW_IDX])
+        );
         for (genvar c = 0; c < `VX_CFG_NUM_CLUSTERS; ++c) begin : g_ptw_mem_legs
-            `INIT_VX_MEM_BUS_IF (per_cluster_ptw_mem_if[c])
+            VX_mem_bus_idle_master per_cluster_ptw_mem_idle (
+                .bus_if (per_cluster_ptw_mem_if[c])
+            );
         end
     end else begin : g_ptw_l2_client
-        `ASSIGN_VX_MEM_BUS_IF (per_cluster_ptw_mem_if[0], dev_ptw_mem_if);
+        VX_mem_bus_connect per_cluster_ptw_mem_0_connect (
+            .bus_in_if  (dev_ptw_mem_if),
+            .bus_out_if (per_cluster_ptw_mem_if[0])
+        );
     end
 
     assign dev_ptw_flush_if.req = mmu_flush_req;

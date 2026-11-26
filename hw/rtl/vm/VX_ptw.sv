@@ -190,7 +190,10 @@ module VX_ptw import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .bus_out_if (merged_mem)
     );
 
-    `ASSIGN_VX_MEM_BUS_IF (mem_bus_if, merged_mem[0]);
+    VX_mem_bus_connect mem_bus_connect (
+        .bus_in_if  (merged_mem[0]),
+        .bus_out_if (mem_bus_if)
+    );
 
     // ---------------------------------------------------------------------
     // Walk-cache fill: at most one descending walk writes per cycle

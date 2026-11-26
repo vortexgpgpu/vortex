@@ -232,7 +232,10 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
                 .empty      (dcache_link_empty[i])
             );
         end else begin : g_wire
-            `ASSIGN_VX_MEM_BUS_IF (dcache_link_bus_if[i], dcache_phys_bus_if[i]);
+            VX_mem_bus_connect dcache_link_bus_connect (
+                .bus_in_if  (dcache_phys_bus_if[i]),
+                .bus_out_if (dcache_link_bus_if[i])
+            );
             assign dcache_link_empty[i] = 1'b1;
         end
     end
@@ -432,10 +435,16 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 `else
     // No-VM passthrough: cache-side buses mirror the core-side buses.
     for (genvar i = 0; i < `VX_CFG_SOCKET_SIZE * DCACHE_NUM_REQS; ++i) begin : g_dcache_phys_passthru
-        `ASSIGN_VX_MEM_BUS_IF (dcache_phys_bus_if[i], per_core_dcache_bus_if[i]);
+        VX_mem_bus_connect dcache_phys_bus_connect (
+            .bus_in_if  (per_core_dcache_bus_if[i]),
+            .bus_out_if (dcache_phys_bus_if[i])
+        );
     end
     for (genvar i = 0; i < `VX_CFG_SOCKET_SIZE * ICACHE_NUM_REQS; ++i) begin : g_icache_phys_passthru
-        `ASSIGN_VX_MEM_BUS_IF (icache_phys_bus_if[i], per_core_icache_bus_if[i]);
+        VX_mem_bus_connect icache_phys_bus_connect (
+            .bus_in_if  (per_core_icache_bus_if[i]),
+            .bus_out_if (icache_phys_bus_if[i])
+        );
     end
 `endif
 
@@ -575,8 +584,12 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     );
 
     for (genvar i = 1; i < `VX_CFG_NUM_TEX_CORES * TCACHE_NUM_REQS; ++i) begin : g_tcache_passthru
-        `ASSIGN_VX_MEM_BUS_IF_EX (tcache_flushable_bus_if[i], tcache_bus_if[i],
-                                  TCACHE_BUS_TAG_WIDTH, TCACHE_TAG_WIDTH, 0);
+        VX_mem_bus_connect #(
+            .UUID_TAG (0)
+        ) tcache_flushable_bus_connect (
+            .bus_in_if  (tcache_bus_if[i]),
+            .bus_out_if (tcache_flushable_bus_if[i])
+        );
     end
 
     VX_cache_cluster #(
@@ -728,8 +741,12 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     );
 
     for (genvar i = 1; i < `VX_CFG_NUM_RTU_CORES * RTCACHE_NUM_REQS; ++i) begin : g_rtcache_passthru
-        `ASSIGN_VX_MEM_BUS_IF_EX (rtcache_flushable_bus_if[i], rtcache_bus_if[i],
-                                  RTCACHE_BUS_TAG_WIDTH, RTCACHE_TAG_WIDTH, 0);
+        VX_mem_bus_connect #(
+            .UUID_TAG (0)
+        ) rtcache_flushable_bus_connect (
+            .bus_in_if  (rtcache_bus_if[i]),
+            .bus_out_if (rtcache_flushable_bus_if[i])
+        );
     end
 
     VX_cache_cluster #(
@@ -871,13 +888,22 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
 
 `ifdef VX_CFG_EXT_TEX_ENABLE
-    `ASSIGN_VX_MEM_BUS_IF_EX (unit_mem_bus_if[UMMU_TCACHE_IDX], tcache_mem_bus_tmp_if[0], SOCKET_MEM_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+    VX_mem_bus_connect unit_mem_bus_ummu_tcache_idx_connect (
+        .bus_in_if  (tcache_mem_bus_tmp_if[0]),
+        .bus_out_if (unit_mem_bus_if[UMMU_TCACHE_IDX])
+    );
 `endif
 `ifdef VX_CFG_EXT_RTU_ENABLE
-    `ASSIGN_VX_MEM_BUS_IF_EX (unit_mem_bus_if[UMMU_RTCACHE_IDX], rtcache_mem_bus_tmp_if[0], SOCKET_MEM_TAG_WIDTH, RTCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+    VX_mem_bus_connect unit_mem_bus_ummu_rtcache_idx_connect (
+        .bus_in_if  (rtcache_mem_bus_tmp_if[0]),
+        .bus_out_if (unit_mem_bus_if[UMMU_RTCACHE_IDX])
+    );
 `endif
 `ifdef VX_CFG_EXT_DXA_ENABLE
-    `ASSIGN_VX_MEM_BUS_IF (unit_mem_bus_if[UMMU_DXA_IDX], dxa_gmem_bus_if[0]);
+    VX_mem_bus_connect unit_mem_bus_ummu_dxa_idx_connect (
+        .bus_in_if  (dxa_gmem_bus_if[0]),
+        .bus_out_if (unit_mem_bus_if[UMMU_DXA_IDX])
+    );
 `endif
 
     VX_mmu_fault_if ummu_fault_if();
@@ -947,27 +973,51 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
                 .TAG_WIDTH (SOCKET_MEM_ARB_TAG_WIDTH)
             ) socket_arb_out_if[1]();
 
-            `ASSIGN_VX_MEM_BUS_IF_EX (socket_arb_in_if[ICACHE_MEM_ARB_IDX], icache_mem_bus_if[0], SOCKET_MEM_TAG_WIDTH, ICACHE_MEM_TAG_WIDTH, UUID_WIDTH);
-            `ASSIGN_VX_MEM_BUS_IF_EX (socket_arb_in_if[DCACHE_MEM_ARB_IDX], dcache_mem_bus_if[0], SOCKET_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+            VX_mem_bus_connect socket_arb_in_icache_mem_arb_idx_connect (
+                .bus_in_if  (icache_mem_bus_if[0]),
+                .bus_out_if (socket_arb_in_if[ICACHE_MEM_ARB_IDX])
+            );
+            VX_mem_bus_connect socket_arb_in_dcache_mem_arb_idx_connect (
+                .bus_in_if  (dcache_mem_bus_if[0]),
+                .bus_out_if (socket_arb_in_if[DCACHE_MEM_ARB_IDX])
+            );
         `ifdef SOCKET_UNIT_MMU_ENABLE
         `ifdef VX_CFG_EXT_TEX_ENABLE
-            `ASSIGN_VX_MEM_BUS_IF (socket_arb_in_if[TCACHE_MEM_ARB_IDX], unit_phys_bus_if[UMMU_TCACHE_IDX]);
+            VX_mem_bus_connect socket_arb_in_tcache_mem_arb_idx_connect (
+                .bus_in_if  (unit_phys_bus_if[UMMU_TCACHE_IDX]),
+                .bus_out_if (socket_arb_in_if[TCACHE_MEM_ARB_IDX])
+            );
         `endif
         `ifdef VX_CFG_EXT_RTU_ENABLE
-            `ASSIGN_VX_MEM_BUS_IF (socket_arb_in_if[RTCACHE_MEM_ARB_IDX], unit_phys_bus_if[UMMU_RTCACHE_IDX]);
+            VX_mem_bus_connect socket_arb_in_rtcache_mem_arb_idx_connect (
+                .bus_in_if  (unit_phys_bus_if[UMMU_RTCACHE_IDX]),
+                .bus_out_if (socket_arb_in_if[RTCACHE_MEM_ARB_IDX])
+            );
         `endif
         `ifdef VX_CFG_EXT_DXA_ENABLE
-            `ASSIGN_VX_MEM_BUS_IF (socket_arb_in_if[DXA_MEM_ARB_IDX], unit_phys_bus_if[UMMU_DXA_IDX]);
+            VX_mem_bus_connect socket_arb_in_dxa_mem_arb_idx_connect (
+                .bus_in_if  (unit_phys_bus_if[UMMU_DXA_IDX]),
+                .bus_out_if (socket_arb_in_if[DXA_MEM_ARB_IDX])
+            );
         `endif
         `else
         `ifdef VX_CFG_EXT_TEX_ENABLE
-            `ASSIGN_VX_MEM_BUS_IF_EX (socket_arb_in_if[TCACHE_MEM_ARB_IDX], tcache_mem_bus_tmp_if[0], SOCKET_MEM_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+            VX_mem_bus_connect socket_arb_in_tcache_mem_arb_idx_connect (
+                .bus_in_if  (tcache_mem_bus_tmp_if[0]),
+                .bus_out_if (socket_arb_in_if[TCACHE_MEM_ARB_IDX])
+            );
         `endif
         `ifdef VX_CFG_EXT_RTU_ENABLE
-            `ASSIGN_VX_MEM_BUS_IF_EX (socket_arb_in_if[RTCACHE_MEM_ARB_IDX], rtcache_mem_bus_tmp_if[0], SOCKET_MEM_TAG_WIDTH, RTCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+            VX_mem_bus_connect socket_arb_in_rtcache_mem_arb_idx_connect (
+                .bus_in_if  (rtcache_mem_bus_tmp_if[0]),
+                .bus_out_if (socket_arb_in_if[RTCACHE_MEM_ARB_IDX])
+            );
         `endif
         `ifdef VX_CFG_EXT_DXA_ENABLE
-            `ASSIGN_VX_MEM_BUS_IF (socket_arb_in_if[DXA_MEM_ARB_IDX], dxa_gmem_bus_if[0]);
+            VX_mem_bus_connect socket_arb_in_dxa_mem_arb_idx_connect (
+                .bus_in_if  (dxa_gmem_bus_if[0]),
+                .bus_out_if (socket_arb_in_if[DXA_MEM_ARB_IDX])
+            );
         `endif
         `endif
 
@@ -1002,15 +1052,24 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
                 .empty    (mem_arb_empty)
             );
 
-            `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[0], socket_arb_out_if[0]);
+            VX_mem_bus_connect mem_bus_0_connect (
+                .bus_in_if  (socket_arb_out_if[0]),
+                .bus_out_if (mem_bus_if[0])
+            );
         end else begin : g_i
             VX_mem_bus_if #(
                 .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
                 .TAG_WIDTH (SOCKET_MEM_ARB_TAG_WIDTH)
             ) l1_mem_arb_bus_if();
 
-            `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_arb_bus_if, dcache_mem_bus_if[i], SOCKET_MEM_ARB_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
-            `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[i], l1_mem_arb_bus_if);
+            VX_mem_bus_connect l1_mem_arb_bus_connect (
+                .bus_in_if  (dcache_mem_bus_if[i]),
+                .bus_out_if (l1_mem_arb_bus_if)
+            );
+            VX_mem_bus_connect mem_bus_connect (
+                .bus_in_if  (l1_mem_arb_bus_if),
+                .bus_out_if (mem_bus_if[i])
+            );
         end
     end
 

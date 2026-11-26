@@ -405,7 +405,10 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     // The rcache carries only the primitive/tile fetch requester now, so the
     // fetch bus drives the physical rcache ports directly (no requester arb).
     for (genvar p = 0; p < RCACHE_NUM_REQS; ++p) begin : g_rcache_fetch
-        `ASSIGN_VX_MEM_BUS_IF (cache_bus_if[p], mem_cache_bus_if[p]);
+        VX_mem_bus_connect cache_bus_connect (
+            .bus_in_if  (mem_cache_bus_if[p]),
+            .bus_out_if (cache_bus_if[p])
+        );
     end
 
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
@@ -425,7 +428,10 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         ) merge_out_if [1] ();
 
         for (genvar s = 0; s < NUM_SLICES; ++s) begin : g_merge_in
-            `ASSIGN_VX_MEM_BUS_IF (merge_in_if[s], slice_earlyz_bus_if[s * OCACHE_NUM_REQS + p]);
+            VX_mem_bus_connect merge_in_connect (
+                .bus_in_if  (slice_earlyz_bus_if[s * OCACHE_NUM_REQS + p]),
+                .bus_out_if (merge_in_if[s])
+            );
         end
 
         VX_mem_bus_arb #(
@@ -444,7 +450,10 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
             .bus_out_if (merge_out_if)
         );
 
-        `ASSIGN_VX_MEM_BUS_IF (earlyz_cache_bus_if[p], merge_out_if[0]);
+        VX_mem_bus_connect earlyz_cache_bus_connect (
+            .bus_in_if  (merge_out_if[0]),
+            .bus_out_if (earlyz_cache_bus_if[p])
+        );
     end
 `endif
 

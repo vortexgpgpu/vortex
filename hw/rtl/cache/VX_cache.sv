@@ -945,9 +945,17 @@ module VX_cache import VX_gpu_pkg::*; #(
     end
     for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_if
         if (WRITE_ENABLE) begin : g_rw
-            `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[i], mem_bus_tmp_if[i]);
+            VX_mem_bus_connect mem_bus_connect (
+                .bus_in_if  (mem_bus_tmp_if[i]),
+                .bus_out_if (mem_bus_if[i])
+            );
         end else begin : g_ro
-            `ASSIGN_VX_MEM_BUS_RO_IF (mem_bus_if[i], mem_bus_tmp_if[i]);
+            VX_mem_bus_connect #(
+                .READ_ONLY (1)
+            ) mem_bus_connect (
+                .bus_in_if  (mem_bus_tmp_if[i]),
+                .bus_out_if (mem_bus_if[i])
+            );
         end
     end
 `ifdef PERF_ENABLE
