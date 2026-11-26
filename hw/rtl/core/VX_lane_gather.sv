@@ -32,7 +32,7 @@ module VX_lane_gather import VX_gpu_pkg::*; #(
     `STATIC_ASSERT (`IS_DIVISBLE(NUM_PORTS, BLOCK_SIZE), ("invalid parameter"))
     `STATIC_ASSERT (`IS_DIVISBLE(`VX_CFG_SIMD_WIDTH, NUM_LANES), ("invalid parameter"))
 
-    `DECL_EXECUTE_T (pe, NUM_LANES);
+    typedef result_if[0].data_t pe_result_t;
 
     localparam BLOCK_SIZE_W = `LOG2UP(BLOCK_SIZE);
     localparam NUM_PACKETS  = `VX_CFG_SIMD_WIDTH / NUM_LANES;
@@ -100,7 +100,7 @@ module VX_lane_gather import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_PORTS; ++i) begin: g_out_bufs
         VX_result_if #(
-            .data_t (pe_result_t)
+            .NUM_LANES (NUM_LANES)
         ) result_tmp_if();
 
         // a narrow unit's results carry whether they complete their beat and

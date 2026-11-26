@@ -13,11 +13,11 @@ module VX_tfu_unit_top import VX_gpu_pkg::*; (
     output wire [$bits(sfu_result_t)-1:0]  result_data
 );
     VX_execute_if #(
-        .data_t (sfu_execute_t)
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
     ) execute_if();
 
     VX_result_if #(
-        .data_t (sfu_result_t)
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
     ) result_if();
 
     assign execute_if.valid = execute_valid;

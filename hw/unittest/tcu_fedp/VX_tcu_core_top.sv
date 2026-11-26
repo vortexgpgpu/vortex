@@ -30,11 +30,11 @@ module VX_tcu_core_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
     input wire result_ready
 );
     VX_execute_if #(
-        .data_t (tcu_execute_t)
+        .NUM_LANES (`VX_CFG_NUM_TCU_LANES)
     ) execute_if();
 
     VX_result_if #(
-        .data_t (tcu_result_t)
+        .NUM_LANES (`VX_CFG_NUM_TCU_LANES)
     ) result_if();
 
     assign execute_if.valid = execute_valid;

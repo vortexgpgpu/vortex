@@ -50,7 +50,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `SCOPE_IO_SWITCH (BLOCK_SIZE);
 
     VX_execute_if #(
-        .data_t (tcu_execute_t)
+        .NUM_LANES (`VX_CFG_NUM_TCU_LANES)
     ) per_block_execute_if[BLOCK_SIZE]();
 
     VX_lane_dispatch #(
@@ -66,7 +66,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     );
 
     VX_result_if #(
-        .data_t (tcu_result_t)
+        .NUM_LANES (`VX_CFG_NUM_TCU_LANES)
     ) per_block_result_if[BLOCK_SIZE]();
 
 `ifdef TCU_META_ENABLE

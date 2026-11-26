@@ -47,11 +47,11 @@ module VX_tcu_block import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `STATIC_ASSERT (`VX_CFG_NUM_TCU_LANES == `VX_CFG_NUM_THREADS, ("must be full warp execution"));
 
     VX_execute_if #(
-        .data_t (tcu_execute_t)
+        .NUM_LANES (`VX_CFG_NUM_TCU_LANES)
     ) core_execute_if();
 
     VX_result_if #(
-        .data_t (tcu_result_t)
+        .NUM_LANES (`VX_CFG_NUM_TCU_LANES)
     ) core_result_if();
 
 `ifdef TCU_META_ENABLE

@@ -73,11 +73,11 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     `STATIC_ASSERT (TAG_WIDTH == LSU_CLIENT_TAG_WIDTH, ("LSU client tag width mismatch — pkg/slice out of sync"))
 
     VX_result_if #(
-        .data_t (lsu_result_t)
+        .NUM_LANES (`VX_CFG_NUM_LSU_LANES)
     ) result_rsp_if();
 
     VX_result_if #(
-        .data_t (lsu_result_t)
+        .NUM_LANES (`VX_CFG_NUM_LSU_LANES)
     ) result_no_rsp_if();
 
     // The third operand slot is read only by compare-and-swap, which needs
