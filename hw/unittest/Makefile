@@ -190,6 +190,9 @@ TCU_MX := $(TCU_BASE) -DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP -DVX_CFG_TCU_MX_ENABLE -D
           -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_MXFP4_ENABLE -DVX_CFG_TCU_NVFP4_ENABLE
 # format:sf_a:sf_b
 TCU_MX_DIRECTED := 10:110:110 8:0:3 9:4:2 8:0xff:127 11:0x7f:0x38
+# NaN scales over all-zero A (--sparsity=100 clears every lane's valid bit, as
+# the dynamic sparsity mask does): the masked elements are still NaN.
+TCU_MX_MASKED := 8:0xff:127 10:0xff:127 11:0x7f:0x38
 tcu_mx_opts = --fmt=$(word 1,$(subst :, ,$(1))) --sfa=$(word 2,$(subst :, ,$(1))) --sfb=$(word 3,$(subst :, ,$(1)))
 # $(1)=NUM_REGS $(2)=SF
 define tcu_mx_suite
@@ -198,6 +201,7 @@ define tcu_mx_suite
 	$(foreach f,4 5 8 9 10 11,$(MAKE) -C tcu_fedp run NUM_REGS=$(1) SF=$(2) CONFIGS="$(TCU_MX)" OPTS="--fmt=$(f) --W=25 --ulp=0 --no-trace" &&) true
 	$(foreach f,4 8 9,$(MAKE) -C tcu_fedp run NUM_REGS=$(1) SF=$(2) CONFIGS="$(TCU_MX)" OPTS="--fmt=$(f) --W=25 --ulp=0 --features=zeros --tests=20000 --no-trace" &&) true
 	$(foreach o,$(TCU_MX_DIRECTED),$(MAKE) -C tcu_fedp run NUM_REGS=$(1) SF=$(2) CONFIGS="$(TCU_MX)" OPTS="$(call tcu_mx_opts,$(o)) --W=25 --ulp=0 --tests=20000 --no-trace" &&) true
+	$(foreach o,$(TCU_MX_MASKED),$(MAKE) -C tcu_fedp run NUM_REGS=$(1) SF=$(2) CONFIGS="$(TCU_MX)" OPTS="$(call tcu_mx_opts,$(o)) --sparsity=100 --W=25 --ulp=0 --tests=2000 --no-trace" &&) true
 endef
 
 # Same native-TFR formats as run-tcu, but with the multipliers mapped onto DSP48
