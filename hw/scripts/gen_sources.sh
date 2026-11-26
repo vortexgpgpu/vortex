@@ -179,12 +179,12 @@ if [ -n "$copy_folder" ]; then
     done
   fi
 
-  # Strip .master/.slave modport qualifiers from preprocessed copies
+  # Strip modport qualifiers from preprocessed copies
   # (Vivado doesn't support modport qualifiers in interface port declarations)
   if [ "$preprocessor" != 0 ]; then
     for f in "$copy_folder"/*.sv; do
       [ -f "$f" ] || continue
-      sed -i 's/\.\(master\|slave\)\b//g' "$f"
+      sed -i 's/\.\(master\|slave\|tap\|monitor\)\b//g' "$f"
     done
   fi
 fi

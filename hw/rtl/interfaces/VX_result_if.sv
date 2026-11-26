@@ -37,6 +37,11 @@ interface VX_result_if import VX_gpu_pkg::*; #(
         logic [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] data;
     } data_t;
 
+    `STATIC_ASSERT ($bits(header_t) == exec_header_bits(NUM_LANES),
+        ("exec_header_bits() disagrees with header_t"))
+    `STATIC_ASSERT ($bits(data_t) == result_data_bits(NUM_LANES),
+        ("result_data_bits() disagrees with data_t"))
+
     logic  valid;
     data_t data;
     logic  ready;

@@ -647,32 +647,4 @@
     end \
     /* verilator lint_on GENUNNAMED */
 
-`define DECL_EXECUTE_T(__name__, __lanes__) \
-    typedef struct packed { \
-        logic [UUID_WIDTH-1:0]           uuid; \
-        logic [NW_WIDTH-1:0]             wid; \
-        logic [NCTA_WIDTH-1:0]           cta_id; \
-        logic [__lanes__-1:0]            tmask; \
-        logic [`LOG2UP(`VX_CFG_NUM_THREADS / __lanes__)-1:0] pid; \
-        logic                            sop; \
-        logic                            eop; \
-        logic [PC_BITS-1:0]              PC; \
-        logic                            wb; \
-        logic [NUM_XREGS-1:0]            wr_xregs; \
-        logic [NUM_REGS_BITS-1:0]        rd; \
-        logic [BYTESEL_BITS-1:0]         bytesel; \
-    } __name__``_header_t; \
-    typedef struct packed { \
-        __name__``_header_t              header; \
-        logic [INST_OP_BITS-1:0]         op_type; \
-        op_args_t                        op_args; \
-        logic [__lanes__-1:0][`VX_CFG_XLEN-1:0] rs1_data; \
-        logic [__lanes__-1:0][`VX_CFG_XLEN-1:0] rs2_data; \
-        logic [__lanes__-1:0][`VX_CFG_XLEN-1:0] rs3_data; \
-    } __name__``_execute_t; \
-    typedef struct packed { \
-        __name__``_header_t              header; \
-        logic [__lanes__-1:0][`VX_CFG_XLEN-1:0] data; \
-    } __name__``_result_t
-
 `endif // VX_DEFINE_VH

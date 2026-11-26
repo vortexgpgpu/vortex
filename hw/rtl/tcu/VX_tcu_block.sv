@@ -27,9 +27,7 @@ module VX_tcu_block import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
     // MMA execute handshake observed by the WGMMA tile buffers
-    output wire             exec_valid,
-    output wire             exec_ready,
-    output tcu_execute_t    exec_data,
+    VX_execute_if.tap       exec_if,
     input wire [TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tbuf_rs1_data,
     input wire [TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tbuf_rs2_data,
     input wire              tbuf_ready,
@@ -55,9 +53,14 @@ module VX_tcu_block import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     ) core_result_if();
 
 `ifdef TCU_META_ENABLE
-    wire                    agu_ld_valid, agu_ld_ready;
-    wire                    agu_result_valid, agu_result_ready;
-    tcu_result_t            agu_result_data;
+    VX_execute_if #(
+        .NUM_LANES (`VX_CFG_NUM_TCU_LANES)
+    ) agu_execute_if();
+
+    VX_result_if #(
+        .NUM_LANES (`VX_CFG_NUM_TCU_LANES)
+    ) agu_result_if();
+
     wire                    meta_wr_en;
     wire [NW_WIDTH-1:0]     meta_wr_wid;
     wire [4:0]              meta_wr_idx;
@@ -69,33 +72,30 @@ module VX_tcu_block import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     ) agu (
         .clk          (clk),
         .reset        (reset),
-        .ld_valid     (agu_ld_valid),
-        .ld_data      (execute_if.data),
-        .ld_ready     (agu_ld_ready),
+        .ld_if        (agu_execute_if),
         .client_if    (tcu_mem_if),
         .meta_wr_en   (meta_wr_en),
         .meta_wr_wid  (meta_wr_wid),
         .meta_wr_idx  (meta_wr_idx),
         .meta_wr_mask (meta_wr_mask),
         .meta_wr_data (meta_wr_data),
-        .result_valid (agu_result_valid),
-        .result_data  (agu_result_data),
-        .result_ready (agu_result_ready)
+        .result_if    (agu_result_if)
     );
 
     // TCU_LD goes to the AGU, every MMA op to the core
     wire is_tcu_ld = (execute_if.data.op_type == INST_TCU_LD);
 
-    assign agu_ld_valid          = execute_if.valid && is_tcu_ld;
+    assign agu_execute_if.valid  = execute_if.valid && is_tcu_ld;
+    assign agu_execute_if.data   = execute_if.data;
     assign core_execute_if.valid = execute_if.valid && !is_tcu_ld;
     assign core_execute_if.data  = execute_if.data;
-    assign execute_if.ready      = is_tcu_ld ? agu_ld_ready : core_execute_if.ready;
+    assign execute_if.ready      = is_tcu_ld ? agu_execute_if.ready : core_execute_if.ready;
 
     // AGU wins same-cycle conflicts; the core stalls and retries next cycle.
-    assign result_if.valid       = agu_result_valid || core_result_if.valid;
-    assign result_if.data        = agu_result_valid ? agu_result_data : core_result_if.data;
-    assign agu_result_ready      = result_if.ready;
-    assign core_result_if.ready  = result_if.ready && !agu_result_valid;
+    assign result_if.valid       = agu_result_if.valid || core_result_if.valid;
+    assign result_if.data        = agu_result_if.valid ? agu_result_if.data : core_result_if.data;
+    assign agu_result_if.ready   = result_if.ready;
+    assign core_result_if.ready  = result_if.ready && !agu_result_if.valid;
 
     // A TCU_LD writes its response fragments straight into the metadata RAM,
     // which an MMA reads while it is presented to the core. That is safe only
@@ -120,7 +120,7 @@ module VX_tcu_block import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
     // ~ld_ready: the AGU holds a TCU_LD, so its wid and slot are registered
     wire mma_reads_ld_region = meta_wr_idx[4] ? mma_reads_mx : mma_reads_sp;
-    `RUNTIME_ASSERT(~(core_execute_if.valid && ~agu_ld_ready
+    `RUNTIME_ASSERT(~(core_execute_if.valid && ~agu_execute_if.ready
                    && (execute_if.data.header.wid == meta_wr_wid) && mma_reads_ld_region),
         ("%t: *** %s MMA reads metadata a TCU_LD is loading: wid=%0d, slot=%0d, op_type=%0d (#%0d)",
             $time, INSTANCE_ID, meta_wr_wid, meta_wr_idx, execute_if.data.op_type, execute_if.data.header.uuid))
@@ -136,9 +136,9 @@ module VX_tcu_block import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
-    assign exec_valid = core_execute_if.valid;
-    assign exec_ready = core_execute_if.ready;
-    assign exec_data  = core_execute_if.data;
+    assign exec_if.valid = core_execute_if.valid;
+    assign exec_if.ready = core_execute_if.ready;
+    assign exec_if.data  = core_execute_if.data;
 `endif
 
     VX_tcu_core #(

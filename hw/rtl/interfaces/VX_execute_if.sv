@@ -40,6 +40,10 @@ interface VX_execute_if import VX_gpu_pkg::*; #(
         logic [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] rs2_data;
         logic [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] rs3_data;
     } data_t;
+
+    `STATIC_ASSERT ($bits(data_t) == execute_data_bits(NUM_LANES),
+        ("execute_data_bits() disagrees with data_t"))
+
     logic  valid;
     data_t data;
     logic  ready;
@@ -54,6 +58,19 @@ interface VX_execute_if import VX_gpu_pkg::*; #(
         input  valid,
         input  data,
         output ready
+    );
+
+    // Exports the handshake of an internal channel to a unit that observes it.
+    modport tap (
+        output valid,
+        output data,
+        output ready
+    );
+
+    modport monitor (
+        input  valid,
+        input  data,
+        input  ready
     );
 
 endinterface

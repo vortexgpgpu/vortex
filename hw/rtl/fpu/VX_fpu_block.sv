@@ -28,6 +28,9 @@ module VX_fpu_block import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     VX_result_if.master     result_if,
     VX_fpu_csr_if.master    fpu_csr_if
 );
+
+    typedef result_if.header_t header_t;
+
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam TAG_WIDTH  = `LOG2UP(`VX_CFG_FPU_QUEUE_SIZE);
 
@@ -37,7 +40,7 @@ module VX_fpu_block import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     fflags_t fpu_rsp_fflags;
     wire fpu_rsp_has_fflags;
 
-    fpu_header_t fpu_hdr, fpu_hdr_wb, fpu_hdr_store;
+    header_t fpu_hdr, fpu_hdr_wb, fpu_hdr_store;
 
     // Carry the decoded wb through the tag store: FPU compares may target
     // integer x0 (e.g. feq.s x0, ...), which decode does not reserve in the
@@ -63,7 +66,7 @@ module VX_fpu_block import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     wire fpu_rsp_fire = fpu_rsp_valid && fpu_rsp_ready;
 
     VX_index_buffer #(
-        .DATAW  ($bits(fpu_header_t)),
+        .DATAW  ($bits(header_t)),
         .SIZE   (`VX_CFG_FPU_QUEUE_SIZE)
     ) tag_store (
         .clk          (clk),
@@ -240,7 +243,7 @@ module VX_fpu_block import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     // send response
 
     VX_elastic_buffer #(
-        .DATAW ($bits(fpu_header_t) + (NUM_LANES * `VX_CFG_XLEN)),
+        .DATAW ($bits(header_t) + (NUM_LANES * `VX_CFG_XLEN)),
         .SIZE  (0)
     ) rsp_buf (
         .clk       (clk),

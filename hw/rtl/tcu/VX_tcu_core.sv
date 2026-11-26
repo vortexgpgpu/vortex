@@ -43,6 +43,9 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     VX_result_if.master result_if
 );
 
+    typedef result_if.header_t header_t;
+
+
 `ifdef SCOPE
     `SCOPE_IO_SWITCH (1);
     `SCOPE_IO_UNUSED (0)
@@ -188,7 +191,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Sparse metadata: VX_tcu_sp_meta (for WMMA_SP) + optional tile-buffer mux
     // -----------------------------------------------------------------------
 
-    tcu_header_t mdata_queue_in;
+    header_t mdata_queue_in;
     always_comb begin
         mdata_queue_in = execute_if.data.header;
     end
@@ -231,8 +234,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire result_fire = result_if.valid && result_if.ready;
 
     reg setup_valid_r;
-    tcu_header_t setup_header_r;
-    tcu_header_t mdata_queue_out;
+    header_t setup_header_r;
+    header_t mdata_queue_out;
 
     wire setup_result_fire = setup_valid_r && result_if.ready;
     // A non-setup result retires whenever the consumer takes one, whether it
@@ -295,7 +298,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire mdata_push = fedp_enqueue;
 
     VX_fifo_queue #(
-        .DATAW ($bits(tcu_header_t)),
+        .DATAW ($bits(header_t)),
         .DEPTH (MDATA_QUEUE_DEPTH),
         .OUT_REG (1)
     ) mdata_queue (

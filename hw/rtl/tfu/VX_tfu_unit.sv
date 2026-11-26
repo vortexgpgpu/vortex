@@ -10,10 +10,13 @@ module VX_tfu_unit import VX_gpu_pkg::*; #(
     VX_execute_if.slave execute_if,
     VX_result_if.master result_if
 );
+
+    typedef result_if.header_t header_t;
+
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam NUM_PES   = `VX_CFG_NUM_TFU_LANES;
     localparam LATENCY   = `VX_TFU_LATENCY;
-    localparam HDR_WIDTH = $bits(sfu_header_t);
+    localparam HDR_WIDTH = $bits(header_t);
 
     `STATIC_ASSERT ((NUM_LANES % NUM_PES) == 0, ("invalid parameter: NUM_LANES=%0d, NUM_TFU_LANES=%0d", NUM_LANES, NUM_PES))
 
@@ -28,7 +31,7 @@ module VX_tfu_unit import VX_gpu_pkg::*; #(
     wire [NUM_PES-1:0][31:0]   pe_data_out;
     wire [INST_TFU_BITS-1:0]   pe_fn;
     wire                       pe_enable;
-    sfu_header_t               rsp_hdr;
+    header_t               rsp_hdr;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_req_data
         wire [`VX_CFG_XLEN-1:0] rs1 = execute_if.data.rs1_data[i];

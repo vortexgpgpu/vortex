@@ -56,6 +56,10 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // warp unlock (-> scheduler)
     VX_sched_unlock_if.master sched_unlock_if
 );
+
+    typedef result_if.header_t header_t;
+    typedef result_if.data_t result_t;
+
     `UNUSED_SPARAM (INSTANCE_ID)
 
     // This SFU block serves the warps with wid mod NUM_SFU_BLOCKS == block_idx;
@@ -171,14 +175,14 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // only the execute port is freed. A warp holds at most one trace, so one entry
     // per warp is exact, not a heuristic.
     reg [NLW-1:0] wait_pend;
-    sfu_header_t  wait_hdr [NLW];
+    header_t  wait_hdr [NLW];
 
     // ── result stage (the RAM read is synchronous) ─────────────────────────
     // One op is accepted per cycle into s1; its word arrives from the RAM on the
     // next, where result_if presents it.
     reg          s1_valid;
     reg          s1_from_ram;
-    sfu_header_t s1_header;
+    header_t s1_header;
 
     wire s1_ready = ~s1_valid || result_if.ready;
 
@@ -396,7 +400,7 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // ── result path ───────────────────────────────────────────────────────
     // Only a slot read returns a word. CFG's handle and the posted stream ops
     // write back zero.
-    sfu_result_t rsp_data_out;
+    result_t rsp_data_out;
     assign rsp_data_out.header = s1_header;
 `ifdef VX_CFG_XLEN_64
 `ifdef VX_CFG_EXT_F_ENABLE

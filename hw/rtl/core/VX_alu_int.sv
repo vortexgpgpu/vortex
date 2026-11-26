@@ -30,6 +30,9 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     VX_branch_ctl_if.master branch_ctl_if
 );
 
+    typedef result_if.header_t header_t;
+
+
     `UNUSED_SPARAM (INSTANCE_ID)
 
     localparam LANE_BITS      = `CLOG2(NUM_LANES);
@@ -324,7 +327,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
                                    : is_wgather ? ~wg_src_mask
                                    : execute_if.data.header.tmask;
 
-    alu_header_t alu_hdr_in;
+    header_t alu_hdr_in;
     always @(*) begin
         alu_hdr_in = execute_if.data.header;
         alu_hdr_in.tmask = alu_tmask;
@@ -338,7 +341,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire br_misaligned_r;
 
     VX_elastic_buffer #(
-        .DATAW ($bits(alu_header_t) + (NUM_LANES * `VX_CFG_XLEN) + PC_BITS + 1 + INST_BR_BITS + LANE_WIDTH + 1 + `VX_CFG_EXT_C_ENABLED)
+        .DATAW ($bits(header_t) + (NUM_LANES * `VX_CFG_XLEN) + PC_BITS + 1 + INST_BR_BITS + LANE_WIDTH + 1 + `VX_CFG_EXT_C_ENABLED)
     ) rsp_buf (
         .clk      (clk),
         .reset    (reset),

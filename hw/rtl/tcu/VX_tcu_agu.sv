@@ -30,9 +30,7 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input wire              clk,
     input wire              reset,
 
-    input wire              ld_valid,
-    input tcu_execute_t     ld_data,
-    output wire             ld_ready,
+    VX_execute_if.slave     ld_if,
 
     VX_lsu_sched_if.master  client_if,
 
@@ -43,10 +41,11 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     output wire [TCU_BLOCK_CAP-1:0][31:0] meta_wr_data,
 
     // releases the TCU_LD's metadata scoreboard bit
-    output wire             result_valid,
-    output tcu_result_t     result_data,
-    input wire              result_ready
+    VX_result_if.master     result_if
 );
+
+    typedef result_if.header_t header_t;
+
     `UNUSED_SPARAM (INSTANCE_ID)
 
     localparam LSU_LANES  = `VX_CFG_NUM_LSU_LANES;
@@ -63,14 +62,14 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `STATIC_ASSERT (LSU_CLIENT_TAG_WIDTH >= PASS_BITS, ("LSU client tag cannot encode the TCU_LD pass"))
 
     reg                     busy_r, issued_r, done_r;
-    tcu_header_t            header_r;
+    header_t            header_r;
     reg [4:0]               slot_r;
     reg [`VX_CFG_XLEN-1:0]  addr_r;
 
-    wire ld_fire     = ld_valid && ld_ready;
+    wire ld_fire     = ld_if.valid && ld_if.ready;
     wire req_fire    = client_if.req_valid && client_if.req_ready;
     wire rsp_fire    = client_if.rsp_valid && client_if.rsp_ready;
-    wire result_fire = result_valid && result_ready;
+    wire result_fire = result_if.valid && result_if.ready;
 
     // the pass being requested, and whether it and the response are the last
     wire [`UP(PASS_BITS)-1:0] req_pass;
@@ -99,9 +98,9 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             end
         end
         if (ld_fire) begin
-            header_r <= ld_data.header;
-            slot_r   <= ld_data.op_args.tcu.fmt_d;
-            addr_r   <= ld_data.rs1_data[0];
+            header_r <= ld_if.data.header;
+            slot_r   <= ld_if.data.op_args.tcu.fmt_d;
+            addr_r   <= ld_if.data.rs1_data[0];
         end else if (req_fire && (NUM_PASSES > 1)) begin
             addr_r   <= addr_r + `VX_CFG_XLEN'(LSU_LANES * 4);
         end
@@ -137,8 +136,8 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `UNUSED_VAR (client_if.rsp_data.tag)
     end
 
-    assign ld_ready = ~busy_r;
-    `UNUSED_VAR (ld_data)
+    assign ld_if.ready = ~busy_r;
+    `UNUSED_VAR (ld_if.data)
 
     // -----------------------------------------------------------------------
     // Request: one pass loads LSU_LANES consecutive 32-bit words.
@@ -223,10 +222,10 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
     // Result: no register writeback; its header releases the scoreboard bit.
     // -----------------------------------------------------------------------
-    assign result_valid = done_r;
+    assign result_if.valid = done_r;
     always_comb begin
-        result_data        = '0;
-        result_data.header = header_r;
+        result_if.data        = '0;
+        result_if.data.header = header_r;
     end
 
 endmodule

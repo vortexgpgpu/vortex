@@ -1772,9 +1772,23 @@ package VX_gpu_pkg;
         logic [PC_BITS-1:0]                 PC;
     } schedule_t;
 
-    `DECL_EXECUTE_T (alu, `VX_CFG_NUM_ALU_LANES);
-    `DECL_EXECUTE_T (lsu, `VX_CFG_NUM_LSU_LANES);
-    `DECL_EXECUTE_T (sfu, `VX_CFG_NUM_SFU_LANES);
+    // Payload widths of VX_execute_if and VX_result_if for a lane count, for
+    // flat ports that cannot name an interface type; each interface checks its
+    // data_t against them.
+    function automatic integer exec_header_bits(input integer lanes);
+        return UUID_WIDTH + NW_WIDTH + NCTA_WIDTH + lanes
+             + `LOG2UP(`VX_CFG_NUM_THREADS / lanes) + 2 + PC_BITS + 1
+             + NUM_XREGS + NUM_REGS_BITS + BYTESEL_BITS;
+    endfunction
+
+    function automatic integer execute_data_bits(input integer lanes);
+        return exec_header_bits(lanes) + INST_OP_BITS + $bits(op_args_t)
+             + 3 * lanes * `VX_CFG_XLEN;
+    endfunction
+
+    function automatic integer result_data_bits(input integer lanes);
+        return exec_header_bits(lanes) + lanes * `VX_CFG_XLEN;
+    endfunction
 
     //////////////////////////// Perf counter types ///////////////////////////
 
@@ -1971,7 +1985,7 @@ package VX_gpu_pkg;
     // Width of the tag carried over VX_lsu_sched_if: lsu_header + op_type
     // + per-lane align + packet allocator addr + fence flag (matches the
     // local TAG_WIDTH built inside VX_lsu_block).
-    localparam LSU_CLIENT_TAG_WIDTH = $bits(lsu_header_t) + INST_LSU_BITS
+    localparam LSU_CLIENT_TAG_WIDTH = exec_header_bits(`VX_CFG_NUM_LSU_LANES) + INST_LSU_BITS
                                     + (`VX_CFG_NUM_LSU_LANES * `CLOG2(LSU_WORD_SIZE))
                                     + `LOG2UP(`VX_CFG_LSU_PENDING_SIZE) + 1;
 

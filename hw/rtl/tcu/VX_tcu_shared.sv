@@ -24,9 +24,7 @@ module VX_tcu_shared import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
-    input wire [BLOCK_SIZE-1:0] exec_valid,
-    input wire [BLOCK_SIZE-1:0] exec_ready,
-    input tcu_execute_t     exec_data [BLOCK_SIZE],
+    VX_execute_if.monitor   exec_if [BLOCK_SIZE],
     output wire [BLOCK_SIZE-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tbuf_rs1_data,
     output wire [BLOCK_SIZE-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tbuf_rs2_data,
     output wire [BLOCK_SIZE-1:0] tbuf_ready_eff,
@@ -53,9 +51,7 @@ module VX_tcu_shared import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `ifdef PERF_ENABLE
         .tcu_perf       (tcu_perf),
     `endif
-        .exec_valid     (exec_valid),
-        .exec_ready     (exec_ready),
-        .exec_data      (exec_data),
+        .exec_if        (exec_if),
         .tcu_lmem_if    (tcu_lmem_if),
         .tbuf_rs1_data  (tbuf_rs1_data),
         .tbuf_rs2_data  (tbuf_rs2_data),

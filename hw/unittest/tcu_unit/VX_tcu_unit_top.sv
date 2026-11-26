@@ -165,8 +165,9 @@ module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
 
     // ---- DUT -------------------------------------------------------------
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
-    wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_exec_valid, tcu_exec_ready;
-    tcu_execute_t                     tcu_exec_data [`VX_CFG_NUM_TCU_BLOCKS];
+    VX_execute_if #(
+        .NUM_LANES (`VX_CFG_NUM_TCU_LANES)
+    ) tcu_exec_if [`VX_CFG_NUM_TCU_BLOCKS] ();
     wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tcu_tbuf_rs1_data;
     wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tcu_tbuf_rs2_data;
     wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_tbuf_ready;
@@ -179,9 +180,7 @@ module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
         .clk              (clk),
         .reset            (reset),
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
-        .exec_valid       (tcu_exec_valid),
-        .exec_ready       (tcu_exec_ready),
-        .exec_data        (tcu_exec_data),
+        .exec_if          (tcu_exec_if),
         .tbuf_rs1_data    (tcu_tbuf_rs1_data),
         .tbuf_rs2_data    (tcu_tbuf_rs2_data),
         .tbuf_ready       (tcu_tbuf_ready),
@@ -199,9 +198,7 @@ module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
         .BLOCK_SIZE  (`VX_CFG_NUM_TCU_BLOCKS)
     ) tcu_shared (
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
-        .exec_valid       (tcu_exec_valid),
-        .exec_ready       (tcu_exec_ready),
-        .exec_data        (tcu_exec_data),
+        .exec_if          (tcu_exec_if),
         .tbuf_rs1_data    (tcu_tbuf_rs1_data),
         .tbuf_rs2_data    (tcu_tbuf_rs2_data),
         .tbuf_ready_eff   (tcu_tbuf_ready),

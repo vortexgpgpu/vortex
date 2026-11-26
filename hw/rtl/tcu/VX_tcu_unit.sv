@@ -23,9 +23,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
     // per-block ports of the core-wide WGMMA tile buffers (VX_tcu_shared)
-    output wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] exec_valid,
-    output wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] exec_ready,
-    output tcu_execute_t    exec_data [`VX_CFG_NUM_TCU_BLOCKS],
+    VX_execute_if.tap       exec_if [`VX_CFG_NUM_TCU_BLOCKS],
     input wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tbuf_rs1_data,
     input wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tbuf_rs2_data,
     input wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tbuf_ready,
@@ -159,9 +157,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .clk              (clk),
             .reset            (reset),
         `ifdef VX_CFG_TCU_WGMMA_ENABLE
-            .exec_valid       (exec_valid[block_idx]),
-            .exec_ready       (exec_ready[block_idx]),
-            .exec_data        (exec_data[block_idx]),
+            .exec_if          (exec_if[block_idx]),
             .tbuf_rs1_data    (tbuf_rs1_data[block_idx]),
             .tbuf_rs2_data    (tbuf_rs2_data[block_idx]),
             .tbuf_ready       (tbuf_ready[block_idx]),

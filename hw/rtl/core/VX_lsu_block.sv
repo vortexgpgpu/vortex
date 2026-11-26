@@ -49,6 +49,10 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
 `endif
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_CHANNELS]
 );
+
+    typedef result_if.header_t header_t;
+    typedef result_if.data_t result_t;
+
     localparam NUM_LANES    = `VX_CFG_NUM_LSU_LANES;
     localparam PID_BITS     = `CLOG2(`VX_CFG_NUM_THREADS / NUM_LANES);
     localparam LSUQ_SIZEW   = `LOG2UP(`VX_CFG_LSU_PENDING_SIZE);
@@ -69,7 +73,7 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
 `endif
 
     // tag_width = header + op_type + align + pkt_addr + fence
-    localparam TAG_WIDTH = $bits(lsu_header_t) + INST_LSU_BITS + (NUM_LANES * REQ_ASHIFT) + LSUQ_SIZEW + 1;
+    localparam TAG_WIDTH = $bits(header_t) + INST_LSU_BITS + (NUM_LANES * REQ_ASHIFT) + LSUQ_SIZEW + 1;
     `STATIC_ASSERT (TAG_WIDTH == LSU_CLIENT_TAG_WIDTH, ("LSU client tag width mismatch — pkg/slice out of sync"))
 
     VX_result_if #(
@@ -481,7 +485,7 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     assign mem_rsp_eop               = client_if.rsp_data.eop;
     assign client_if.rsp_ready       = mem_rsp_ready;
 
-    lsu_header_t rsp_hdr;
+    header_t rsp_hdr;
     wire [INST_LSU_BITS-1:0] rsp_op_type;
     wire [NUM_LANES-1:0][REQ_ASHIFT-1:0] rsp_align;
     `UNUSED_VAR (rsp_op_type)
@@ -545,7 +549,7 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
 
     // result
 
-    lsu_header_t rsp_hdr2;
+    header_t rsp_hdr2;
     always @(*) begin
         rsp_hdr2 = rsp_hdr;
         rsp_hdr2.tmask = mem_rsp_mask;
@@ -554,7 +558,7 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     end
 
     VX_elastic_buffer #(
-        .DATAW ($bits(lsu_result_t)),
+        .DATAW ($bits(result_t)),
         .SIZE  (2)
     ) rsp_buf (
         .clk       (clk),
@@ -568,7 +572,7 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     );
 
     VX_elastic_buffer #(
-        .DATAW ($bits(lsu_header_t)),
+        .DATAW ($bits(header_t)),
         .SIZE  (2)
     ) no_rsp_buf (
         .clk       (clk),
@@ -584,7 +588,7 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
 
     VX_stream_arb #(
         .NUM_INPUTS (2),
-        .DATAW      ($bits(lsu_result_t)),
+        .DATAW      ($bits(result_t)),
         .ARBITER    ("P"), // prioritize result_rsp_if
         .OUT_BUF    (3)
     ) rsp_arb (
