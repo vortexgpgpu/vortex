@@ -58,7 +58,7 @@ module VX_rtu_recip import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     // this module to elaborate.
     function automatic [SEED_N*32-1:0] seed_table();
         reg [63:0] d, num;
-            for (integer i = 0; i < SEED_N; ++i) begin
+        for (integer i = 0; i < SEED_N; ++i) begin
             d   = 64'(2*SEED_N + 2*i + 1);
             num = (64'd1 << 33) * SEED_N;
             seed_table[i*32 +: 32] = 32'((num + d) / (2 * d));
