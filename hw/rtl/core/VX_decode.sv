@@ -267,6 +267,9 @@ module VX_decode import
     // vx_rwin (custom-2, funct7 1) sets the warp's windows for the rd, rs1,
     // rs2 and rs3 fields; vx_rpfx (funct7 2) gives them to the next instruction
     // only. Decode consumes both, so neither reaches the ibuffer.
+    // vx_rwin encodes 3 bits per field; a window above the configured
+    // registers drops its high bits
+    `STATIC_ASSERT (RWIN_BITS >= 1 && RWIN_BITS <= 3, ("register windows need 64, 128 or 256 registers"))
     localparam RWIN_W = 4 * RWIN_BITS;
     // a fused write yields the instruction after it; an unfused one is dropped
     wire is_rwin = is_rwin0 && ~rwin_fused;
@@ -293,12 +296,10 @@ module VX_decode import
     end
     // each field's window is applied as the field is extracted, beside the
     // opcode decode; field 0 names x0 only in window 0
-    localparam WB = RV_REGS_BITS - 5;
-    `UNUSED_VAR (rwin_cur) // below 256 registers a window uses fewer than RWIN_BITS bits
-    wire [RV_REGS_BITS-1:0] rd_i  = {rwin_cur[0 * RWIN_BITS +: WB], rd};
-    wire [RV_REGS_BITS-1:0] rs1_i = {rwin_cur[1 * RWIN_BITS +: WB], rs1};
-    wire [RV_REGS_BITS-1:0] rs2_i = {rwin_cur[2 * RWIN_BITS +: WB], rs2};
-    wire [RV_REGS_BITS-1:0] rs3_i = {rwin_cur[3 * RWIN_BITS +: WB], rs3};
+    wire [RV_REGS_BITS-1:0] rd_i  = {rwin_cur[0 * RWIN_BITS +: RWIN_BITS], rd};
+    wire [RV_REGS_BITS-1:0] rs1_i = {rwin_cur[1 * RWIN_BITS +: RWIN_BITS], rs1};
+    wire [RV_REGS_BITS-1:0] rs2_i = {rwin_cur[2 * RWIN_BITS +: RWIN_BITS], rs2};
+    wire [RV_REGS_BITS-1:0] rs3_i = {rwin_cur[3 * RWIN_BITS +: RWIN_BITS], rs3};
 `else
     wire is_rwin = 1'b0;
     wire [RV_REGS_BITS-1:0] rd_i  = RV_REGS_BITS'(rd);

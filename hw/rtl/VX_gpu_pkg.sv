@@ -47,7 +47,8 @@ package VX_gpu_pkg;
     // Registers per thread; above 32 they are reached through register windows.
     localparam RV_REGS = `VX_CFG_NUM_RV_REGS;
     localparam RV_REGS_BITS = `CLOG2(RV_REGS);
-    localparam RWIN_BITS = 3;
+    // window bits per operand field: the high register-number bits above the 5-bit field
+    localparam RWIN_BITS = RV_REGS_BITS - 5;
 
     localparam RV_RD  = 0;
     localparam RV_RS1 = 1;

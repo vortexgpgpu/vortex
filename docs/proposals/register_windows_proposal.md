@@ -25,8 +25,9 @@ ignored (no NaN-boxing); half loads, stores and moves are the integer ones.
 
 ### Windows
 
-Each warp holds `W = {W.rd, W.rs1, W.rs2, W.rs3}`, 3 bits per instruction field
-(12 bits per warp). A register operand in field `p` with 5-bit value `f` names
+Each warp holds `W = {W.rd, W.rs1, W.rs2, W.rs3}`, log2(R) - 5 bits per
+instruction field for R registers (`VX_CFG_NUM_RV_REGS`): 4, 8 or 12 bits per
+warp at 64, 128 or 256 registers. `vx_rwin` always encodes 3 bits per field. A register operand in field `p` with 5-bit value `f` names
 
 ```
 reg = (W[p] << 5) | f
@@ -59,7 +60,7 @@ nothing is read from a register, so decode applies `vx_rwin` without a hazard.
   `vx_split_n`, `vx_join`, `vx_pred`, `vx_pred_n` and `vx_tmc`. The compiler
   guarantees it; hardware saves nothing. Vortex runs the two sides of a split in
   turn, so with zero state at split and join one copy per warp suffices.
-  Asynchronous preemption would save the 12 bits with the register file.
+  Asynchronous preemption would save the window bits with the register file.
 - **Implicit FP operands.** TCU fragments and the RTU ray window move to the
   fixed block x32 up under Zfinx (they used f0 up).
 
@@ -74,7 +75,7 @@ fetch round trip, which fewer warps (larger register budgets) hide less well.
 Decode applies each field's window as it extracts the field, beside the opcode
 decode, so the windows add no logic depth after it.
 
-Per-warp state grows by 12 bits. Register numbers widen from 6 to 8 bits through
+Per-warp state grows by 4 x (log2(R) - 5) bits, 12 at 256 registers. Register numbers widen from 6 to 8 bits through
 the pipeline; a tag-based scoreboard keeps its cost independent of the register
 count.
 
