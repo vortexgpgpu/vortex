@@ -44,29 +44,29 @@ module VX_rtu_recip import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 );
     localparam [31:0] F32_MAX = 32'h7F7FFFFF;
 
+    // ── seed ROM: 1/a for a = 1.fraction in [1,2), indexed by the top 10
+    //    fraction bits, stored as Q1.31 (value = entry / 2^31, in (0.5,1]). ──
+    localparam KIDX = 10;
+    localparam SEED_N = 1 << KIDX;
+    // round(2^31 / a) in exact integer arithmetic. Substituting
+    // a = (2*SEED_N + 2i + 1) / (2*SEED_N) gives
+    //     round(2^32 * SEED_N / d) == (2^33*SEED_N + d) / (2*d),  d odd
+    // which is bit-identical to the float form for every entry: d is odd
+    // and > 1, so 2^33*SEED_N/d is never a half-integer and the exact and
+    // double-rounded results cannot disagree. Written this way because
+    // yosys rejects `real` outright (TOK_REAL), and the ASIC flow needs
+    // this module to elaborate.
+    function automatic [SEED_N*32-1:0] seed_table();
+        reg [63:0] d, num;
+            for (integer i = 0; i < SEED_N; ++i) begin
+            d   = 64'(2*SEED_N + 2*i + 1);
+            num = (64'd1 << 33) * SEED_N;
+            seed_table[i*32 +: 32] = 32'((num + d) / (2 * d));
+        end
+    endfunction
+
     if (DSP_SEED != 0) begin : g_dsp_seed
         `UNUSED_VAR (mask)
-        // ── seed ROM: 1/a for a = 1.fraction in [1,2), indexed by the top 10
-        //    fraction bits, stored as Q1.31 (value = entry / 2^31, in (0.5,1]). ──
-        localparam KIDX = 10;
-        localparam SEED_N = 1 << KIDX;
-        reg [31:0] seed_rom [0:SEED_N-1];
-        // round(2^31 / a) in exact integer arithmetic. Substituting
-        // a = (2*SEED_N + 2i + 1) / (2*SEED_N) gives
-        //     round(2^32 * SEED_N / d) == (2^33*SEED_N + d) / (2*d),  d odd
-        // which is bit-identical to the float form for every entry: d is odd
-        // and > 1, so 2^33*SEED_N/d is never a half-integer and the exact and
-        // double-rounded results cannot disagree. Written this way because
-        // yosys rejects `real` outright (TOK_REAL), and the ASIC flow needs
-        // this module to elaborate.
-        initial begin
-            for (int i = 0; i < SEED_N; i++) begin
-                reg [63:0] d, num;
-                d   = 64'(2*SEED_N + 2*i + 1);
-                num = (64'd1 << 33) * SEED_N;
-                seed_rom[i] = 32'((num + d) / (2 * d));
-            end
-        end
 
         // S0: unpack the operand
         wire        s0_sign = x[31];
@@ -82,12 +82,23 @@ module VX_rtu_recip import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         reg        s1_sign, s1_inf, s1_zero, s1_nan;
         reg [7:0]  s1_exp;
         reg [30:0] s1_afx;
-        reg [31:0] s1_y;                                 // seed, Q1.31
+        wire [31:0] s1_y;                                // seed, Q1.31
         always_ff @(posedge clk) if (enable) begin
             s1_sign <= s0_sign; s1_inf <= s0_inf; s1_zero <= s0_zero; s1_nan <= s0_nan;
             s1_exp  <= s0_exp;  s1_afx <= s0_afx;
-            s1_y    <= seed_rom[s0_idx];                 // registered ROM read -> BRAM
         end
+
+        VX_rom #(
+            .DATAW     (32),
+            .SIZE      (SEED_N),
+            .OUT_REG   (1),
+            .INIT_DATA (seed_table())
+        ) seed_rom (
+            .clk   (clk),
+            .read  (enable),
+            .addr  (s0_idx),
+            .rdata (s1_y)
+        );
 
         // NR step 1:  p = a*y (Q2.30);  t = 2 - p;  y = y*(2 - a*y)
         wire [62:0] s1_ay = s1_afx * s1_y;               // -> DSP (31b * 32b)
