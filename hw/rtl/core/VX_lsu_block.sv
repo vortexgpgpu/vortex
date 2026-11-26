@@ -639,7 +639,15 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     `SCOPE_IO_SWITCH (1);
 `ifdef DBG_SCOPE_LSU
     wire reset_negedge;
-    `NEG_EDGE (reset_negedge, reset);
+    VX_edge_trigger #(
+        .POS  (0),
+        .INIT (0)
+    ) reset_negedge_trig (
+        .clk      (clk),
+        .reset    (1'b0),
+        .data_in  (reset),
+        .data_out (reset_negedge)
+    );
     `SCOPE_TAP_EX (0, 3, 4, 2, (
             1 + NUM_LANES * (`VX_CFG_XLEN + LSU_WORD_SIZE + LSU_WORD_SIZE * 8) + UUID_WIDTH + NUM_LANES * LSU_WORD_SIZE * 8 + UUID_WIDTH
         ), {

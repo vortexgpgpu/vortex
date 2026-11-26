@@ -162,7 +162,13 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     reg [PERF_CTR_BITS-1:0] cycles_r;
     reg [PERF_CTR_BITS-1:0] instret_r;
     wire [`CLOG2(`VX_CFG_ISSUE_WIDTH+1)-1:0] committed_cnt;
-    `POP_COUNT(committed_cnt, committed_slices);
+    VX_popcount #(
+        .N     ($bits(committed_slices)),
+        .MODEL (1)
+    ) committed_cnt_popcount (
+        .data_in  (committed_slices),
+        .data_out (committed_cnt)
+    );
     always @(posedge clk) begin
         if (reset) begin
             cycles_r  <= '0;
@@ -286,7 +292,17 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     // cta_fire; counting the launch itself keeps busy from dropping between the dispatcher going
     // idle and the launched warps becoming visible (a CTA launched in a single cycle).
     wire busy_buf;
-    `BUFFER_EX(busy_buf, (active_warps != 0 || (| cta_fire) || ~(&pending_warp_empty)), 1'b1, 1, 1);
+    VX_pipe_register #(
+        .DATAW  ($bits(busy_buf)),
+        .RESETW (1),
+        .DEPTH  (1)
+    ) busy_buf_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  ((active_warps != 0 || (| cta_fire) || ~(&pending_warp_empty))),
+        .data_out (busy_buf)
+    );
     assign busy = busy_buf || cta_dispatcher_busy;
 
     // timeout handling
@@ -355,12 +371,48 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         assign issued_threads[p] = {`VX_CFG_NUM_THREADS{sched_fire[p]}} & sched_tmask[p];
     end
 
-    `POP_COUNT(active_warps_cnt, active_warps);
-    `POP_COUNT(stalled_warps_cnt, stalled_warps);
-    `POP_COUNT(issued_threads_cnt, issued_threads);
-    `POP_COUNT(issued_warps_cnt, sched_fire);
-    `POP_COUNT(branches_cnt, slice_branch);
-    `POP_COUNT(divergence_cnt, slice_divergence);
+    VX_popcount #(
+        .N     ($bits(active_warps)),
+        .MODEL (1)
+    ) active_warps_cnt_popcount (
+        .data_in  (active_warps),
+        .data_out (active_warps_cnt)
+    );
+    VX_popcount #(
+        .N     ($bits(stalled_warps)),
+        .MODEL (1)
+    ) stalled_warps_cnt_popcount (
+        .data_in  (stalled_warps),
+        .data_out (stalled_warps_cnt)
+    );
+    VX_popcount #(
+        .N     ($bits(issued_threads)),
+        .MODEL (1)
+    ) issued_threads_cnt_popcount (
+        .data_in  (issued_threads),
+        .data_out (issued_threads_cnt)
+    );
+    VX_popcount #(
+        .N     ($bits(sched_fire)),
+        .MODEL (1)
+    ) issued_warps_cnt_popcount (
+        .data_in  (sched_fire),
+        .data_out (issued_warps_cnt)
+    );
+    VX_popcount #(
+        .N     ($bits(slice_branch)),
+        .MODEL (1)
+    ) branches_cnt_popcount (
+        .data_in  (slice_branch),
+        .data_out (branches_cnt)
+    );
+    VX_popcount #(
+        .N     ($bits(slice_divergence)),
+        .MODEL (1)
+    ) divergence_cnt_popcount (
+        .data_in  (slice_divergence),
+        .data_out (divergence_cnt)
+    );
 
     wire sched_idle = ~(| sched_valid);
 

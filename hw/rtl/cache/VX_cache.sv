@@ -964,8 +964,28 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0]  perf_crsp_stall_per_req;
     wire [MEM_PORTS-1:0] perf_mem_stall_per_port;
     // a merged read counts once, as the bank access that serves it
-    `BUFFER(perf_core_reads_per_req, core_req_live & core_req_ready & ~core_req_rw & ~core_req_follower);
-    `BUFFER(perf_core_writes_per_req, core_req_live & core_req_ready & core_req_rw);
+    VX_pipe_register #(
+        .DATAW  ($bits(perf_core_reads_per_req)),
+        .RESETW ($bits(perf_core_reads_per_req)),
+        .DEPTH  (1)
+    ) perf_core_reads_per_req_buf (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  (core_req_live & core_req_ready & ~core_req_rw & ~core_req_follower),
+        .data_out (perf_core_reads_per_req)
+    );
+    VX_pipe_register #(
+        .DATAW  ($bits(perf_core_writes_per_req)),
+        .RESETW ($bits(perf_core_writes_per_req)),
+        .DEPTH  (1)
+    ) perf_core_writes_per_req_buf (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  (core_req_live & core_req_ready & core_req_rw),
+        .data_out (perf_core_writes_per_req)
+    );
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_perf_crsp_stall_per_req
         assign perf_crsp_stall_per_req[i] = core_bus_if[i].rsp_valid && ~core_bus_if[i].rsp_ready;
     end
@@ -980,14 +1000,62 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [`CLOG2(NUM_BANKS+1)-1:0] perf_evictions_per_cycle;
     wire [`CLOG2(NUM_BANKS+1)-1:0] perf_mshr_stall_per_cycle;
     wire [`CLOG2(MEM_PORTS+1)-1:0] perf_mem_stall_per_cycle;
-    `POP_COUNT(perf_core_reads_per_cycle, perf_core_reads_per_req);
-    `POP_COUNT(perf_core_writes_per_cycle, perf_core_writes_per_req);
-    `POP_COUNT(perf_read_miss_per_cycle, perf_read_miss_per_bank);
-    `POP_COUNT(perf_write_miss_per_cycle, perf_write_miss_per_bank);
-    `POP_COUNT(perf_evictions_per_cycle, perf_evictions_per_bank);
-    `POP_COUNT(perf_mshr_stall_per_cycle, perf_mshr_stall_per_bank);
-    `POP_COUNT(perf_crsp_stall_per_cycle, perf_crsp_stall_per_req);
-    `POP_COUNT(perf_mem_stall_per_cycle, perf_mem_stall_per_port);
+    VX_popcount #(
+        .N     ($bits(perf_core_reads_per_req)),
+        .MODEL (1)
+    ) perf_core_reads_per_cycle_popcount (
+        .data_in  (perf_core_reads_per_req),
+        .data_out (perf_core_reads_per_cycle)
+    );
+    VX_popcount #(
+        .N     ($bits(perf_core_writes_per_req)),
+        .MODEL (1)
+    ) perf_core_writes_per_cycle_popcount (
+        .data_in  (perf_core_writes_per_req),
+        .data_out (perf_core_writes_per_cycle)
+    );
+    VX_popcount #(
+        .N     ($bits(perf_read_miss_per_bank)),
+        .MODEL (1)
+    ) perf_read_miss_per_cycle_popcount (
+        .data_in  (perf_read_miss_per_bank),
+        .data_out (perf_read_miss_per_cycle)
+    );
+    VX_popcount #(
+        .N     ($bits(perf_write_miss_per_bank)),
+        .MODEL (1)
+    ) perf_write_miss_per_cycle_popcount (
+        .data_in  (perf_write_miss_per_bank),
+        .data_out (perf_write_miss_per_cycle)
+    );
+    VX_popcount #(
+        .N     ($bits(perf_evictions_per_bank)),
+        .MODEL (1)
+    ) perf_evictions_per_cycle_popcount (
+        .data_in  (perf_evictions_per_bank),
+        .data_out (perf_evictions_per_cycle)
+    );
+    VX_popcount #(
+        .N     ($bits(perf_mshr_stall_per_bank)),
+        .MODEL (1)
+    ) perf_mshr_stall_per_cycle_popcount (
+        .data_in  (perf_mshr_stall_per_bank),
+        .data_out (perf_mshr_stall_per_cycle)
+    );
+    VX_popcount #(
+        .N     ($bits(perf_crsp_stall_per_req)),
+        .MODEL (1)
+    ) perf_crsp_stall_per_cycle_popcount (
+        .data_in  (perf_crsp_stall_per_req),
+        .data_out (perf_crsp_stall_per_cycle)
+    );
+    VX_popcount #(
+        .N     ($bits(perf_mem_stall_per_port)),
+        .MODEL (1)
+    ) perf_mem_stall_per_cycle_popcount (
+        .data_in  (perf_mem_stall_per_port),
+        .data_out (perf_mem_stall_per_cycle)
+    );
     reg [PERF_CTR_BITS-1:0] perf_core_reads;
     reg [PERF_CTR_BITS-1:0] perf_core_writes;
     reg [PERF_CTR_BITS-1:0] perf_read_misses;

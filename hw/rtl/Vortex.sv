@@ -513,7 +513,17 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
         assign per_cluster_kmu_valid[c] = per_cluster_kmu_bus_if[c].valid;
     end
     wire busy_r;
-    `BUFFER_EX(busy_r, kmu_busy | dcr_bus_if.req_valid | (|per_cluster_busy) | dev_mmu_busy | ~l3_req_empty, 1'b1, 1, (`VX_CFG_NUM_CLUSTERS > 1));
+    VX_pipe_register #(
+        .DATAW  ($bits(busy_r)),
+        .RESETW (1),
+        .DEPTH  ((`VX_CFG_NUM_CLUSTERS > 1))
+    ) busy_buf (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  (kmu_busy | dcr_bus_if.req_valid | (|per_cluster_busy) | dev_mmu_busy | ~l3_req_empty),
+        .data_out (busy_r)
+    );
     assign busy = busy_r | kmu_busy | dcr_bus_if.req_valid | (|per_cluster_kmu_valid) | cp_mem_busy;
 
 `ifdef PERF_ENABLE
@@ -534,9 +544,27 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
     wire [MEM_PORTS_CTR_W-1:0] perf_mem_writes_per_cycle;
     wire [MEM_PORTS_CTR_W-1:0] perf_mem_rsps_per_cycle;
 
-    `POP_COUNT(perf_mem_reads_per_cycle, mem_rd_req_fire);
-    `POP_COUNT(perf_mem_writes_per_cycle, mem_wr_req_fire);
-    `POP_COUNT(perf_mem_rsps_per_cycle, mem_rsp_fire);
+    VX_popcount #(
+        .N     ($bits(mem_rd_req_fire)),
+        .MODEL (1)
+    ) perf_mem_reads_per_cycle_popcount (
+        .data_in  (mem_rd_req_fire),
+        .data_out (perf_mem_reads_per_cycle)
+    );
+    VX_popcount #(
+        .N     ($bits(mem_wr_req_fire)),
+        .MODEL (1)
+    ) perf_mem_writes_per_cycle_popcount (
+        .data_in  (mem_wr_req_fire),
+        .data_out (perf_mem_writes_per_cycle)
+    );
+    VX_popcount #(
+        .N     ($bits(mem_rsp_fire)),
+        .MODEL (1)
+    ) perf_mem_rsps_per_cycle_popcount (
+        .data_in  (mem_rsp_fire),
+        .data_out (perf_mem_rsps_per_cycle)
+    );
 
     reg [PERF_CTR_BITS-1:0] perf_mem_pending_reads;
 

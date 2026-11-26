@@ -80,8 +80,28 @@ module VX_issue import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin : g_issue_sched
         logic issued_r;
         logic [ISSUE_WIS_W-1:0] issued_wis_r;
-        `BUFFER(issued_r,   issued_warps[i]);
-        `BUFFER(issued_wis_r, issued_warp_wis[i]);
+        VX_pipe_register #(
+            .DATAW  ($bits(issued_r)),
+            .RESETW ($bits(issued_r)),
+            .DEPTH  (1)
+        ) issued_buf (
+            .clk      (clk),
+            .reset    (reset),
+            .enable   (1'b1),
+            .data_in  (issued_warps[i]),
+            .data_out (issued_r)
+        );
+        VX_pipe_register #(
+            .DATAW  ($bits(issued_wis_r)),
+            .RESETW ($bits(issued_wis_r)),
+            .DEPTH  (1)
+        ) issued_wis_buf (
+            .clk      (clk),
+            .reset    (reset),
+            .enable   (1'b1),
+            .data_in  (issued_warp_wis[i]),
+            .data_out (issued_wis_r)
+        );
         assign issue_sched_if[i].valid = issued_r;
         assign issue_sched_if[i].wis   = issued_wis_r;
     end

@@ -194,7 +194,13 @@ module VX_warp_shared_unit import VX_gpu_pkg::*; #(
     reg is_single_warp;
 
     wire [`CLOG2(`VX_CFG_NUM_WARPS+1)-1:0] active_warps_cnt;
-    `POP_COUNT(active_warps_cnt, active_warps);
+    VX_popcount #(
+        .N     ($bits(active_warps)),
+        .MODEL (1)
+    ) active_warps_cnt_popcount (
+        .data_in  (active_warps),
+        .data_out (active_warps_cnt)
+    );
 
     assign wspawn_apply = wspawn_valid_r && is_single_warp;
 

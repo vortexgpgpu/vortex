@@ -1229,7 +1229,17 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     wire issued_busy = BUSY_REG ? (dcr_bus_if.req_valid | (| per_core_kmu_fire)) : 1'b0;
     wire skid_busy   = BUSY_REG ? (| per_core_kmu_valid) : 1'b0;
     wire busy_r;
-    `BUFFER_EX(busy_r, (|per_core_busy) | (|per_core_lsu_busy) | dcache_link_busy | ~mem_req_empty | mmu_busy | issued_busy, 1'b1, 1, BUSY_REG);
+    VX_pipe_register #(
+        .DATAW  ($bits(busy_r)),
+        .RESETW (1),
+        .DEPTH  (BUSY_REG)
+    ) busy_buf (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  ((|per_core_busy) | (|per_core_lsu_busy) | dcache_link_busy | ~mem_req_empty | mmu_busy | issued_busy),
+        .data_out (busy_r)
+    );
     assign busy = busy_r | skid_busy;
 
 endmodule

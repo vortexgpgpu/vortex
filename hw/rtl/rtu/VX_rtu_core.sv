@@ -821,9 +821,27 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     wire [NUM_LANES-1:0] perf_cb_lanes  = perf_cand ? ws_cb : '0;
 
     wire [LANE_CNT_W-1:0] perf_rays_cnt, perf_hits_cnt, perf_cb_cnt;
-    `POP_COUNT(perf_rays_cnt, perf_ray_lanes);
-    `POP_COUNT(perf_hits_cnt, perf_hit_lanes);
-    `POP_COUNT(perf_cb_cnt,   perf_cb_lanes);
+    VX_popcount #(
+        .N     ($bits(perf_ray_lanes)),
+        .MODEL (1)
+    ) perf_rays_cnt_popcount (
+        .data_in  (perf_ray_lanes),
+        .data_out (perf_rays_cnt)
+    );
+    VX_popcount #(
+        .N     ($bits(perf_hit_lanes)),
+        .MODEL (1)
+    ) perf_hits_cnt_popcount (
+        .data_in  (perf_hit_lanes),
+        .data_out (perf_hits_cnt)
+    );
+    VX_popcount #(
+        .N     ($bits(perf_cb_lanes)),
+        .MODEL (1)
+    ) perf_cb_cnt_popcount (
+        .data_in  (perf_cb_lanes),
+        .data_out (perf_cb_cnt)
+    );
 
     // The per-cycle increments are registered so the counter adders stay off
     // the scheduler's and the record walk's timing paths.

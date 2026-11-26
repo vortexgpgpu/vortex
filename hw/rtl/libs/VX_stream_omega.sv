@@ -206,8 +206,24 @@ module VX_stream_omega #(
             end
         end
 
-        `BUFFER(per_cycle_collision_r, per_cycle_collision);
-        `POP_COUNT(collision_count, per_cycle_collision_r);
+        VX_pipe_register #(
+            .DATAW  ($bits(per_cycle_collision_r)),
+            .RESETW ($bits(per_cycle_collision_r)),
+            .DEPTH  (1)
+        ) per_cycle_collision_buf (
+            .clk      (clk),
+            .reset    (reset),
+            .enable   (1'b1),
+            .data_in  (per_cycle_collision),
+            .data_out (per_cycle_collision_r)
+        );
+        VX_popcount #(
+            .N     ($bits(per_cycle_collision_r)),
+            .MODEL (1)
+        ) collision_count_popcount (
+            .data_in  (per_cycle_collision_r),
+            .data_out (collision_count)
+        );
 
         always @(posedge clk) begin
             if (reset) begin
@@ -234,8 +250,20 @@ module VX_stream_omega #(
         localparam CAPACITY = 4 * `MAX(NUM_INPUTS, NUM_OUTPUTS) * (`CLOG2(`MAX(NUM_INPUTS, NUM_OUTPUTS)) + 1);
         wire [IN_W-1:0]  in_cnt;
         wire [OUT_W-1:0] out_cnt;
-        `POP_COUNT(in_cnt, valid_in & ready_in);
-        `POP_COUNT(out_cnt, valid_out & ready_out);
+        VX_popcount #(
+            .N     ($bits(valid_in & ready_in)),
+            .MODEL (1)
+        ) in_cnt_popcount (
+            .data_in  (valid_in & ready_in),
+            .data_out (in_cnt)
+        );
+        VX_popcount #(
+            .N     ($bits(valid_out & ready_out)),
+            .MODEL (1)
+        ) out_cnt_popcount (
+            .data_in  (valid_out & ready_out),
+            .data_out (out_cnt)
+        );
         `UNUSED_VAR (buf_any_valid)
         VX_pending_size #(
             .SIZE  (CAPACITY),

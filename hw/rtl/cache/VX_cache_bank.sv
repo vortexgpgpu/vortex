@@ -1069,7 +1069,13 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire mshr_release_fire = mshr_finalize_st1 && mshr_release_st1 && ~pipe_stall;
 
     wire [1:0] mshr_dequeue;
-    `POP_COUNT(mshr_dequeue, {((replay_fire && ~park_fire) || fwd_fire), mshr_release_fire});
+    VX_popcount #(
+        .N     ($bits({((replay_fire && ~park_fire) || fwd_fire), mshr_release_fire})),
+        .MODEL (1)
+    ) mshr_dequeue_popcount (
+        .data_in  ({((replay_fire && ~park_fire) || fwd_fire), mshr_release_fire}),
+        .data_out (mshr_dequeue)
+    );
 
     VX_pending_size #(
         .SIZE  (MSHR_SIZE),

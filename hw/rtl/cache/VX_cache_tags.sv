@@ -181,10 +181,50 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         wire [`CS_TAG_SEL_BITS-1:0]  rdw_tag;
         wire [`CS_LINE_SEL_BITS-1:0] rdw_set;
         wire rdw_refill;
-        `BUFFER_EX(rdw_fill_raw, do_fill, ~stall, 1, 1);
-        `BUFFER_EX(rdw_sec_oh, sec_oh, ~stall, $bits(rdw_sec_oh), 1);
-        `BUFFER_EX(rdw_tag, line_tag, ~stall, $bits(rdw_tag), 1);
-        `BUFFER_EX(rdw_set, line_idx, ~stall, $bits(rdw_set), 1);
+        VX_pipe_register #(
+            .DATAW  ($bits(rdw_fill_raw)),
+            .RESETW (1),
+            .DEPTH  (1)
+        ) rdw_fill_raw_buf (
+            .clk      (clk),
+            .reset    (reset),
+            .enable   (~stall),
+            .data_in  (do_fill),
+            .data_out (rdw_fill_raw)
+        );
+        VX_pipe_register #(
+            .DATAW  ($bits(rdw_sec_oh)),
+            .RESETW ($bits(rdw_sec_oh)),
+            .DEPTH  (1)
+        ) rdw_sec_oh_buf (
+            .clk      (clk),
+            .reset    (reset),
+            .enable   (~stall),
+            .data_in  (sec_oh),
+            .data_out (rdw_sec_oh)
+        );
+        VX_pipe_register #(
+            .DATAW  ($bits(rdw_tag)),
+            .RESETW ($bits(rdw_tag)),
+            .DEPTH  (1)
+        ) rdw_tag_buf (
+            .clk      (clk),
+            .reset    (reset),
+            .enable   (~stall),
+            .data_in  (line_tag),
+            .data_out (rdw_tag)
+        );
+        VX_pipe_register #(
+            .DATAW  ($bits(rdw_set)),
+            .RESETW ($bits(rdw_set)),
+            .DEPTH  (1)
+        ) rdw_set_buf (
+            .clk      (clk),
+            .reset    (reset),
+            .enable   (~stall),
+            .data_in  (line_idx),
+            .data_out (rdw_set)
+        );
         // do_fill is way-gated, so rdw_fill_raw identifies the filled way.
         wire way_filled = rdw_fill_raw && (line_idx == rdw_set);
 
@@ -209,7 +249,17 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         // victim way installs only the fetched sector (others cleared). With
         // 1 sector/line a fill is always to a fresh way.
         wire fill_refill = do_fill && tag_eq && (| read_valid[i]);
-        `BUFFER_EX(rdw_refill, do_fill && fill_refill, ~stall, 1, 1);
+        VX_pipe_register #(
+            .DATAW  ($bits(rdw_refill)),
+            .RESETW (1),
+            .DEPTH  (1)
+        ) rdw_refill_buf (
+            .clk      (clk),
+            .reset    (reset),
+            .enable   (~stall),
+            .data_in  (do_fill && fill_refill),
+            .data_out (rdw_refill)
+        );
 
         // Per-sector valid update as per-bit set/clear for the LUTRAM (no
         // read-modify-write): set the filled sector; clear the whole line on
@@ -225,7 +275,17 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
                                | (do_inval              ? sec_oh      : {SEC{1'b0}});
         wire same_set_v = (line_idx == line_idx_n);
         wire [SEC-1:0] rdw_vclr;
-        `BUFFER_EX(rdw_vclr, (same_set_v ? vclr_op : {SEC{1'b0}}), ~stall, SEC, 1);
+        VX_pipe_register #(
+            .DATAW  ($bits(rdw_vclr)),
+            .RESETW (SEC),
+            .DEPTH  (1)
+        ) rdw_vclr_buf (
+            .clk      (clk),
+            .reset    (reset),
+            .enable   (~stall),
+            .data_in  ((same_set_v ? vclr_op : {SEC{1'b0}})),
+            .data_out (rdw_vclr)
+        );
         wire [SEC-1:0] cur_valid = read_valid[i] & ~rdw_vclr;
         wire [SEC-1:0] fill_valid = do_fill ? (fill_refill ? (cur_valid | sec_oh) : sec_oh) : cur_valid;
         assign valid_wren[i]  = (fill ? {SEC{1'b1}} : {SEC{1'b0}}) | vclr_op;
@@ -269,9 +329,39 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
             wire same_set = (line_idx == line_idx_n);
             wire [SEC-1:0] rdw_dset, rdw_dclr;
             wire rdw_dclr_all;
-            `BUFFER_EX(rdw_dset, (same_set ? dset_oh : {SEC{1'b0}}), ~stall, SEC, 1);
-            `BUFFER_EX(rdw_dclr, (same_set ? dclr_oh : {SEC{1'b0}}), ~stall, SEC, 1);
-            `BUFFER_EX(rdw_dclr_all, same_set && dclr_all, ~stall, 1, 1);
+            VX_pipe_register #(
+                .DATAW  ($bits(rdw_dset)),
+                .RESETW (SEC),
+                .DEPTH  (1)
+            ) rdw_dset_buf (
+                .clk      (clk),
+                .reset    (reset),
+                .enable   (~stall),
+                .data_in  ((same_set ? dset_oh : {SEC{1'b0}})),
+                .data_out (rdw_dset)
+            );
+            VX_pipe_register #(
+                .DATAW  ($bits(rdw_dclr)),
+                .RESETW (SEC),
+                .DEPTH  (1)
+            ) rdw_dclr_buf (
+                .clk      (clk),
+                .reset    (reset),
+                .enable   (~stall),
+                .data_in  ((same_set ? dclr_oh : {SEC{1'b0}})),
+                .data_out (rdw_dclr)
+            );
+            VX_pipe_register #(
+                .DATAW  ($bits(rdw_dclr_all)),
+                .RESETW (1),
+                .DEPTH  (1)
+            ) rdw_dclr_all_buf (
+                .clk      (clk),
+                .reset    (reset),
+                .enable   (~stall),
+                .data_in  (same_set && dclr_all),
+                .data_out (rdw_dclr_all)
+            );
             assign read_dirty[i] = (dirty_rdata[i] & ~rdw_dclr & ~{SEC{rdw_dclr_all}}) | rdw_dset;
         end else begin : g_no_dirty
             `UNUSED_VAR (do_write)
@@ -285,7 +375,17 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
             // corrects a same-set fill from the previous cycle the same way. A
             // refetch's clear needs none: nothing is looked up right behind it.
             wire rdw_nodata;
-            `BUFFER_EX(rdw_nodata, fill_nodata, ~stall, 1, 1);
+            VX_pipe_register #(
+                .DATAW  ($bits(rdw_nodata)),
+                .RESETW (1),
+                .DEPTH  (1)
+            ) rdw_nodata_buf (
+                .clk      (clk),
+                .reset    (reset),
+                .enable   (~stall),
+                .data_in  (fill_nodata),
+                .data_out (rdw_nodata)
+            );
             wire do_refetch = refetch && sector_valid;
             assign partial_wren[i]  = (do_fill || do_refetch) ? sec_oh : {SEC{1'b0}};
             assign partial_wdata[i] = {SEC{do_fill && fill_nodata}};

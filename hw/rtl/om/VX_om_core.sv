@@ -469,8 +469,20 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
             assign wr_lane_hit[i] = wr_lanes_r[i] && (wr_hash_r[i] == PXH_BITS'(s));
         end
         assign rd_set_mask[s] = (| rd_lane_hit);
-        `POP_COUNT(rd_set_incr[s], rd_lane_hit);
-        `POP_COUNT(wr_set_decr[s], wr_lane_hit);
+        VX_popcount #(
+            .N     ($bits(rd_lane_hit)),
+            .MODEL (1)
+        ) rd_set_incr_popcount (
+            .data_in  (rd_lane_hit),
+            .data_out (rd_set_incr[s])
+        );
+        VX_popcount #(
+            .N     ($bits(wr_lane_hit)),
+            .MODEL (1)
+        ) wr_set_decr_popcount (
+            .data_in  (wr_lane_hit),
+            .data_out (wr_set_decr[s])
+        );
     end
 
     reg [PXH_SETS-1:0][PXH_CNT_W-1:0] pxh_cnt;
@@ -584,7 +596,15 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     wire [OCACHE_TAG_WIDTH-UUID_WIDTH-1:0] cache_bus_rsp_tag  = cache_bus_if[0].rsp_data.tag[OCACHE_TAG_WIDTH-UUID_WIDTH-1:0];
     wire [UUID_WIDTH-1:0] cache_bus_rsp_uuid = cache_bus_if[0].rsp_data.tag[OCACHE_TAG_WIDTH-1 -: UUID_WIDTH];
     wire om_bus_fire = om_bus_if.req_valid && om_bus_if.req_ready;
-    `NEG_EDGE (reset_negedge, reset);
+    VX_edge_trigger #(
+        .POS  (0),
+        .INIT (0)
+    ) reset_negedge_trig (
+        .clk      (clk),
+        .reset    (1'b0),
+        .data_in  (reset),
+        .data_out (reset_negedge)
+    );
     `SCOPE_TAP_EX (0, 6, 6, 4, (
             OCACHE_ADDR_WIDTH + 1 + OCACHE_TAG_WIDTH +
             (OCACHE_WORD_SIZE * 8) + OCACHE_TAG_WIDTH +
@@ -662,9 +682,27 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         assign perf_mem_rd_rsp_fire[i] = cache_bus_if[i].rsp_valid && cache_bus_if[i].rsp_ready;
     end
 
-    `POP_COUNT(perf_mem_rd_req_per_cycle, perf_mem_rd_req_fire);
-    `POP_COUNT(perf_mem_wr_req_per_cycle, perf_mem_wr_req_fire);
-    `POP_COUNT(perf_mem_rd_rsp_per_cycle, perf_mem_rd_rsp_fire);
+    VX_popcount #(
+        .N     ($bits(perf_mem_rd_req_fire)),
+        .MODEL (1)
+    ) perf_mem_rd_req_per_cycle_popcount (
+        .data_in  (perf_mem_rd_req_fire),
+        .data_out (perf_mem_rd_req_per_cycle)
+    );
+    VX_popcount #(
+        .N     ($bits(perf_mem_wr_req_fire)),
+        .MODEL (1)
+    ) perf_mem_wr_req_per_cycle_popcount (
+        .data_in  (perf_mem_wr_req_fire),
+        .data_out (perf_mem_wr_req_per_cycle)
+    );
+    VX_popcount #(
+        .N     ($bits(perf_mem_rd_rsp_fire)),
+        .MODEL (1)
+    ) perf_mem_rd_rsp_per_cycle_popcount (
+        .data_in  (perf_mem_rd_rsp_fire),
+        .data_out (perf_mem_rd_rsp_per_cycle)
+    );
 
     reg [PERF_CTR_BITS-1:0] perf_pending_reads;
     assign perf_pending_reads_cycle = perf_mem_rd_req_per_cycle - perf_mem_rd_rsp_per_cycle;

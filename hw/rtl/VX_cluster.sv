@@ -680,9 +680,29 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
     wire busy_r;
 `ifdef EXT_GFX_ANY_ENABLE
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | socket_issued_busy | gfx_busy | mmu_busy | l2_link_busy | ~l2_req_empty, 1'b1, 1, (NUM_SOCKETS > 1));
+    VX_pipe_register #(
+        .DATAW  ($bits(busy_r)),
+        .RESETW (1),
+        .DEPTH  ((NUM_SOCKETS > 1))
+    ) busy_buf (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  (dcr_bus_if.req_valid | (|per_socket_busy) | socket_issued_busy | gfx_busy | mmu_busy | l2_link_busy | ~l2_req_empty),
+        .data_out (busy_r)
+    );
 `else
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | socket_issued_busy | mmu_busy | l2_link_busy | ~l2_req_empty, 1'b1, 1, (NUM_SOCKETS > 1));
+    VX_pipe_register #(
+        .DATAW  ($bits(busy_r)),
+        .RESETW (1),
+        .DEPTH  ((NUM_SOCKETS > 1))
+    ) busy_buf (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  (dcr_bus_if.req_valid | (|per_socket_busy) | socket_issued_busy | mmu_busy | l2_link_busy | ~l2_req_empty),
+        .data_out (busy_r)
+    );
 `endif
     assign busy = busy_r | dcr_bus_if.req_valid | launch_link_busy;
 

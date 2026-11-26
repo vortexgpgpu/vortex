@@ -198,7 +198,13 @@ module VX_tlb_l1 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     // ---------------------------------------------------------------------
 `ifdef PERF_ENABLE
     wire [`CLOG2(NUM_REQS+1)-1:0] n_hits;
-    `POP_COUNT(n_hits, access_hit);
+    VX_popcount #(
+        .N     ($bits(access_hit)),
+        .MODEL (1)
+    ) n_hits_popcount (
+        .data_in  (access_hit),
+        .data_out (n_hits)
+    );
     wire miss_ev = park_valid && park_ready;
 
     reg [PERF_CTR_BITS-1:0] perf_reads, perf_hits, perf_misses, perf_evicts, perf_walks;

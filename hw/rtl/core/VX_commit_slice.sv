@@ -75,7 +75,17 @@ module VX_commit_slice import VX_gpu_pkg::*; #(
 
     // notify scheduler
     wire [PER_ISSUE_WARPS-1:0] committed_wis_n = commit_arb_if.valid ? commit_eop_wis : '0;
-    `BUFFER(committed_wis, committed_wis_n);
+    VX_pipe_register #(
+        .DATAW  ($bits(committed_wis)),
+        .RESETW ($bits(committed_wis)),
+        .DEPTH  (1)
+    ) committed_wis_buf (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  (committed_wis_n),
+        .data_out (committed_wis)
+    );
 
     // Writeback
 

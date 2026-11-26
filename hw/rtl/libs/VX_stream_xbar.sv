@@ -218,8 +218,24 @@ module VX_stream_xbar #(
         end
     end
 
-    `BUFFER(per_cycle_collision_r, per_cycle_collision);
-    `POP_COUNT(collision_count, per_cycle_collision_r);
+    VX_pipe_register #(
+        .DATAW  ($bits(per_cycle_collision_r)),
+        .RESETW ($bits(per_cycle_collision_r)),
+        .DEPTH  (1)
+    ) per_cycle_collision_buf (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  (per_cycle_collision),
+        .data_out (per_cycle_collision_r)
+    );
+    VX_popcount #(
+        .N     ($bits(per_cycle_collision_r)),
+        .MODEL (1)
+    ) collision_count_popcount (
+        .data_in  (per_cycle_collision_r),
+        .data_out (collision_count)
+    );
 
     always @(posedge clk) begin
         if (reset) begin

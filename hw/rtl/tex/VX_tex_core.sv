@@ -273,7 +273,15 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     wire [UUID_WIDTH-1:0] tex_bus_rsp_uuid = tex_bus_if.rsp_data.tag[TEX_REQ_ARB1_TAG_WIDTH-1 -: UUID_WIDTH];
     wire tex_bus_req_fire = tex_bus_if.req_valid && tex_bus_if.req_ready;
     wire tex_bus_rsp_fire = tex_bus_if.rsp_valid && tex_bus_if.rsp_ready;
-    `NEG_EDGE (reset_negedge, reset);
+    VX_edge_trigger #(
+        .POS  (0),
+        .INIT (0)
+    ) reset_negedge_trig (
+        .clk      (clk),
+        .reset    (1'b0),
+        .data_in  (reset),
+        .data_out (reset_negedge)
+    );
     `SCOPE_TAP_EX (0, 5, 8, 5, (
             TCACHE_ADDR_WIDTH + 1 + TCACHE_TAG_WIDTH +
             (TCACHE_WORD_SIZE * 8) + TCACHE_TAG_WIDTH +
@@ -352,8 +360,20 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
         assign perf_mem_rsp_fire[i] = cache_bus_if[i].rsp_valid && cache_bus_if[i].rsp_ready;
     end
 
-    `POP_COUNT(perf_mem_req_per_cycle, perf_mem_req_fire);
-    `POP_COUNT(perf_mem_rsp_per_cycle, perf_mem_rsp_fire);
+    VX_popcount #(
+        .N     ($bits(perf_mem_req_fire)),
+        .MODEL (1)
+    ) perf_mem_req_per_cycle_popcount (
+        .data_in  (perf_mem_req_fire),
+        .data_out (perf_mem_req_per_cycle)
+    );
+    VX_popcount #(
+        .N     ($bits(perf_mem_rsp_fire)),
+        .MODEL (1)
+    ) perf_mem_rsp_per_cycle_popcount (
+        .data_in  (perf_mem_rsp_fire),
+        .data_out (perf_mem_rsp_per_cycle)
+    );
 
     reg [PERF_CTR_BITS-1:0] perf_pending_reads;
     assign perf_pending_reads_cycle = perf_mem_req_per_cycle - perf_mem_rsp_per_cycle;

@@ -1216,7 +1216,15 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
     wire m_axi_mem_wfire_0  = m_axi_mem_wvalid_a[0]  & m_axi_mem_wready_a[0];
     wire m_axi_mem_bfire_0  = m_axi_mem_bvalid_a[0]  & m_axi_mem_bready_a[0];
     wire reset_negedge;
-    `NEG_EDGE (reset_negedge, reset);
+    VX_edge_trigger #(
+        .POS  (0),
+        .INIT (0)
+    ) reset_negedge_trig (
+        .clk      (clk),
+        .reset    (1'b0),
+        .data_in  (reset),
+        .data_out (reset_negedge)
+    );
     `SCOPE_TAP (0, 0, {
             vx_start,
             interrupt,

@@ -479,8 +479,20 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
         assign lsu_mem_if[k].rsp_data.tag  = rsp_tag_r;
     end
 
-    `POP_COUNT(a_rsp_done, a_done);
-    `POP_COUNT(b_rsp_done, b_done);
+    VX_popcount #(
+        .N     ($bits(a_done)),
+        .MODEL (1)
+    ) a_rsp_done_popcount (
+        .data_in  (a_done),
+        .data_out (a_rsp_done)
+    );
+    VX_popcount #(
+        .N     ($bits(b_done)),
+        .MODEL (1)
+    ) b_rsp_done_popcount (
+        .data_in  (b_done),
+        .data_out (b_rsp_done)
+    );
     assign a_rsp_take = (| a_load);
     assign b_rsp_take = (| b_load);
 
@@ -906,15 +918,33 @@ module VX_lmem_unit import VX_gpu_pkg::*; #(
 `ifdef PERF_ENABLE
     wire [`CLOG2(NUM_LANES+1)-1:0] perf_a_served;
     wire [`CLOG2(NUM_LANES+1)-1:0] perf_b_served;
-    `POP_COUNT(perf_a_served, a_perf_served);
-    `POP_COUNT(perf_b_served, b_perf_served);
+    VX_popcount #(
+        .N     ($bits(a_perf_served)),
+        .MODEL (1)
+    ) perf_a_served_popcount (
+        .data_in  (a_perf_served),
+        .data_out (perf_a_served)
+    );
+    VX_popcount #(
+        .N     ($bits(b_perf_served)),
+        .MODEL (1)
+    ) perf_b_served_popcount (
+        .data_in  (b_perf_served),
+        .data_out (perf_b_served)
+    );
 
     wire [NUM_BLOCKS-1:0] perf_crsp_stall_per_blk;
     for (genvar k = 0; k < NUM_BLOCKS; ++k) begin : g_perf_crsp
         assign perf_crsp_stall_per_blk[k] = lsu_mem_if[k].rsp_valid && ~lsu_mem_if[k].rsp_ready;
     end
     wire [`CLOG2(NUM_BLOCKS+1)-1:0] perf_crsp_stalls_per_cycle;
-    `POP_COUNT(perf_crsp_stalls_per_cycle, perf_crsp_stall_per_blk);
+    VX_popcount #(
+        .N     ($bits(perf_crsp_stall_per_blk)),
+        .MODEL (1)
+    ) perf_crsp_stalls_per_cycle_popcount (
+        .data_in  (perf_crsp_stall_per_blk),
+        .data_out (perf_crsp_stalls_per_cycle)
+    );
 
     reg [PERF_CTR_BITS-1:0] perf_reads;
     reg [PERF_CTR_BITS-1:0] perf_writes;

@@ -261,7 +261,13 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     wire [NUM_SLICES-1:0] slice_arb_fire_out = slice_arb_valid_out & slice_arb_ready_out;
     wire [SLICES_BITS-1:0] slice_arb_fire_out_cnt;
 
-    `POP_COUNT(slice_arb_fire_out_cnt, slice_arb_fire_out);
+    VX_popcount #(
+        .N     ($bits(slice_arb_fire_out)),
+        .MODEL (1)
+    ) slice_arb_fire_out_cnt_popcount (
+        .data_in  (slice_arb_fire_out),
+        .data_out (slice_arb_fire_out_cnt)
+    );
 
     VX_pending_size #(
         .SIZE  (EDGE_FUNC_LATENCY + 2 * NUM_SLICES),
@@ -574,7 +580,15 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     wire cache_bus_req_fire_0 = cache_bus_if[0].req_valid && cache_bus_if[0].req_ready;
     wire cache_bus_rsp_fire_0 = cache_bus_if[0].rsp_valid && cache_bus_if[0].rsp_ready;
     wire raster_bus_fire = raster_bus_tmp_if[0].req_valid && raster_bus_tmp_if[0].req_ready;
-    `NEG_EDGE (reset_negedge, reset);
+    VX_edge_trigger #(
+        .POS  (0),
+        .INIT (0)
+    ) reset_negedge_trig (
+        .clk      (clk),
+        .reset    (1'b0),
+        .data_in  (reset),
+        .data_out (reset_negedge)
+    );
     `SCOPE_TAP_EX (0, 7, 12, 5, (
             RCACHE_ADDR_WIDTH + 1 + RCACHE_TAG_WIDTH +
             (RCACHE_WORD_SIZE * 8) + RCACHE_TAG_WIDTH +
@@ -650,8 +664,20 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         assign perf_mem_rsp_fire[i] = cache_bus_if[i].rsp_valid && cache_bus_if[i].rsp_ready;
     end
 
-    `POP_COUNT(perf_mem_req_per_cycle, perf_mem_req_fire);
-    `POP_COUNT(perf_mem_rsp_per_cycle, perf_mem_rsp_fire);
+    VX_popcount #(
+        .N     ($bits(perf_mem_req_fire)),
+        .MODEL (1)
+    ) perf_mem_req_per_cycle_popcount (
+        .data_in  (perf_mem_req_fire),
+        .data_out (perf_mem_req_per_cycle)
+    );
+    VX_popcount #(
+        .N     ($bits(perf_mem_rsp_fire)),
+        .MODEL (1)
+    ) perf_mem_rsp_per_cycle_popcount (
+        .data_in  (perf_mem_rsp_fire),
+        .data_out (perf_mem_rsp_per_cycle)
+    );
 
     reg [PERF_CTR_BITS-1:0] perf_pending_reads;
     assign perf_pending_reads_cycle = perf_mem_req_per_cycle - perf_mem_rsp_per_cycle;

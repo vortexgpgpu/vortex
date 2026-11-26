@@ -109,8 +109,20 @@ module VX_cache_init import VX_gpu_pkg::*; #(
         wire [REQS_W-1:0]   xbar_req_cnt;
         wire [BANKS_W-1:0]  bank_req_cnt;
 
-        `POP_COUNT(xbar_req_cnt, xbar_req_fire_r);
-        `POP_COUNT(bank_req_cnt, bank_req_fire_r);
+        VX_popcount #(
+            .N     ($bits(xbar_req_fire_r)),
+            .MODEL (1)
+        ) xbar_req_cnt_popcount (
+            .data_in  (xbar_req_fire_r),
+            .data_out (xbar_req_cnt)
+        );
+        VX_popcount #(
+            .N     ($bits(bank_req_fire_r)),
+            .MODEL (1)
+        ) bank_req_cnt_popcount (
+            .data_in  (bank_req_fire_r),
+            .data_out (bank_req_cnt)
+        );
 
         always @(posedge clk) begin
             if (reset) begin

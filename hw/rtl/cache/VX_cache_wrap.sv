@@ -228,10 +228,34 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
         wire [`CLOG2(NUM_REQS+1)-1:0]  perf_core_writes_per_cycle;
         wire [`CLOG2(NUM_REQS+1)-1:0]  perf_crsp_stall_per_cycle;
         wire [`CLOG2(MEM_PORTS+1)-1:0] perf_mem_stall_per_cycle;
-        `POP_COUNT(perf_core_reads_per_cycle, perf_core_reads_per_req);
-        `POP_COUNT(perf_core_writes_per_cycle, perf_core_writes_per_req);
-        `POP_COUNT(perf_crsp_stall_per_cycle, perf_crsp_stall_per_req);
-        `POP_COUNT(perf_mem_stall_per_cycle, perf_mem_stall_per_port);
+        VX_popcount #(
+            .N     ($bits(perf_core_reads_per_req)),
+            .MODEL (1)
+        ) perf_core_reads_per_cycle_popcount (
+            .data_in  (perf_core_reads_per_req),
+            .data_out (perf_core_reads_per_cycle)
+        );
+        VX_popcount #(
+            .N     ($bits(perf_core_writes_per_req)),
+            .MODEL (1)
+        ) perf_core_writes_per_cycle_popcount (
+            .data_in  (perf_core_writes_per_req),
+            .data_out (perf_core_writes_per_cycle)
+        );
+        VX_popcount #(
+            .N     ($bits(perf_crsp_stall_per_req)),
+            .MODEL (1)
+        ) perf_crsp_stall_per_cycle_popcount (
+            .data_in  (perf_crsp_stall_per_req),
+            .data_out (perf_crsp_stall_per_cycle)
+        );
+        VX_popcount #(
+            .N     ($bits(perf_mem_stall_per_port)),
+            .MODEL (1)
+        ) perf_mem_stall_per_cycle_popcount (
+            .data_in  (perf_mem_stall_per_port),
+            .data_out (perf_mem_stall_per_cycle)
+        );
         reg [PERF_CTR_BITS-1:0] perf_core_reads;
         reg [PERF_CTR_BITS-1:0] perf_core_writes;
         reg [PERF_CTR_BITS-1:0] perf_mem_stalls;

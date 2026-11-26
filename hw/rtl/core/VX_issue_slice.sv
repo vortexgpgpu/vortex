@@ -104,7 +104,15 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     wire decode_fire = decode_if.valid && decode_if.ready;
     wire operands_fire = operands_if.valid && operands_if.ready;
     wire reset_negedge;
-    `NEG_EDGE (reset_negedge, reset);
+    VX_edge_trigger #(
+        .POS  (0),
+        .INIT (0)
+    ) reset_negedge_trig (
+        .clk      (clk),
+        .reset    (1'b0),
+        .data_in  (reset),
+        .data_out (reset_negedge)
+    );
     `SCOPE_TAP_EX (0, 2, 4, 3, (
             UUID_WIDTH + NW_WIDTH + `VX_CFG_NUM_THREADS + PC_BITS + EX_BITS + INST_OP_BITS + 1 + NUM_REGS_BITS * 4 +
             UUID_WIDTH + ISSUE_WIS_W + `VX_CFG_SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + 1 + NUM_REGS_BITS + (3 * `VX_CFG_XLEN) +

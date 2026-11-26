@@ -266,7 +266,15 @@ module VX_fetch import VX_gpu_pkg::*; #(
     wire icache_bus_req_fire = icache_bus_if.req_valid && icache_bus_if.req_ready;
     wire icache_bus_rsp_fire = icache_bus_if.rsp_valid && icache_bus_if.rsp_ready;
     wire reset_negedge;
-    `NEG_EDGE (reset_negedge, reset);
+    VX_edge_trigger #(
+        .POS  (0),
+        .INIT (0)
+    ) reset_negedge_trig (
+        .clk      (clk),
+        .reset    (1'b0),
+        .data_in  (reset),
+        .data_out (reset_negedge)
+    );
     `SCOPE_TAP_EX (0, 1, 6, 3, (
             UUID_WIDTH + NW_WIDTH + `VX_CFG_NUM_THREADS + PC_BITS +
             UUID_WIDTH + ICACHE_WORD_SIZE + ICACHE_ADDR_WIDTH +

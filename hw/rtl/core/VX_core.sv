@@ -889,8 +889,20 @@ import VX_tcu_pkg::*;
         assign perf_icache_req_fire[i] = icache_bus_if[i].req_valid && icache_bus_if[i].req_ready;
         assign perf_icache_rsp_fire[i] = icache_bus_if[i].rsp_valid && icache_bus_if[i].rsp_ready;
     end
-    `POP_COUNT(perf_icache_req_per_cycle, perf_icache_req_fire);
-    `POP_COUNT(perf_icache_rsp_per_cycle, perf_icache_rsp_fire);
+    VX_popcount #(
+        .N     ($bits(perf_icache_req_fire)),
+        .MODEL (1)
+    ) perf_icache_req_per_cycle_popcount (
+        .data_in  (perf_icache_req_fire),
+        .data_out (perf_icache_req_per_cycle)
+    );
+    VX_popcount #(
+        .N     ($bits(perf_icache_rsp_fire)),
+        .MODEL (1)
+    ) perf_icache_rsp_per_cycle_popcount (
+        .data_in  (perf_icache_rsp_fire),
+        .data_out (perf_icache_rsp_per_cycle)
+    );
 
     wire [LSU_NUM_REQS-1:0] perf_dcache_rd_req_fire, perf_dcache_rd_req_fire_r;
     wire [LSU_NUM_REQS-1:0] perf_dcache_wr_req_fire, perf_dcache_wr_req_fire_r;
@@ -909,14 +921,62 @@ import VX_tcu_pkg::*;
         .data_in  (lsu_coalescer_misses),
         .data_out (coalescer_misses)
     );
-    `BUFFER(coalescer_perf.misses, coalescer_misses);
+    VX_pipe_register #(
+        .DATAW  ($bits(coalescer_perf.misses)),
+        .RESETW ($bits(coalescer_perf.misses)),
+        .DEPTH  (1)
+    ) coalescer_perf_buf (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  (coalescer_misses),
+        .data_out (coalescer_perf.misses)
+    );
 
-    `BUFFER(perf_dcache_rd_req_fire_r, perf_dcache_rd_req_fire);
-    `BUFFER(perf_dcache_wr_req_fire_r, perf_dcache_wr_req_fire);
+    VX_pipe_register #(
+        .DATAW  ($bits(perf_dcache_rd_req_fire_r)),
+        .RESETW ($bits(perf_dcache_rd_req_fire_r)),
+        .DEPTH  (1)
+    ) perf_dcache_rd_req_fire_buf (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  (perf_dcache_rd_req_fire),
+        .data_out (perf_dcache_rd_req_fire_r)
+    );
+    VX_pipe_register #(
+        .DATAW  ($bits(perf_dcache_wr_req_fire_r)),
+        .RESETW ($bits(perf_dcache_wr_req_fire_r)),
+        .DEPTH  (1)
+    ) perf_dcache_wr_req_fire_buf (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  (perf_dcache_wr_req_fire),
+        .data_out (perf_dcache_wr_req_fire_r)
+    );
 
-    `POP_COUNT(perf_dcache_rd_req_per_cycle, perf_dcache_rd_req_fire_r);
-    `POP_COUNT(perf_dcache_wr_req_per_cycle, perf_dcache_wr_req_fire_r);
-    `POP_COUNT(perf_dcache_rsp_per_cycle, perf_dcache_rsp_fire);
+    VX_popcount #(
+        .N     ($bits(perf_dcache_rd_req_fire_r)),
+        .MODEL (1)
+    ) perf_dcache_rd_req_per_cycle_popcount (
+        .data_in  (perf_dcache_rd_req_fire_r),
+        .data_out (perf_dcache_rd_req_per_cycle)
+    );
+    VX_popcount #(
+        .N     ($bits(perf_dcache_wr_req_fire_r)),
+        .MODEL (1)
+    ) perf_dcache_wr_req_per_cycle_popcount (
+        .data_in  (perf_dcache_wr_req_fire_r),
+        .data_out (perf_dcache_wr_req_per_cycle)
+    );
+    VX_popcount #(
+        .N     ($bits(perf_dcache_rsp_fire)),
+        .MODEL (1)
+    ) perf_dcache_rsp_per_cycle_popcount (
+        .data_in  (perf_dcache_rsp_fire),
+        .data_out (perf_dcache_rsp_per_cycle)
+    );
 
     assign perf_icache_pending_read_cycle = perf_icache_req_per_cycle - perf_icache_rsp_per_cycle;
     assign perf_dcache_pending_read_cycle = perf_dcache_rd_req_per_cycle - perf_dcache_rsp_per_cycle;

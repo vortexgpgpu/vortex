@@ -766,7 +766,15 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire vx_mem_req_fire = vx_mem_req_valid[0] && vx_mem_req_ready[0];
     wire vx_mem_rsp_fire = vx_mem_rsp_valid[0] && vx_mem_rsp_ready[0];
     wire reset_negedge;
-    `NEG_EDGE (reset_negedge, reset);
+    VX_edge_trigger #(
+        .POS  (0),
+        .INIT (0)
+    ) reset_negedge_trig (
+        .clk      (clk),
+        .reset    (1'b0),
+        .data_in  (reset),
+        .data_out (reset_negedge)
+    );
     `SCOPE_TAP (0, 0, {
             vx_reset,
             vx_busy,

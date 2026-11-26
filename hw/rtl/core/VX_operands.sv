@@ -122,7 +122,17 @@ module VX_operands import VX_gpu_pkg::*; #(
         .data_in  (per_opc_perf_stalls),
         .data_out (perf_stalls_w)
     );
-    `BUFFER(perf_stalls, perf_stalls_w);
+    VX_pipe_register #(
+        .DATAW  ($bits(perf_stalls)),
+        .RESETW ($bits(perf_stalls)),
+        .DEPTH  (1)
+    ) perf_stalls_buf (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  (perf_stalls_w),
+        .data_out (perf_stalls)
+    );
 `endif
 
 endmodule

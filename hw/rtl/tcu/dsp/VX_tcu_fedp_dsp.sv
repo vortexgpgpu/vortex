@@ -210,7 +210,17 @@ module VX_tcu_fedp_dsp import VX_tcu_pkg::*; #(
         always @(*) begin
             dpi_fmul(enable, int'(0), a_h, b_h, 3'b0, c_h, fflags);
         end
-        `BUFFER_EX(mult_result[i], c_h[31:0], enable, 0, FMUL_LATENCY);
+        VX_pipe_register #(
+            .DATAW  ($bits(mult_result[i])),
+            .RESETW (0),
+            .DEPTH  (FMUL_LATENCY)
+        ) mult_result_buf (
+            .clk      (clk),
+            .reset    (reset),
+            .enable   (enable),
+            .data_in  (c_h[31:0]),
+            .data_out (mult_result[i])
+        );
     `else
         xil_fmul fmul (
             .aclk                (clk),
@@ -245,7 +255,17 @@ module VX_tcu_fedp_dsp import VX_tcu_pkg::*; #(
             always @(*) begin
                 dpi_fadd(enable, int'(0), a_h, b_h, 3'b0, c_h, fflags);
             end
-            `BUFFER_EX(red_in[lvl+1][i], c_h[31:0], enable, 0, FADD_LATENCY);
+            VX_pipe_register #(
+                .DATAW  ($bits(red_in[lvl+1][i])),
+                .RESETW (0),
+                .DEPTH  (FADD_LATENCY)
+            ) red_in_buf (
+                .clk      (clk),
+                .reset    (reset),
+                .enable   (enable),
+                .data_in  (c_h[31:0]),
+                .data_out (red_in[lvl+1][i])
+            );
         `else
             xil_fadd fadd_red (
                 .aclk                (clk),
@@ -415,7 +435,17 @@ module VX_tcu_fedp_dsp import VX_tcu_pkg::*; #(
     always @(*) begin
         dpi_fadd(enable, int'(0), a_h, b_h, 3'b0, c_h, fflags);
     end
-    `BUFFER_EX(fp_result, c_h[31:0], enable, 0, FADD_LATENCY);
+    VX_pipe_register #(
+        .DATAW  ($bits(fp_result)),
+        .RESETW (0),
+        .DEPTH  (FADD_LATENCY)
+    ) fp_result_buf (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  (c_h[31:0]),
+        .data_out (fp_result)
+    );
 `else
     xil_fadd fadd_acc (
         .aclk                (clk),

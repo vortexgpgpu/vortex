@@ -47,8 +47,20 @@ module VX_mem_req_pending #(
 
     wire [INCRW-1:0] in_cnt;
     wire [DECRW-1:0] out_cnt;
-    `POP_COUNT(in_cnt, in_fire_r);
-    `POP_COUNT(out_cnt, out_fire_r);
+    VX_popcount #(
+        .N     ($bits(in_fire_r)),
+        .MODEL (1)
+    ) in_cnt_popcount (
+        .data_in  (in_fire_r),
+        .data_out (in_cnt)
+    );
+    VX_popcount #(
+        .N     ($bits(out_fire_r)),
+        .MODEL (1)
+    ) out_cnt_popcount (
+        .data_in  (out_fire_r),
+        .data_out (out_cnt)
+    );
 
     wire [SIZEW-1:0] size_lag;
     VX_pending_size #(

@@ -123,8 +123,28 @@ import VX_tcu_pkg::*;
         .warp_issued_wis (issue_wis)
     );
 
-    `BUFFER(warp_issued, issue_fire);
-    `BUFFER(warp_issued_wis, issue_wis);
+    VX_pipe_register #(
+        .DATAW  ($bits(warp_issued)),
+        .RESETW ($bits(warp_issued)),
+        .DEPTH  (1)
+    ) warp_issued_buf (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  (issue_fire),
+        .data_out (warp_issued)
+    );
+    VX_pipe_register #(
+        .DATAW  ($bits(warp_issued_wis)),
+        .RESETW ($bits(warp_issued_wis)),
+        .DEPTH  (1)
+    ) warp_issued_wis_buf (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  (issue_wis),
+        .data_out (warp_issued_wis)
+    );
 
     // execute
 
