@@ -2272,7 +2272,7 @@ package VX_gpu_pkg;
     // The primitive/tile fetch unit owns a VX_mem_scheduler whose memory-side tag
     // width is UUID + CLOG2(queue_size) + batch-select bits. The scheduler runs
     // un-coalesced (LINE_SIZE defaults to WORD_SIZE), so each request is its own
-    // batch: mem-tag width = UUID + CLOG2(queue_size) + ARB_SEL_BITS(reqs,
+    // batch: mem-tag width = UUID + CLOG2(queue_size) + arb_sel_bits(reqs,
     // channels). This matches the scheduler's internal MEM_TAG_WIDTH.
     localparam RCACHE_FETCH_TAG_WIDTH  = (UUID_WIDTH + `CLOG2(`VX_CFG_RASTER_MEM_QUEUE_SIZE) + arb_sel_bits(RASTER_MEM_REQS, RCACHE_NUM_REQS));
     // The rcache carries only the fetch requester (early-Z reads the ocache).

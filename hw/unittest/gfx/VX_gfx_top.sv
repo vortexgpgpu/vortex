@@ -1009,9 +1009,11 @@ module VX_gfx_top import VX_gpu_pkg::*
     // Under VM the walker's PTE fetches take an L2 client slot; the walker is
     // covered by the vm DUT, so the slot idles here.
     if (PTW_ON_L2 != 0) begin : g_ptw_l2_idle
-        VX_mem_bus_idle_master l2_core_l2_ptw_idx_idle (
-            .bus_if (l2_core_if[L2_PTW_IDX])
-        );
+        // Tied here, not through VX_mem_bus_idle_master, so the harness ties stay visible to Beacon.
+        assign l2_core_if[L2_PTW_IDX].req_valid = 1'b0;
+        assign l2_core_if[L2_PTW_IDX].req_data  = '0;
+        assign l2_core_if[L2_PTW_IDX].rsp_ready = 1'b0;
+        `UNUSED_VAR ({l2_core_if[L2_PTW_IDX].req_ready, l2_core_if[L2_PTW_IDX].rsp_valid, l2_core_if[L2_PTW_IDX].rsp_data})
     end
 
     assign flush_done = & flush_done_w;

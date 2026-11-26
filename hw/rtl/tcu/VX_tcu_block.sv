@@ -118,7 +118,7 @@ module VX_tcu_block import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `else
     wire mma_reads_mx = 1'b0;
 `endif
-    // ~ld_ready: the AGU holds a TCU_LD, so its wid and slot are registered
+    // ~agu_execute_if.ready: the AGU holds a TCU_LD, so its wid and slot are registered
     wire mma_reads_ld_region = meta_wr_idx[4] ? mma_reads_mx : mma_reads_sp;
     `RUNTIME_ASSERT(~(core_execute_if.valid && ~agu_execute_if.ready
                    && (execute_if.data.header.wid == meta_wr_wid) && mma_reads_ld_region),

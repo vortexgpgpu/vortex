@@ -45,7 +45,6 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     typedef result_if.header_t header_t;
 
-
 `ifdef SCOPE
     `SCOPE_IO_SWITCH (1);
     `SCOPE_IO_UNUSED (0)

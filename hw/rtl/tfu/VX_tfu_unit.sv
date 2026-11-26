@@ -31,7 +31,7 @@ module VX_tfu_unit import VX_gpu_pkg::*; #(
     wire [NUM_PES-1:0][31:0]   pe_data_out;
     wire [INST_TFU_BITS-1:0]   pe_fn;
     wire                       pe_enable;
-    header_t               rsp_hdr;
+    header_t                   rsp_hdr;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_req_data
         wire [`VX_CFG_XLEN-1:0] rs1 = execute_if.data.rs1_data[i];

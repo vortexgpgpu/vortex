@@ -276,7 +276,7 @@ module VX_mm_axi_xbar #(
 
     // ---- Collision perf counter (cycles with >1 master contending a slave) ----
     // Inlined popcount + 1-cycle buffer so this libs IP depends on VX_platform
-    // only (no VX_define macros such as POP_COUNT/BUFFER).
+    // only.
     reg [NUM_INPUTS-1:0]    collision_mask, collision_mask_r;
     reg [PERF_CTR_BITS-1:0] collision_count;
     reg [PERF_CTR_BITS-1:0] collisions_r;

@@ -32,7 +32,6 @@ module VX_alu_int import VX_gpu_pkg::*; #(
 
     typedef result_if.header_t header_t;
 
-
     `UNUSED_SPARAM (INSTANCE_ID)
 
     localparam LANE_BITS      = `CLOG2(NUM_LANES);
