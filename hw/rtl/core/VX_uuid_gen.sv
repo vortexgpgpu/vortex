@@ -37,7 +37,7 @@ module VX_uuid_gen import VX_gpu_pkg::*; #(
         assign lid = wid_to_wfs(wid);
     end
 
-    reg [31:0] uuid_cntrs [0:NUM_WARPS-1];
+    wire [31:0] uuid_cntr_r;
     reg [NUM_WARPS-1:0] has_uuid_cntrs;
 
     always @(posedge clk) begin
@@ -46,12 +46,25 @@ module VX_uuid_gen import VX_gpu_pkg::*; #(
         end else if (incr) begin
             has_uuid_cntrs[lid] <= 1;
         end
-        if (incr) begin
-            uuid_cntrs[lid] <= has_uuid_cntrs[lid] ? (uuid_cntrs[lid] + 1) : 1;
-        end
     end
 
-    wire [31:0] uuid_cntr = has_uuid_cntrs[lid] ? uuid_cntrs[lid] : 0;
+    VX_dp_ram #(
+        .DATAW  (32),
+        .SIZE   (NUM_WARPS),
+        .LUTRAM (1)
+    ) uuid_cntrs (
+        .clk   (clk),
+        .reset (reset),
+        .read  (1'b1),
+        .write (incr),
+        .wren  (1'b1),
+        .waddr (lid),
+        .wdata (has_uuid_cntrs[lid] ? (uuid_cntr_r + 1) : 1),
+        .raddr (lid),
+        .rdata (uuid_cntr_r)
+    );
+
+    wire [31:0] uuid_cntr = has_uuid_cntrs[lid] ? uuid_cntr_r : 0;
     if (GNW_WIDTH > 0) begin : g_gwid
         wire [GNW_WIDTH-1:0] g_wid = (GNW_WIDTH'(core_id) << NW_BITS) + GNW_WIDTH'(wid);
         assign uuid = {g_wid, uuid_cntr};
