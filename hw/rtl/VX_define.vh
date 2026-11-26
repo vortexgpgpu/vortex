@@ -236,153 +236,6 @@
     end \
     /* verilator lint_on GENUNNAMED */
 
-`define AOS_TO_ITF(prefix, itf, count, dataw) \
-    wire [(count)-1:0] prefix``_valid; \
-    wire [(count)-1:0][(dataw)-1:0] prefix``_data; \
-    wire [(count)-1:0] prefix``_ready; \
-    /* verilator lint_off GENUNNAMED */ \
-    for (genvar i = 0; i < (count); ++i) begin \
-        assign itf[i].valid = prefix``_valid[i]; \
-        assign itf[i].data = prefix``_data[i]; \
-        assign prefix``_ready[i] = itf[i].ready; \
-    end \
-    /* verilator lint_on GENUNNAMED */
-
-`define ITF_TO_AOS_V(prefix, itf, count, dataw) \
-    wire [(count)-1:0] prefix``_valid; \
-    wire [(count)-1:0][(dataw)-1:0] prefix``_data; \
-    /* verilator lint_off GENUNNAMED */ \
-    for (genvar i = 0; i < (count); ++i) begin \
-        assign prefix``_valid[i] = itf[i].valid; \
-        assign prefix``_data[i] = itf[i].data; \
-    end \
-    /* verilator lint_on GENUNNAMED */
-
-`define AOS_TO_ITF_V(prefix, itf, count, dataw) \
-    wire [(count)-1:0] prefix``_valid; \
-    wire [(count)-1:0][(dataw)-1:0] prefix``_data; \
-    /* verilator lint_off GENUNNAMED */ \
-    for (genvar i = 0; i < (count); ++i) begin \
-        assign itf[i].valid = prefix``_valid[i]; \
-        assign itf[i].data = prefix``_data[i]; \
-    end \
-    /* verilator lint_on GENUNNAMED */
-
-`define ITF_TO_AOS_REQ(prefix, itf, count, dataw) \
-    wire [(count)-1:0] prefix``_valid; \
-    wire [(count)-1:0][(dataw)-1:0] prefix``_data; \
-    wire [(count)-1:0] prefix``_ready; \
-    /* verilator lint_off GENUNNAMED */ \
-    for (genvar i = 0; i < (count); ++i) begin \
-        assign prefix``_valid[i] = itf[i].req_valid; \
-        assign prefix``_data[i]  = itf[i].req_data; \
-        assign itf[i].req_ready = prefix``_ready[i]; \
-    end \
-    /* verilator lint_on GENUNNAMED */
-
-`define AOS_TO_ITF_REQ(prefix, itf, count, dataw) \
-    wire [(count)-1:0] prefix``_valid; \
-    wire [(count)-1:0][(dataw)-1:0] prefix``_data; \
-    wire [(count)-1:0] prefix``_ready; \
-    /* verilator lint_off GENUNNAMED */ \
-    for (genvar i = 0; i < (count); ++i) begin \
-        assign itf[i].req_valid = prefix``_valid[i]; \
-        assign itf[i].req_data  = prefix``_data[i]; \
-        assign prefix``_ready[i] = itf[i].req_ready; \
-    end \
-    /* verilator lint_on GENUNNAMED */
-
-`define ITF_TO_AOS_REQ_V(prefix, itf, count, dataw) \
-    wire [(count)-1:0] prefix``_valid; \
-    wire [(count)-1:0][(dataw)-1:0] prefix``_data; \
-    /* verilator lint_off GENUNNAMED */ \
-    for (genvar i = 0; i < (count); ++i) begin \
-        assign prefix``_valid[i] = itf[i].req_valid; \
-        assign prefix``_data[i] = itf[i].req_data; \
-    end \
-    /* verilator lint_on GENUNNAMED */
-
-`define AOS_TO_ITF_REQ_V(prefix, itf, count, dataw) \
-    wire [(count)-1:0] prefix``_valid; \
-    wire [(count)-1:0][(dataw)-1:0] prefix``_data; \
-    /* verilator lint_off GENUNNAMED */ \
-    for (genvar i = 0; i < (count); ++i) begin \
-        assign itf[i].req_valid = prefix``_valid[i]; \
-        assign itf[i].req_data = prefix``_data[i]; \
-    end \
-    /* verilator lint_on GENUNNAMED */
-
-`define ITF_TO_AOS_RSP(prefix, itf, count, dataw) \
-    wire [(count)-1:0] prefix``_valid; \
-    wire [(count)-1:0][(dataw)-1:0] prefix``_data; \
-    wire [(count)-1:0] prefix``_ready; \
-    /* verilator lint_off GENUNNAMED */ \
-    for (genvar i = 0; i < (count); ++i) begin \
-        assign prefix``_valid[i] = itf[i].rsp_valid; \
-        assign prefix``_data[i] = itf[i].rsp_data; \
-        assign itf[i].rsp_ready = prefix``_ready[i]; \
-    end \
-    /* verilator lint_on GENUNNAMED */
-
-`define AOS_TO_ITF_RSP(prefix, itf, count, dataw) \
-    wire [(count)-1:0] prefix``_valid; \
-    wire [(count)-1:0][(dataw)-1:0] prefix``_data; \
-    wire [(count)-1:0] prefix``_ready; \
-    /* verilator lint_off GENUNNAMED */ \
-    for (genvar i = 0; i < (count); ++i) begin \
-        assign itf[i].rsp_valid = prefix``_valid[i]; \
-        assign itf[i].rsp_data = prefix``_data[i]; \
-        assign prefix``_ready[i] = itf[i].rsp_ready; \
-    end \
-    /* verilator lint_on GENUNNAMED */
-
-`define ITF_TO_AOS_RSP_V(prefix, itf, count, dataw) \
-    wire [(count)-1:0] prefix``_valid; \
-    wire [(count)-1:0][(dataw)-1:0] prefix``_data; \
-    /* verilator lint_off GENUNNAMED */ \
-    for (genvar i = 0; i < (count); ++i) begin \
-        assign prefix``_valid[i] = itf[i].rsp_valid; \
-        assign prefix``_data[i] = itf[i].rsp_data; \
-    end \
-    /* verilator lint_on GENUNNAMED */
-
-`define AOS_TO_ITF_RSP_V(prefix, itf, count, dataw) \
-    wire [(count)-1:0] prefix``_valid; \
-    wire [(count)-1:0][(dataw)-1:0] prefix``_data; \
-    /* verilator lint_off GENUNNAMED */ \
-    for (genvar i = 0; i < (count); ++i) begin \
-        assign itf[i].rsp_valid = prefix``_valid[i]; \
-        assign itf[i].rsp_data = prefix``_data[i]; \
-    end \
-    /* verilator lint_on GENUNNAMED */
-
-`define REDUCE(__op, __out, __in, __n, __outw) \
-    /* verilator lint_off GENUNNAMED */ \
-    if (__n > 1) begin \
-        reg [(__outw)-1:0] result; \
-        always @(*) begin \
-            result = (__outw)'(__in[0]); \
-            for (integer __i = 1; __i < __n; __i++) begin \
-                result = result __op (__outw)'(__in[__i]); \
-            end \
-        end \
-        assign __out = result; \
-    end else begin \
-        assign __out = (__outw)'(__in[0]); \
-    end \
-    /* verilator lint_on GENUNNAMED */
-
-`define REDUCE_TREE(__op, __out, __in, __n, __outw, __inw) \
-    VX_reduce_tree #( \
-        .IN_W  (__inw), \
-        .OUT_W (__outw), \
-        .N     (__n), \
-        .OP    ("__op") \
-    ) reduce`__LINE__ ( \
-        .data_in(__in), \
-        .data_out(__out) \
-    )
-
 `define POP_COUNT_EX(out, in, model) \
     VX_popcount #( \
         .N ($bits(in)), \
@@ -494,20 +347,6 @@
     assign src.rsp_data.tag = dst.rsp_data.tag; \
     assign dst.rsp_ready = src.rsp_ready
 
-`define ASSIGN_VX_MEM_BUS_WR_IF(dst, src) \
-    assign dst.req_valid = src.req_valid; \
-    assign dst.req_data.rw = 1; \
-    assign dst.req_data.addr = src.req_data.addr; \
-    assign dst.req_data.data = src.req_data.data; \
-    assign dst.req_data.byteen = src.req_data.byteen; \
-    assign dst.req_data.attr = src.req_data.attr; \
-    assign dst.req_data.tag = src.req_data.tag; \
-    assign src.req_ready = dst.req_ready; \
-    assign src.rsp_valid = dst.rsp_valid; \
-    assign src.rsp_data.data = '0; \
-    assign src.rsp_data.tag = '0; \
-    assign dst.rsp_ready = src.rsp_ready
-
 `define ASSIGN_VX_MEM_BUS_IF_EX(dst, src, TD, TS, UUID) \
     /* verilator lint_off GENUNNAMED */ \
     assign dst.req_valid = src.req_valid; \
@@ -571,34 +410,6 @@
     assign itf.rsp_valid = 0; \
     assign itf.rsp_data  = '0; \
     `UNUSED_VAR (itf.rsp_ready)
-
-// Graphics extension bus_if forwarders (request-only for RASTER/OM,
-// request+response for TEX).
-`define ASSIGN_VX_RASTER_BUS_IF(dst, src) \
-    assign dst.req_valid = src.req_valid; \
-    assign dst.req_data  = src.req_data; \
-    assign src.req_ready = dst.req_ready
-
-`define ASSIGN_VX_OM_BUS_IF(dst, src) \
-    assign dst.req_valid = src.req_valid; \
-    assign dst.req_data  = src.req_data; \
-    assign src.req_ready = dst.req_ready
-
-`define ASSIGN_VX_TEX_BUS_IF(dst, src) \
-    assign dst.req_valid = src.req_valid; \
-    assign dst.req_data  = src.req_data; \
-    assign src.req_ready = dst.req_ready; \
-    assign src.rsp_valid = dst.rsp_valid; \
-    assign src.rsp_data  = dst.rsp_data; \
-    assign dst.rsp_ready = src.rsp_ready
-
-`define ASSIGN_VX_RTU_BUS_IF(dst, src) \
-    assign dst.req_valid = src.req_valid; \
-    assign dst.req_data  = src.req_data; \
-    assign src.req_ready = dst.req_ready; \
-    assign src.rsp_valid = dst.rsp_valid; \
-    assign src.rsp_data  = dst.rsp_data; \
-    assign dst.rsp_ready = src.rsp_ready
 
 `define PERF_COUNTER_ADD(dst, src, field, width, count, reg_enable) \
     /* verilator lint_off GENUNNAMED */ \
