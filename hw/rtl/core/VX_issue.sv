@@ -71,7 +71,9 @@ module VX_issue import VX_gpu_pkg::*; #(
 
         // Assign transposed dispatch_if
         for (genvar ex_id = 0; ex_id < NUM_EX_UNITS; ++ex_id) begin : g_dispatch_if
-            `ASSIGN_VX_IF(dispatch_if[ex_id * `VX_CFG_ISSUE_WIDTH + issue_id], per_issue_dispatch_if[ex_id]);
+            assign dispatch_if[ex_id * `VX_CFG_ISSUE_WIDTH + issue_id].valid = per_issue_dispatch_if[ex_id].valid;
+            assign dispatch_if[ex_id * `VX_CFG_ISSUE_WIDTH + issue_id].data  = per_issue_dispatch_if[ex_id].data;
+            assign per_issue_dispatch_if[ex_id].ready = dispatch_if[ex_id * `VX_CFG_ISSUE_WIDTH + issue_id].ready;
         end
      end
 

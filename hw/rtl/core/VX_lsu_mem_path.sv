@@ -136,7 +136,10 @@ module VX_lsu_mem_path import VX_gpu_pkg::*; #(
 
 `else
 
-    `ASSIGN_VX_MEM_BUS_IF (lsu_dcache_if, lsu_mem_if);
+    VX_lsu_mem_connect lsu_dcache_connect (
+        .bus_in_if  (lsu_mem_if),
+        .bus_out_if (lsu_dcache_if)
+    );
 
 `endif
 
@@ -216,7 +219,10 @@ module VX_lsu_mem_path import VX_gpu_pkg::*; #(
         // mem-scheduler slot id or responses alias.
         `STATIC_ASSERT (DCACHE_CORE_TAG_WIDTH >= LSU_TAG_WIDTH, ("dcache tag-id space cannot hold the LSU outstanding slot id"))
 
-        `ASSIGN_VX_MEM_BUS_IF (dcache_coalesced_if, lsu_dcache_if);
+        VX_lsu_mem_connect dcache_coalesced_connect (
+            .bus_in_if  (lsu_dcache_if),
+            .bus_out_if (dcache_coalesced_if)
+        );
     `ifdef PERF_ENABLE
         assign coalescer_misses = '0;
     `endif
@@ -233,7 +239,10 @@ module VX_lsu_mem_path import VX_gpu_pkg::*; #(
     ) dcache_token_if();
 
 `ifdef VX_CFG_EXT_A_ENABLE
-    `ASSIGN_VX_MEM_BUS_IF (dcache_token_if, dcache_coalesced_if);
+    VX_lsu_mem_connect dcache_token_connect (
+        .bus_in_if  (dcache_coalesced_if),
+        .bus_out_if (dcache_token_if)
+    );
 `else
     // Without atomics no lane carries the operation field: a flush token
     // crosses the memory path with its release half in the noalloc bit and its

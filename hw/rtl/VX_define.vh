@@ -224,18 +224,6 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define ITF_TO_AOS(prefix, itf, count, dataw) \
-    wire [(count)-1:0] prefix``_valid; \
-    wire [(count)-1:0][(dataw)-1:0] prefix``_data; \
-    wire [(count)-1:0] prefix``_ready; \
-    /* verilator lint_off GENUNNAMED */ \
-    for (genvar i = 0; i < (count); ++i) begin \
-        assign prefix``_valid[i] = itf[i].valid; \
-        assign prefix``_data[i] = itf[i].data; \
-        assign itf[i].ready = prefix``_ready[i]; \
-    end \
-    /* verilator lint_on GENUNNAMED */
-
 `define POP_COUNT_EX(out, in, model) \
     VX_popcount #( \
         .N ($bits(in)), \
@@ -289,97 +277,6 @@
 `define TO_FULL_ADDR(x) {x, (`VX_CFG_MEM_ADDR_WIDTH-$bits(x))'(0)}
 
 ///////////////////////////////////////////////////////////////////////////////
-
-`define ASSIGN_VX_IF(dst, src) \
-    assign dst.valid = src.valid; \
-    assign dst.data  = src.data; \
-    assign src.ready = dst.ready
-
-`define ASSIGN_VX_MEM_BUS_IF(dst, src) \
-    assign dst.req_valid  = src.req_valid; \
-    assign dst.req_data   = src.req_data; \
-    assign src.req_ready  = dst.req_ready; \
-    assign src.rsp_valid  = dst.rsp_valid; \
-    assign src.rsp_data   = dst.rsp_data; \
-    assign dst.rsp_ready  = src.rsp_ready
-
-`define ASSIGN_VX_MEM_BUS_RO_IF(dst, src) \
-    assign dst.req_valid = src.req_valid; \
-    assign dst.req_data.rw = 0; \
-    assign dst.req_data.addr = src.req_data.addr; \
-    assign dst.req_data.data = '0; \
-    assign dst.req_data.byteen = '0; \
-    assign dst.req_data.attr = src.req_data.attr; \
-    assign dst.req_data.tag = src.req_data.tag; \
-    assign src.req_ready = dst.req_ready; \
-    assign src.rsp_valid = dst.rsp_valid; \
-    assign src.rsp_data.data = dst.rsp_data.data; \
-    assign src.rsp_data.tag = dst.rsp_data.tag; \
-    assign dst.rsp_ready = src.rsp_ready
-
-`define ASSIGN_VX_MEM_BUS_IF_EX(dst, src, TD, TS, UUID) \
-    /* verilator lint_off GENUNNAMED */ \
-    assign dst.req_valid = src.req_valid; \
-    assign dst.req_data.rw = src.req_data.rw; \
-    assign dst.req_data.addr = src.req_data.addr; \
-    assign dst.req_data.data = src.req_data.data; \
-    assign dst.req_data.byteen = src.req_data.byteen; \
-    assign dst.req_data.attr = src.req_data.attr; \
-    if (TD != TS) begin \
-        if (UUID != 0) begin \
-            if (TD > TS) begin \
-                assign dst.req_data.tag = {src.req_data.tag.uuid, {(TD-TS){1'b0}}, src.req_data.tag.value}; \
-            end else begin \
-                assign dst.req_data.tag = {src.req_data.tag.uuid, src.req_data.tag.value[TD-UUID-1:0]}; \
-            end \
-        end else begin \
-            if (TD > TS) begin \
-                assign dst.req_data.tag = {{(TD-TS){1'b0}}, src.req_data.tag}; \
-            end else begin \
-                assign dst.req_data.tag = src.req_data.tag[TD-1:0]; \
-            end \
-        end \
-    end else begin \
-        assign dst.req_data.tag = src.req_data.tag; \
-    end \
-    assign src.req_ready = dst.req_ready; \
-    assign src.rsp_valid = dst.rsp_valid; \
-    assign src.rsp_data.data = dst.rsp_data.data; \
-    if (TD != TS) begin \
-        if (UUID != 0) begin \
-            if (TD > TS) begin \
-                assign src.rsp_data.tag = {dst.rsp_data.tag.uuid, dst.rsp_data.tag.value[TS-UUID-1:0]}; \
-            end else begin \
-                assign src.rsp_data.tag = {dst.rsp_data.tag.uuid, {(TS-TD){1'b0}}, dst.rsp_data.tag.value}; \
-            end \
-        end else begin \
-            if (TD > TS) begin \
-                assign src.rsp_data.tag = dst.rsp_data.tag[TS-1:0]; \
-            end else begin \
-                assign src.rsp_data.tag = {{(TS-TD){1'b0}}, dst.rsp_data.tag}; \
-            end \
-        end \
-    end else begin \
-        assign src.rsp_data.tag = dst.rsp_data.tag; \
-    end \
-    assign dst.rsp_ready = src.rsp_ready \
-    /* verilator lint_on GENUNNAMED */
-
-`define INIT_VX_MEM_BUS_IF(itf) \
-    assign itf.req_valid = 0; \
-    assign itf.req_data = '0; \
-    `UNUSED_VAR (itf.req_ready) \
-    `UNUSED_VAR (itf.rsp_valid) \
-    `UNUSED_VAR (itf.rsp_data) \
-    assign itf.rsp_ready = 0;
-
-`define UNUSED_VX_MEM_BUS_IF(itf) \
-    `UNUSED_VAR (itf.req_valid) \
-    `UNUSED_VAR (itf.req_data) \
-    assign itf.req_ready = 0; \
-    assign itf.rsp_valid = 0; \
-    assign itf.rsp_data  = '0; \
-    `UNUSED_VAR (itf.rsp_ready)
 
 `define PERF_COUNTER_ADD(dst, src, field, width, count, reg_enable) \
     /* verilator lint_off GENUNNAMED */ \

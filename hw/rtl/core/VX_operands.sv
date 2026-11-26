@@ -80,7 +80,14 @@ module VX_operands import VX_gpu_pkg::*; #(
         );
     end
 
-    `ITF_TO_AOS (per_opc_operands, per_opc_operands_if, `VX_CFG_NUM_OPCS, OUT_DATAW)
+    wire [`VX_CFG_NUM_OPCS-1:0]                per_opc_operands_valid;
+    wire [`VX_CFG_NUM_OPCS-1:0][OUT_DATAW-1:0] per_opc_operands_data;
+    wire [`VX_CFG_NUM_OPCS-1:0]                per_opc_operands_ready;
+    for (genvar i = 0; i < `VX_CFG_NUM_OPCS; ++i) begin : g_per_opc_operands
+        assign per_opc_operands_valid[i]    = per_opc_operands_if[i].valid;
+        assign per_opc_operands_data[i]     = per_opc_operands_if[i].data;
+        assign per_opc_operands_if[i].ready = per_opc_operands_ready[i];
+    end
 
     // Round-robin (not fixed-priority): collectors are fed by wis % NUM_OPCS,
     // so a fixed-priority merge starves the highest-index collector once

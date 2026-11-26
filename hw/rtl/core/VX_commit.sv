@@ -29,7 +29,9 @@ module VX_commit import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin : g_slices
         VX_commit_if slice_commit_if[NUM_EX_UNITS]();
         for (genvar j = 0; j < NUM_EX_UNITS; ++j) begin : g_commit_if
-            `ASSIGN_VX_IF(slice_commit_if[j], commit_if[j * `VX_CFG_ISSUE_WIDTH + i]);
+            assign slice_commit_if[j].valid = commit_if[j * `VX_CFG_ISSUE_WIDTH + i].valid;
+            assign slice_commit_if[j].data  = commit_if[j * `VX_CFG_ISSUE_WIDTH + i].data;
+            assign commit_if[j * `VX_CFG_ISSUE_WIDTH + i].ready = slice_commit_if[j].ready;
         end
 
         wire [PER_ISSUE_WARPS-1:0] committed_wis;

@@ -80,7 +80,10 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
             .TAG_WIDTH (DCACHE_TAG_WIDTH)
         ) block_dcache_bus_if[DCACHE_CHANNELS]();
         for (genvar j = 0; j < DCACHE_CHANNELS; ++j) begin : g_dcache_bus_if
-            `ASSIGN_VX_MEM_BUS_IF (dcache_bus_if[block_idx * DCACHE_CHANNELS + j], block_dcache_bus_if[j]);
+            VX_mem_bus_connect dcache_bus_block_idx_dcache_channels_j_connect (
+                .bus_in_if  (block_dcache_bus_if[j]),
+                .bus_out_if (dcache_bus_if[block_idx * DCACHE_CHANNELS + j])
+            );
         end
 
         VX_lsu_block #(

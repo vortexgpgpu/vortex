@@ -100,8 +100,14 @@ module VX_dcr_flush import VX_gpu_pkg::*; #(
     // `busy` drops to 0, so once the LSU adapter buffers drain, the core
     // input goes idle and the flush wins. STICKY=1 hardens against any
     // 1-cycle gap in core valid during the drain phase.
-    `ASSIGN_VX_MEM_BUS_IF (dcache_arb_in_if[0], core_bus_if);
-    `ASSIGN_VX_MEM_BUS_IF (dcache_arb_in_if[1], flush_bus_if);
+    VX_mem_bus_connect dcache_arb_in_0_connect (
+        .bus_in_if  (core_bus_if),
+        .bus_out_if (dcache_arb_in_if[0])
+    );
+    VX_mem_bus_connect dcache_arb_in_1_connect (
+        .bus_in_if  (flush_bus_if),
+        .bus_out_if (dcache_arb_in_if[1])
+    );
 
     VX_mem_bus_if #(
         .DATA_SIZE (WORD_SIZE),
@@ -125,6 +131,9 @@ module VX_dcr_flush import VX_gpu_pkg::*; #(
         .bus_out_if (dcache_arb_out_if)
     );
 
-    `ASSIGN_VX_MEM_BUS_IF (cache_bus_if, dcache_arb_out_if[0]);
+    VX_mem_bus_connect cache_bus_connect (
+        .bus_in_if  (dcache_arb_out_if[0]),
+        .bus_out_if (cache_bus_if)
+    );
 
 endmodule
