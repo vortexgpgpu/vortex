@@ -56,6 +56,22 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
   synthesis. It runs in `ci.yml` together with `perf_gate` (every pull request, every push that touches the RTL or the config);
   `.github/workflows/logic_gate.yml` is the manual entry point and runs the full-GPU builds. *Why:* a perf regression costs cycles,
   a logic regression costs Fmax; both are now named on the change that causes them, not by the nightly FPGA gate.
+- **Register windows: up to 256 registers per thread in 32-bit instructions (`VX_CFG_EXT_RWIN_ENABLE`).** Each warp holds a
+  window for each register field (rd, rs1, rs2, rs3); a field value `f` under window `w` names `x(32w + f)`, so x0 is zero only in
+  window 0 and x32, x64, ... are ordinary registers. `vx_rwin` (custom-2, funct7 1) sets the warp's windows; `vx_rpfx` (funct7 2)
+  gives windows to the next instruction only. Decode consumes both, without an issue slot, and fuses them with the next instruction
+  in an 8-byte fetch word. `VX_CFG_NUM_RV_REGS` (64, 128 or 256; 256 by default with windows) sizes the register file and the
+  per-warp window state: log2(R) - 5 bits per field. Windows are zero at function entry, calls, returns and trapping instructions,
+  and equal at `vx_split` and `vx_join`. The compiler allocates up to `-riscv-vortex-max-regs` and places the windows; window code is
+  built without linker relaxation, and `-riscv-vortex-rwin-prefix` (off by default) uses `vx_rpfx` where it is cheaper than a switch.
+  See [docs/proposals/register_windows_proposal.md](docs/proposals/register_windows_proposal.md).
+  *Why:* windows match 64-bit encodings within 1% on softmax, epilogue and FFT at 64 and 128 registers, with 5% to 74% less code and
+  no deeper logic path.
+  *Limits:* the compiler is the LLVM fork's `feature/register-windows`; CI's prebuilt LLVM cannot build window kernels yet, so the
+  `isa` window cases are marked known issues.
+- **Zfinx (`VX_CFG_EXT_ZFINX_ENABLE`).** FP operands live in the x registers: no f registers and no FP loads, stores or moves, with
+  Zhinxmin conversions. Combined with windows, integer and FP values share up to 256 registers. *Limits:* the TCU and
+  `ldst_matrix` are not supported under Zfinx.
 
 ### Changed
 
@@ -109,6 +125,8 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ### Fixed
 
+- **Regression apps rebuild when only compiler flags change.** An app's config stamp now includes `LLVM_CFLAGS`, so a change such
+  as a different `-mllvm` option no longer reuses a kernel built with the old flags.
 - **ASIC core and top at 800 MHz.** On ASAP7 the core reached 655 MHz and top 654 MHz against the 800 MHz catalog clock, held by
   three datapaths: the FDIV/FSQRT result stage, the FMA's accumulate and rounding stages, and the integer multiplier. Each is
   retimed with no change in latency, so SimX and every cycle count are unchanged. FDIV/FSQRT decides the subnormal shift and tests
