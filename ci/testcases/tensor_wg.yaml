@@ -133,6 +133,21 @@ tests:
   args: -m 128 -n 128 -k 32
   configs: -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
     -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DSMEM_PAD_BYTES=64 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
+# One CTA whose B alternates K-major and block-major per K tile, the block-major
+# tile one bank row short of a B tile past the K-major base: its first bank row
+# is the address the K-major tile's last B fetch was keyed on. At XLEN 64 the two
+# fall in different halves of a bank row.
+- id: sgemm_tcu_wg-b-relayout
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  xlen:
+  - 32
+  app: sgemm_tcu_wg
+  args: -m 32 -n 8 -k 64
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+    -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_SS -DB_RELAYOUT=1 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
 
 - id: sgemm_tcu_wg_sp-1
   via: blackbox
