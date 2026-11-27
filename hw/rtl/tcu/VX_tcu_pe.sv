@@ -60,6 +60,7 @@ module VX_tcu_pe import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     output wire [31:0]                  d_val
 );
     `UNUSED_SPARAM (INSTANCE_ID)
+    `UNUSED_PARAM (FEDP_SF)
     `UNUSED_VAR ({array_issue, header, step_m, step_n, row_i, col_j})
 
     wire [FEDP_K-1:0][31:0] b_col;
