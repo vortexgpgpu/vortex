@@ -71,7 +71,6 @@ module VX_tex_addr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     wire [REQ_TAGW-1:0] req_tag_s0;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][1:0][`TEX_FXD_FRAC-1:0] clamped_lo, clamped_lo_s0;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][1:0][`TEX_FXD_FRAC-1:0] clamped_hi, clamped_hi_s0;
-    wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][1:0] border_lo, border_hi;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][1:0][SHIFT_BITS-1:0] dim_shift, dim_shift_s0;
     wire [`TEX_LGSTRIDE_BITS-1:0] log_stride, log_stride_s0;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][W_ADDR_BITS-1:0] mip_addr, mip_addr_s0;
@@ -100,60 +99,36 @@ module VX_tex_addr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     // reason, so the address is the top level's, which is what the software
     // sampler returns.
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_clamp
+        wire [TEX_NUM_LEVELS-1:0][1:0] border_lo, border_hi;
+
+        VX_tex_clamp_lane #(
+            .SHIFT_BITS (SHIFT_BITS),
+            .PITCH_BITS (PITCH_BITS)
+        ) tex_clamp_lane (
+            .bilinear   (req_filter[0]),
+            .wraps      (req_wraps),
+            .logdims    (req_logdims),
+            .log_stride (log_stride),
+            .miplevel   (req_miplevel[i]),
+            .coords     ({req_coords[1][i], req_coords[0][i]}),
+            .clamped_lo (clamped_lo[i]),
+            .clamped_hi (clamped_hi[i]),
+            .border_lo  (border_lo),
+            .border_hi  (border_hi),
+            .dim_shift  (dim_shift[i]),
+            .log_pitch  (log_pitch[i])
+        );
+
+        // Tap order is the one the addresses below are built in:
+        // 0=(u_lo,v_lo) 1=(u_hi,v_lo) 2=(u_lo,v_hi) 3=(u_hi,v_hi). A tap is
+        // the border colour if either of its coordinates left the texture.
+        // Under POINT the low and high coordinates are equal and only tap 0
+        // is consumed, so the other three are ignored rather than special-cased.
         for (genvar k = 0; k < TEX_NUM_LEVELS; ++k) begin : g_k
-            for (genvar j = 0; j < 2; ++j) begin  : g_j
-                // Half a texel of this level. The shift is floored rather than
-                // allowed to go negative: past the end of the mip chain the
-                // level is 1x1 and its half-texel is half the whole coordinate
-                // range, which is what the software sampler uses. Shifting left
-                // first and letting the result truncate would collapse it to
-                // zero instead, and the two taps would then agree on whether
-                // they left the texture when they should not.
-                wire [SHIFT_BITS-1:0] delta_shift = (req_logdims[j] >= req_miplevel[i][k])
-                                                  ? SHIFT_BITS'(req_logdims[j] - req_miplevel[i][k])
-                                                  : SHIFT_BITS'(0);
-                wire [`TEX_FXD_FRAC-1:0] delta = `TEX_FXD_FRAC'(`TEX_FXD_HALF) >> delta_shift;
-                wire [`VX_TEX_FXD_BITS-1:0] coord_lo = req_filter[0] ? (req_coords[j][i] - `VX_TEX_FXD_BITS'(delta)) : req_coords[j][i];
-                wire [`VX_TEX_FXD_BITS-1:0] coord_hi = req_filter[0] ? (req_coords[j][i] + `VX_TEX_FXD_BITS'(delta)) : req_coords[j][i];
-
-                VX_tex_wrap tex_wrap_lo (
-                    .wrap_i   (req_wraps[j]),
-                    .coord_i  (coord_lo),
-                    .coord_o  (clamped_lo[i][k][j]),
-                    .border_o (border_lo[i][k][j])
-                );
-
-                VX_tex_wrap tex_wrap_hi (
-                    .wrap_i   (req_wraps[j]),
-                    .coord_i  (coord_hi),
-                    .coord_o  (clamped_hi[i][k][j]),
-                    .border_o (border_hi[i][k][j])
-                );
-            end
-
-            // Tap order is the one the addresses below are built in:
-            // 0=(u_lo,v_lo) 1=(u_hi,v_lo) 2=(u_lo,v_hi) 3=(u_hi,v_hi). A tap is
-            // the border colour if either of its coordinates left the texture.
-            // Under POINT the low and high coordinates are equal and only tap 0
-            // is consumed, so the other three are ignored rather than special-cased.
-            assign border_mask[i][k][0] = border_lo[i][k][0] || border_lo[i][k][1];
-            assign border_mask[i][k][1] = border_hi[i][k][0] || border_lo[i][k][1];
-            assign border_mask[i][k][2] = border_lo[i][k][0] || border_hi[i][k][1];
-            assign border_mask[i][k][3] = border_hi[i][k][0] || border_hi[i][k][1];
-        end
-    end
-
-    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_dim_shift
-        for (genvar k = 0; k < TEX_NUM_LEVELS; ++k) begin : g_k
-            for (genvar j = 0; j < 2; ++j) begin : g_j
-                assign dim_shift[i][k][j] = SHIFT_BITS'(`TEX_FXD_FRAC - `TEX_BLEND_FRAC) - (req_logdims[j] - req_miplevel[i][k]);
-            end
-        end
-    end
-
-    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_log_pitch
-        for (genvar k = 0; k < TEX_NUM_LEVELS; ++k) begin : g_k
-            assign log_pitch[i][k] = PITCH_BITS'(req_logdims[0] - req_miplevel[i][k]) + PITCH_BITS'(log_stride);
+            assign border_mask[i][k][0] = border_lo[k][0] || border_lo[k][1];
+            assign border_mask[i][k][1] = border_hi[k][0] || border_lo[k][1];
+            assign border_mask[i][k][2] = border_lo[k][0] || border_hi[k][1];
+            assign border_mask[i][k][3] = border_hi[k][0] || border_hi[k][1];
         end
     end
 
