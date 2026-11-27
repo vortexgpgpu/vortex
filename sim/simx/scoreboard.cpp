@@ -53,9 +53,6 @@ void Scoreboard::on_tick() {
     }
     pending_releases_.pop_front();
   }
-  if (pending_releases_.empty()) {
-    this->tick_sleep();
-  }
 }
 
 bool Scoreboard::in_use(instr_trace_t* trace) const {

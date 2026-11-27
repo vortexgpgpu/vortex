@@ -38,7 +38,7 @@ module VX_mem_xbar import VX_gpu_pkg::*; #(
 );
     `UNUSED_PARAM (TAG_WIDTH)
     localparam DATA_WIDTH   = (8 * DATA_SIZE);
-    localparam LOG_NUM_REQS = `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS);
+    localparam LOG_NUM_REQS = arb_sel_bits(NUM_INPUTS, NUM_OUTPUTS);
     localparam TAG_UUID_W   = `UP(UUID_WIDTH);
     localparam REQ_DATAW    = 1 + ADDR_WIDTH + DATA_WIDTH + DATA_SIZE + ATTR_WIDTH + TAG_UUID_W;
     localparam RSP_DATAW    = DATA_WIDTH + TAG_UUID_W;

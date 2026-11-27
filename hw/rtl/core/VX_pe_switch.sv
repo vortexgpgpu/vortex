@@ -15,7 +15,6 @@
 
 module VX_pe_switch import VX_gpu_pkg::*; #(
     parameter PE_COUNT        = 0,
-    parameter NUM_LANES       = 0,
     parameter REQ_OUT_BUF     = 0,
     parameter RSP_OUT_BUF     = 0,
     parameter `STRING ARBITER = "R",
@@ -29,7 +28,8 @@ module VX_pe_switch import VX_gpu_pkg::*; #(
     VX_execute_if.master execute_out_if[PE_COUNT],
     VX_result_if .slave result_in_if[PE_COUNT]
 );
-    `DECL_EXECUTE_T (pe, NUM_LANES);
+    typedef execute_in_if.data_t pe_execute_t;
+    typedef result_out_if.data_t pe_result_t;
 
     localparam REQ_DATAW = $bits(pe_execute_t);
     localparam RSP_DATAW = $bits(pe_result_t);

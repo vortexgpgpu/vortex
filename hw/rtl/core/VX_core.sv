@@ -356,8 +356,9 @@ import VX_tcu_pkg::*;
     ) block_rtu_bus_if[`VX_CFG_NUM_SFU_BLOCKS]();
 `endif
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
-    wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_exec_valid, tcu_exec_ready;
-    tcu_execute_t                     tcu_exec_data [`VX_CFG_NUM_TCU_BLOCKS];
+    VX_execute_if #(
+        .NUM_LANES (`VX_CFG_NUM_TCU_LANES)
+    ) tcu_exec_if [`VX_CFG_NUM_TCU_BLOCKS] ();
     wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tcu_tbuf_rs1_data;
     wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tcu_tbuf_rs2_data;
     wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_tbuf_ready;
@@ -391,9 +392,7 @@ import VX_tcu_pkg::*;
         .tcu_perf         (tcu_perf),
     `endif
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
-        .exec_valid       (tcu_exec_valid),
-        .exec_ready       (tcu_exec_ready),
-        .exec_data        (tcu_exec_data),
+        .exec_if          (tcu_exec_if),
         .tbuf_rs1_data    (tcu_tbuf_rs1_data),
         .tbuf_rs2_data    (tcu_tbuf_rs2_data),
         .tbuf_ready_eff   (tcu_tbuf_ready),
@@ -495,9 +494,7 @@ import VX_tcu_pkg::*;
                 .rtu_bus_if           (block_rtu_bus_if[i]),
             `endif
             `ifdef VX_CFG_TCU_WGMMA_ENABLE
-                .tcu_exec_valid       (tcu_exec_valid[i]),
-                .tcu_exec_ready       (tcu_exec_ready[i]),
-                .tcu_exec_data        (tcu_exec_data[i]),
+                .tcu_exec_if          (tcu_exec_if[i]),
                 .tcu_tbuf_rs1_data    (tcu_tbuf_rs1_data[i]),
                 .tcu_tbuf_rs2_data    (tcu_tbuf_rs2_data[i]),
                 .tcu_tbuf_ready       (tcu_tbuf_ready[i]),
@@ -717,9 +714,7 @@ import VX_tcu_pkg::*;
                     .rtu_bus_if           (block_rtu_bus_if[i]),
                 `endif
                 `ifdef VX_CFG_TCU_WGMMA_ENABLE
-                    .tcu_exec_valid       (tcu_exec_valid[i]),
-                    .tcu_exec_ready       (tcu_exec_ready[i]),
-                    .tcu_exec_data        (tcu_exec_data[i]),
+                    .tcu_exec_if          (tcu_exec_if[i]),
                     .tcu_tbuf_rs1_data    (tcu_tbuf_rs1_data[i]),
                     .tcu_tbuf_rs2_data    (tcu_tbuf_rs2_data[i]),
                     .tcu_tbuf_ready       (tcu_tbuf_ready[i]),
@@ -795,9 +790,7 @@ import VX_tcu_pkg::*;
                 .sched_csr_if         (sched_csr_if),
 
             `ifdef VX_CFG_TCU_WGMMA_ENABLE
-                .tcu_exec_valid       (tcu_exec_valid),
-                .tcu_exec_ready       (tcu_exec_ready),
-                .tcu_exec_data        (tcu_exec_data),
+                .tcu_exec_if          (tcu_exec_if),
                 .tcu_tbuf_rs1_data    (tcu_tbuf_rs1_data),
                 .tcu_tbuf_rs2_data    (tcu_tbuf_rs2_data),
                 .tcu_tbuf_ready       (tcu_tbuf_ready),

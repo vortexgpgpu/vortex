@@ -46,17 +46,11 @@ FpuUnit::FpuUnit(const SimContext& ctx, const char* name, Core* core)
 	// One output slot per tag: an operation holds its slot from acceptance
 	// until its result is taken off the response port, however deep the
 	// pipelines are.
-	: FuncUnit<VX_CFG_NUM_FPU_BLOCKS>(ctx, name, core, VX_CFG_FPU_QUEUE_SIZE)
-	, ReleaseOut(this, VX_CFG_ISSUE_WIDTH)
-{
-	if (!kGather) {
-		// No buffer between the dispatch queue and the unit: the input holds
-		// only the queue's head.
-		for (auto& input : Inputs) {
-			input = SimChannel<instr_trace_t*>(this, 1);
-		}
-	}
-}
+	// No buffer between the dispatch queue and the unit (!kGather): the input
+	// holds only the queue's head.
+	: FuncUnit<FpuUnit, VX_CFG_NUM_FPU_BLOCKS>(ctx, name, core, core, kGather ? 2 : 1, VX_CFG_FPU_QUEUE_SIZE)
+	, ReleaseOut(this)
+{}
 
 uint32_t FpuUnit::latency_of(const instr_trace_t* trace) const {
 	auto fpu_type = std::get<FpuType>(trace->op_type);
@@ -519,7 +513,6 @@ void FpuUnit::respond(uint32_t b) {
 }
 
 void FpuUnit::on_tick() {
-  bool idle = true;
   for (uint32_t b = 0; b < VX_CFG_NUM_FPU_BLOCKS; ++b) {
     this->respond(b);
     auto& input = Inputs.at(b);
@@ -533,7 +526,6 @@ void FpuUnit::on_tick() {
         // last batch of lanes enters the pipeline.
         if (batch_idx_.at(b) + 1 < this->batches_of(trace)) {
           ++batch_idx_.at(b);
-          idle = false;
           continue;
         }
         batch_idx_.at(b) = 0;
@@ -550,10 +542,14 @@ void FpuUnit::on_tick() {
         }
       }
     }
-    idle &= (input.size() == 0) && (num_results_.at(b) == 0);
   }
-  // sleep until a new trace is reserved toward an input.
-  if (idle) {
-    this->tick_sleep();
+}
+
+bool FpuUnit::busy() const {
+  for (uint32_t n : num_results_) {
+    if (n != 0) {
+      return true;
+    }
   }
+  return false;
 }

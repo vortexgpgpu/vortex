@@ -293,7 +293,10 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .bus_out_if (lmem_arb_out_if)
     );
 
-    `ASSIGN_VX_MEM_BUS_IF (tcu_lmem_if, lmem_arb_out_if[0]);
+    VX_mem_bus_connect tcu_lmem_connect (
+        .bus_in_if  (lmem_arb_out_if[0]),
+        .bus_out_if (tcu_lmem_if)
+    );
 
     // -----------------------------------------------------------------------
     // Per-block bbuf-key match.

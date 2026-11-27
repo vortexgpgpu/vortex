@@ -58,11 +58,11 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     localparam NUM_LANES  = `VX_CFG_NUM_SFU_LANES;
 
     VX_execute_if #(
-        .data_t (sfu_execute_t)
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
     ) per_block_execute_if[BLOCK_SIZE]();
 
     VX_result_if #(
-        .data_t (sfu_result_t)
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
     ) per_block_result_if[BLOCK_SIZE]();
 
     VX_lane_dispatch #(

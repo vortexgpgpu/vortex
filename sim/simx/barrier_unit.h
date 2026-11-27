@@ -36,7 +36,7 @@ public:
   void event_release(uint32_t bar_id);
 
   // warps a local barrier releases, to the core's warp scheduler
-  SimChannel<uint32_t> unlock_out;
+  SimPortOut<uint32_t> unlock_out;
 
 protected:
   void on_reset();

@@ -32,11 +32,11 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
     localparam PARTIAL_BW   = (BLOCK_SIZE != `VX_CFG_ISSUE_WIDTH) || (NUM_LANES != `VX_CFG_SIMD_WIDTH);
 
     VX_execute_if #(
-        .data_t (alu_execute_t)
+        .NUM_LANES (`VX_CFG_NUM_ALU_LANES)
     ) per_block_execute_if[BLOCK_SIZE]();
 
     VX_result_if #(
-        .data_t (alu_result_t)
+        .NUM_LANES (`VX_CFG_NUM_ALU_LANES)
     ) per_block_result_if[BLOCK_SIZE]();
 
     VX_lane_dispatch #(

@@ -51,8 +51,7 @@ module VX_ptw_cache import VX_tlb_pkg::*; #(
     wire [IDX_WIDTH-1:0] wr_idx    = wr_tag[IDX_WIDTH-1:0];
 
     reg [NUM_ENTRIES-1:0]                 valid_r;
-    reg [TAG_WIDTH-1:0]                   tag_r [NUM_ENTRIES];
-    reg [TLB_PPN_WIDTH-1:0]               ppn_r [NUM_ENTRIES];
+    wire [TAG_WIDTH-1:0]                  probe_entry_tag;
 
     always @(posedge clk) begin
         if (reset || flush) begin
@@ -62,14 +61,22 @@ module VX_ptw_cache import VX_tlb_pkg::*; #(
         end
     end
 
-    always @(posedge clk) begin
-        if (wr_valid) begin
-            tag_r[wr_idx] <= wr_tag;
-            ppn_r[wr_idx] <= wr_ppn;
-        end
-    end
+    VX_dp_ram #(
+        .DATAW  (TAG_WIDTH + TLB_PPN_WIDTH),
+        .SIZE   (NUM_ENTRIES),
+        .LUTRAM (1)
+    ) entry_ram (
+        .clk   (clk),
+        .reset (reset),
+        .read  (1'b1),
+        .write (wr_valid),
+        .wren  (1'b1),
+        .waddr (wr_idx),
+        .wdata ({wr_tag, wr_ppn}),
+        .raddr (probe_idx),
+        .rdata ({probe_entry_tag, probe_ppn})
+    );
 
-    assign probe_hit = valid_r[probe_idx] && (tag_r[probe_idx] == probe_tag);
-    assign probe_ppn = ppn_r[probe_idx];
+    assign probe_hit = valid_r[probe_idx] && (probe_entry_tag == probe_tag);
 
 endmodule

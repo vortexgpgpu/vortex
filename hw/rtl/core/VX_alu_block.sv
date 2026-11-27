@@ -35,11 +35,11 @@ module VX_alu_block import VX_gpu_pkg::*; #(
     localparam PE_IDX_MDV   = PE_IDX_INT + `VX_CFG_EXT_M_ENABLED;
 
     VX_execute_if #(
-        .data_t (alu_execute_t)
+        .NUM_LANES (`VX_CFG_NUM_ALU_LANES)
     ) pe_execute_if[PE_COUNT]();
 
     VX_result_if#(
-        .data_t (alu_result_t)
+        .NUM_LANES (`VX_CFG_NUM_ALU_LANES)
     ) pe_result_if[PE_COUNT]();
 
     reg [`UP(PE_SEL_BITS)-1:0] pe_select;
@@ -52,7 +52,6 @@ module VX_alu_block import VX_gpu_pkg::*; #(
 
     VX_pe_switch #(
         .PE_COUNT    (PE_COUNT),
-        .NUM_LANES   (NUM_LANES),
         .ARBITER     ("R"),
         .REQ_OUT_BUF (0),
         .RSP_OUT_BUF (PARTIAL_BW ? 1 : 3)

@@ -21,20 +21,20 @@ module VX_tcu_core_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
 
     // Dispatch Interface
     input wire execute_valid,
-    input tcu_execute_t execute_data,
+    input wire [execute_data_bits(`VX_CFG_NUM_TCU_LANES)-1:0] execute_data,
     output wire execute_ready,
 
     // Commit Interface
     output wire result_valid,
-    output tcu_result_t result_data,
+    output wire [result_data_bits(`VX_CFG_NUM_TCU_LANES)-1:0] result_data,
     input wire result_ready
 );
     VX_execute_if #(
-        .data_t (tcu_execute_t)
+        .NUM_LANES (`VX_CFG_NUM_TCU_LANES)
     ) execute_if();
 
     VX_result_if #(
-        .data_t (tcu_result_t)
+        .NUM_LANES (`VX_CFG_NUM_TCU_LANES)
     ) result_if();
 
     assign execute_if.valid = execute_valid;

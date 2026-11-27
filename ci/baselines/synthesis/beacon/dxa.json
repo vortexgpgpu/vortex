@@ -6,7 +6,7 @@
     "dut": "dxa",
     "result": {
       "bram": 0.0,
-      "build_time_s": 5,
+      "build_time_s": 10,
       "deep_endpoints": 2081,
       "deepest_paths": [
         "15  dxa_core/g_workers_0.worker/addr_gen/gmem_cursor_r[0] -> dxa_core/g_workers_0.worker/addr_gen/smem_byte_addr_r.d[8]",

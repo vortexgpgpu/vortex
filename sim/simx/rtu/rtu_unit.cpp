@@ -35,7 +35,7 @@ inline uint32_t float_to_bits(float f) {
 }
 } // namespace
 
-RtuUnit::RtuUnit(Core* core, SimChannel<RtuReq>& req_out, RtuWindow& window, uint32_t bus_delay)
+RtuUnit::RtuUnit(Core* core, SimPortOut<RtuReq>& req_out, RtuWindow& window, uint32_t bus_delay)
   : window_(window)
   , core_(core)
   , req_out_(req_out)

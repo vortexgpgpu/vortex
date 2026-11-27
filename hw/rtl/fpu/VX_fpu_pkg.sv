@@ -38,8 +38,6 @@ package VX_fpu_pkg;
         logic NX; // 0-Inexact
     } fflags_t;
 
-    `DECL_EXECUTE_T (fpu, `VX_CFG_NUM_FPU_LANES);
-
     // A single-precision operand that is not NaN-boxed in a 64-bit FP register
     // reads as the canonical NaN.
     function automatic logic [31:0] fp_unbox_s(input logic [63:0] x);

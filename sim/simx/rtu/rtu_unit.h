@@ -71,7 +71,7 @@ class RtuUnit {
 public:
   // bus_delay: extra cycles a request spends merging with other SFU blocks'
   // requests onto the core's RTU bus.
-  RtuUnit(Core* core, SimChannel<RtuReq>& req_out, RtuWindow& window, uint32_t bus_delay = 0);
+  RtuUnit(Core* core, SimPortOut<RtuReq>& req_out, RtuWindow& window, uint32_t bus_delay = 0);
 
   // Async ray pool. process_wait either:
   //   - returns the trace with the per-lane status word written
@@ -170,7 +170,7 @@ public:
 
   // Async ray pool: Cluster wires this after RtuCore exists so
   // RtuUnit can directly call allocate_slot()/free_slot() on the
-  // shared cluster-level pool (no SimChannel hop). Both pointers are
+  // shared cluster-level pool (no port hop). Both pointers are
   // borrowed — RtuCore outlives RtuUnit (Cluster owns both).
   void set_rtu_core(RtuCore* core) { rtu_core_ = core; }
 
@@ -188,7 +188,7 @@ private:
   RtuWindow&          window_;
 
   Core*               core_;
-  SimChannel<RtuReq>& req_out_;
+  SimPortOut<RtuReq>& req_out_;
   uint32_t            bus_delay_;
   // Async ray pool. Borrowed from the Socket via set_rtu_core();
   // null until the Socket has wired it (TRACE/WAIT paths must NEVER

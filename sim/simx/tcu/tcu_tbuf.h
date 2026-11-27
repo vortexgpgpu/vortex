@@ -45,8 +45,8 @@ public:
   // Lines of one bank-row read.
   using LmemRead = std::vector<uint64_t>;
 
-  std::vector<SimChannel<MemReq>> lmem_req_out;
-  std::vector<SimChannel<MemRsp>> lmem_rsp_in;
+  SimPortOutArray<MemReq> lmem_req_out;
+  SimPortInArray<MemRsp> lmem_rsp_in;
 
   TcuTbuf(const SimContext& ctx, const char* name);
   virtual ~TcuTbuf();

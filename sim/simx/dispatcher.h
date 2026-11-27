@@ -23,10 +23,10 @@ class Core;
 
 class Dispatcher : public SimObject<Dispatcher> {
 public:
-	std::vector<SimChannel<instr_trace_t*>> Inputs;
-	std::vector<SimChannel<instr_trace_t*>> Outputs;
+	SimPortInArray<instr_trace_t*> Inputs;
+	SimPortOutArray<instr_trace_t*> Outputs;
 	// An op leaving its slot queue, which returns its issue credit.
-	SimChannel<instr_trace_t*> ReleaseOut;
+	SimPortOut<instr_trace_t*> ReleaseOut;
 
 	// out_delay: cycles from the slot queue's head to the unit taking the op,
 	// past the lane-dispatch buffer when the unit has one.
@@ -39,8 +39,9 @@ public:
 	void set_release_on_accept() { release_on_accept_ = true; }
 
 protected:
-	virtual void on_reset();
-	virtual void on_tick();
+	void on_reset();
+	void on_tick();
+	bool busy() const;
 
 private:
 	Core*    core_;

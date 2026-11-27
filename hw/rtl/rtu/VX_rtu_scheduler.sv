@@ -273,8 +273,11 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [NUM_CTX-1:0][RTU_CB_TYPE_BITS-1:0] cbtype_q;
     reg [NUM_CTX-1:0]                       objv_q;    // candidate came from inside a BLAS
     reg [NUM_CTX-1:0]                       attr_q;
-    reg [NUM_CTX-1:0][RTU_STACK_BITS-1:0]   sp_q_arr;
-    reg [NUM_CTX-1:0][LVLW-1:0]             lvl_q_arr;
+    wire                                    sp_wr;
+    wire [RTU_STACK_BITS-1:0]               sp_wdata;
+    wire [RTU_STACK_BITS-1:0]               sp_s1_rdata;
+    wire                                    lvl_wr;
+    wire [LVLW-1:0]                         lvl_wdata;
     reg [NUM_CTX-1:0][LB-1:0]               f_slot_q;
     reg [NUM_CTX-1:0][RTU_CB_ACTION_BITS-1:0] act_q;
 
@@ -484,6 +487,41 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire [PATHW-1:0]    path_wdata;
     wire [PATHW-1:0]    path_rdata;
     if (!FLAT) begin : g_stack
+        wire [RTU_STACK_BITS-1:0] sp_g1_rdata;
+        wire [LVLW-1:0]           lvl_g1_rdata;
+
+        VX_dp_ram #(
+            .DATAW  (RTU_STACK_BITS),
+            .SIZE   (NUM_CTX),
+            .LUTRAM (1)
+        ) sp_g1_ram (
+            .clk   (clk),
+            .reset (reset),
+            .read  (1'b1),
+            .write (sp_wr),
+            .wren  (1'b1),
+            .waddr (sel_q),
+            .wdata (sp_wdata),
+            .raddr (g1_idx),
+            .rdata (sp_g1_rdata)
+        );
+
+        VX_dp_ram #(
+            .DATAW  (LVLW),
+            .SIZE   (NUM_CTX),
+            .LUTRAM (1)
+        ) lvl_g1_ram (
+            .clk   (clk),
+            .reset (reset),
+            .read  (1'b1),
+            .write (lvl_wr),
+            .wren  (1'b1),
+            .waddr (sel_q),
+            .wdata (lvl_wdata),
+            .raddr (g1_idx),
+            .rdata (lvl_g1_rdata)
+        );
+
         VX_dp_ram #(
             .DATAW    (STK_ENTW),
             .SIZE     (NUM_CTX << STK_IDXW),
@@ -497,7 +535,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .wren  (1'b1),
             .waddr ({sel_q, sp_q[STK_IDXW-1:0]}),
             .wdata (stk_wdata),
-            .raddr ({g1_idx, STK_IDXW'(sp_q_arr[g1_idx] - RTU_STACK_BITS'(1))}),
+            .raddr ({g1_idx, STK_IDXW'(sp_g1_rdata - RTU_STACK_BITS'(1))}),
             .rdata (stk_rdata)
         );
         // the rank recorded at each level of the current path
@@ -514,13 +552,13 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .wren  (1'b1),
             .waddr ({sel_q, path_wlvl}),
             .wdata (path_wdata),
-            .raddr ({g1_idx, LVLW'(lvl_q_arr[g1_idx] + LVLW'(1))}),
+            .raddr ({g1_idx, LVLW'(lvl_g1_rdata + LVLW'(1))}),
             .rdata (path_rdata)
         );
     end else begin : g_no_stack
         assign stk_rdata  = '0;
         assign path_rdata = '0;
-        `UNUSED_VAR ({stk_wr, stk_wdata, sp_q_arr, path_wr, path_wlvl, path_wdata, lvl_q_arr})
+        `UNUSED_VAR ({stk_wr, stk_wdata, path_wr, path_wlvl, path_wdata, lvl_wr, lvl_wdata})
     end
 
     wire [COLL_SIZE-1:0]                     coll_busy;
@@ -591,7 +629,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 // either walk starts at the scene base (the template's cur_off is 0)
                 structaddr_q <= slot_scene[s1_slot]
                               + ((s1_fresh || s1_rewalk) ? ADDRW'(0) : ADDRW'(cs_word.cur_off));
-                sp_q         <= sp_q_arr[s1_sel];
+                sp_q         <= sp_s1_rdata;
                 flags_q      <= slot_flags[s1_slot];
                 cull_q       <= slot_cull[s1_slot];
                 {trihit_q, triback_q, trit_q, triu_q, triv_q} <= trires_rdata;
@@ -1997,6 +2035,29 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 
     assign rdy_next = (rdy_set & ~g1_onehot) | rdy_wake_mask;
 
+    // per-context stack pointer and path level, written on each EXEC outcome
+    wire sp_rst = fresh_q || rewalk_q || sp_clr;
+    assign sp_wr     = ~reset && x_valid && (sp_rst || sp_inc || sp_dec);
+    assign sp_wdata  = sp_rst ? '0 : (sp_inc ? (sp_q + RTU_STACK_BITS'(1)) : (sp_q - RTU_STACK_BITS'(1)));
+    assign lvl_wr    = ~reset && x_valid;
+    assign lvl_wdata = word_n.lvl;
+
+    VX_dp_ram #(
+        .DATAW  (RTU_STACK_BITS),
+        .SIZE   (NUM_CTX),
+        .LUTRAM (1)
+    ) sp_s1_ram (
+        .clk   (clk),
+        .reset (reset),
+        .read  (1'b1),
+        .write (sp_wr),
+        .wren  (1'b1),
+        .waddr (sel_q),
+        .wdata (sp_wdata),
+        .raddr (s1_sel),
+        .rdata (sp_s1_rdata)
+    );
+
     integer k;
     always_ff @(posedge clk) begin
         if (reset) begin
@@ -2053,14 +2114,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 end
                 if (exec_hit_set) begin
                     hit_q[sel_q] <= 1'b1;
-                end
-                lvl_q_arr[sel_q] <= word_n.lvl;
-                if (fresh_q || rewalk_q || sp_clr) begin
-                    sp_q_arr[sel_q] <= '0;
-                end else if (sp_inc) begin
-                    sp_q_arr[sel_q] <= sp_q + RTU_STACK_BITS'(1);
-                end else if (sp_dec) begin
-                    sp_q_arr[sel_q] <= sp_q - RTU_STACK_BITS'(1);
                 end
                 if (mem_fire) begin
                     f_slot_q[sel_q] <= mem_fslot;

@@ -18,8 +18,8 @@ using namespace vortex;
 
 Kmu::Kmu(const SimContext& ctx, const char* name, uint32_t num_cores)
   : SimObject<Kmu>(ctx, name)
-  , bus_out(num_cores, this)
-  , credit_in(num_cores, this)
+  , bus_out(this, num_cores)
+  , credit_in(this, num_cores, 2)
   , PC_(0)
   , entry_(0)
   , param_(0)
@@ -51,6 +51,7 @@ void Kmu::on_reset() {
   // destroy the distinction. It is free-running from device reset, and
   // zero-initialized at construction.
   running_         = false;
+  blocked_         = false;
   cta_id_          = 0;
   rr_ptr_          = 0;
   cluster_locked_  = false;
@@ -100,6 +101,7 @@ void Kmu::start() {
     cta_id_          = 0;
     group_origin_[0] = group_origin_[1] = group_origin_[2] = 0;
     intra_offset_[0] = intra_offset_[1] = intra_offset_[2] = 0;
+    blocked_ = false;
     this->tick_wake();
   }
 }
@@ -115,8 +117,8 @@ void Kmu::on_tick() {
       --inflight_[c];
     }
   }
+  blocked_ = false;
   if (!running_) {
-    this->tick_sleep();
     return;
   }
   // Steering: a locked cluster's remaining members stay with the owning core;
@@ -143,8 +145,20 @@ void Kmu::on_tick() {
       }
     }
   }
-  if (target == num_cores)
-    return; // no ready lane this cycle
+  if (target == num_cores) {
+    // No ready lane: nothing changes until a credit returns or a lane slice
+    // takes a CTA, and both wake the KMU. A lane full only through a slot
+    // freed this cycle under a registered ready reopens next cycle with no
+    // event, so the KMU idles only on lanes out of credits or truly full.
+    auto blocked = [&](uint32_t c) {
+      return inflight_[c] >= LAUNCH_CREDITS || bus_out.at(c).size() == bus_out.at(c).capacity();
+    };
+    blocked_ = cluster_locked_ ? blocked(cluster_core_) : true;
+    for (uint32_t c = 0; c < num_cores && blocked_ && !cluster_locked_; ++c) {
+      blocked_ = blocked(c);
+    }
+    return;
+  }
   kmu_req_t req{};
   if (!this->next_cta(&req, target))
     return;

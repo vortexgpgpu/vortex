@@ -1339,8 +1339,10 @@ public:
   }
 
   const PerfStats& perf_stats() const {
+  #ifdef VX_CFG_TCU_WGMMA_ENABLE
     // lmem_reads: total MemReq traffic from TcuTbuf (abuf + bbuf).
     perf_stats_.lmem_reads = simobject_->tbuf()->reads();
+  #endif
     return perf_stats_;
   }
 
@@ -1898,12 +1900,12 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 ///////////////////////////////////////////////////////////////////////////////
 
 TcuUnit::TcuUnit(const SimContext &ctx, const char* name, Core* core)
-	: FuncUnit(ctx, name, core, 1u << log2ceil(VX_CFG_TCU_LATENCY + 1)) // landing-queue depth bounds results awaiting the consumer
+	: FuncUnit(ctx, name, core, core, 2, 1u << log2ceil(VX_CFG_TCU_LATENCY + 1)) // landing-queue depth bounds results awaiting the consumer
 #ifdef TCU_META_ENABLE
-	, agu_req_out(TCU_AGU_PORTS, this)
-	, agu_rsp_in(TCU_AGU_PORTS, this)
+	, agu_req_out(this, TCU_AGU_PORTS)
+	, agu_rsp_in(this, TCU_AGU_PORTS, 2)
 #endif
-	, result_stall_in(VX_CFG_NUM_TCU_BLOCKS, this)
+	, result_stall_in(this, VX_CFG_NUM_TCU_BLOCKS, 2)
 	, impl_(new Impl(this, core))
 {}
 

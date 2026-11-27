@@ -5,7 +5,7 @@
     "configs": "-DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4",
     "dut": "gfx",
     "result": {
-      "build_time_s": 50,
+      "build_time_s": 85,
       "cells": 1873902,
       "endpoints": 239287,
       "env": {
@@ -67,7 +67,7 @@
     "configs": "",
     "dut": "om",
     "result": {
-      "build_time_s": 5,
+      "build_time_s": 10,
       "cells": 34359,
       "endpoints": 5135,
       "env": {
@@ -104,7 +104,7 @@
     "configs": "",
     "dut": "raster",
     "result": {
-      "build_time_s": 5,
+      "build_time_s": 10,
       "cells": 76084,
       "endpoints": 12792,
       "env": {
@@ -141,7 +141,7 @@
     "configs": "",
     "dut": "rtu",
     "result": {
-      "build_time_s": 25,
+      "build_time_s": 45,
       "cells": 1060717,
       "endpoints": 105631,
       "env": {
@@ -167,7 +167,7 @@
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "tex",
     "result": {
-      "build_time_s": 15,
+      "build_time_s": 30,
       "cells": 376164,
       "endpoints": 49445,
       "env": {

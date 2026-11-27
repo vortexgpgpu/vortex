@@ -37,7 +37,7 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
     // a batched dispatch derives the issue slot from the batch index alone
     `STATIC_ASSERT ((NUM_PORTS == `VX_CFG_ISSUE_WIDTH) || (BLOCK_SIZE == NUM_PORTS), ("invalid parameter"))
 
-    `DECL_EXECUTE_T (pe, NUM_LANES);
+    typedef execute_if[0].data_t pe_execute_t;
     localparam IN_DATAW     = $bits(dispatch_t);
     localparam OUT_DATAW    = $bits(pe_execute_t);
 

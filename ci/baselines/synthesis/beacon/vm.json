@@ -6,7 +6,7 @@
     "dut": "vm",
     "result": {
       "bram": 159.0,
-      "build_time_s": 25,
+      "build_time_s": 40,
       "deep_endpoints": 3153,
       "deepest_paths": [
         "21  ptw/rsp_arb/g_input_select.g_arbiter.g_out_buf_0.out_buf/g_eb2.stream_buffer/g_buffer.buffer_r[30] -> l2tlb/set_mru_r.d[2]",

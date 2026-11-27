@@ -29,18 +29,12 @@ AluUnit::AluUnit(const SimContext& ctx, const char* name, Core* core)
 	// The output channel also counts results still in flight: it covers the
 	// deepest path plus the result waiting for the commit side, so the
 	// multiplier keeps one result per cycle.
-	: FuncUnit<VX_CFG_NUM_ALU_BLOCKS>(ctx, name, core, kMulDivLatency + (kGather ? 1 : 0) + 2)
-	, branch_ctl_out(this, VX_CFG_NUM_WARPS)
-	, ReleaseOut(this, VX_CFG_ISSUE_WIDTH)
-{
-	if (!kGather) {
-		// No buffer between the dispatch queue and the unit: the input holds
-		// only the queue's head.
-		for (auto& input : Inputs) {
-			input = SimChannel<instr_trace_t*>(this, 1);
-		}
-	}
-}
+	// No buffer between the dispatch queue and the unit (!kGather): the input
+	// holds only the queue's head.
+	: FuncUnit<AluUnit, VX_CFG_NUM_ALU_BLOCKS>(ctx, name, core, core, kGather ? 2 : 1, kMulDivLatency + (kGather ? 1 : 0) + 2)
+	, branch_ctl_out(this)
+	, ReleaseOut(this)
+{}
 
 // Cycles from this unit's execute to its output, beyond the commit-queue hop.
 // Execute stands for the integer ALU's registered result (the branch_ctl
@@ -638,36 +632,25 @@ uint32_t AluUnit::output_wait(uint32_t b, uint64_t ready) {
   return wait;
 }
 
-void AluUnit::on_tick() {
-  bool idle = true;
-  for (uint32_t b = 0; b < VX_CFG_NUM_ALU_BLOCKS; ++b) {
-    auto& input = Inputs.at(b);
-    if (!input.empty()) {
-      auto& output = Outputs.at(b);
-      if (!output.full()) {
-        auto trace = input.peek();
-        this->execute(trace);
-        uint32_t latency = this->latency_of(trace) + (kGather ? 1 : 0);
-        uint32_t wait = this->output_wait(b, SimPlatform::instance().cycles() + latency);
-        // A branch releases its warp as it resolves, not when its result
-        // retires: the result register, then the branch register. It resolves
-        // as its result leaves the integer unit, behind a multiply or divide
-        // result that the unit's result switch takes first.
-        if (std::get_if<BrType>(&trace->op_type) && trace->eop && trace->resume_warp) {
-          branch_ctl_out.send(trace->wid, 2 + wait);
-          trace->resume_warp = false;
-        }
-        output.send(trace, latency);
-        input.pop();
-        if (!kGather && trace->eop) {
-          ReleaseOut.send(trace, 0);
-        }
-      }
-    }
-    idle &= (input.size() == 0);
+bool AluUnit::issue(uint32_t b, instr_trace_t*& trace) {
+  auto& output = Outputs.at(b);
+  if (output.full()) {
+    return false;
   }
-  // sleep until a new trace is reserved toward an input.
-  if (idle) {
-    this->tick_sleep();
+  this->execute(trace);
+  uint32_t latency = this->latency_of(trace) + (kGather ? 1 : 0);
+  uint32_t wait = this->output_wait(b, SimPlatform::instance().cycles() + latency);
+  // A branch releases its warp as it resolves, not when its result
+  // retires: the result register, then the branch register. It resolves
+  // as its result leaves the integer unit, behind a multiply or divide
+  // result that the unit's result switch takes first.
+  if (std::get_if<BrType>(&trace->op_type) && trace->eop && trace->resume_warp) {
+    branch_ctl_out.send(trace->wid, 2 + wait);
+    trace->resume_warp = false;
   }
+  output.send(trace, latency);
+  if (!kGather && trace->eop) {
+    ReleaseOut.send(trace, 0);
+  }
+  return true;
 }
