@@ -1054,7 +1054,7 @@ Parameterized arithmetic units supporting various area/performance trade-offs.
 
 **Features:**
 - Restoring division algorithm -- minimal area, multi-cycle latency
-- Multi-lane support for throughput
+- Multi-lane support for throughput; each lane is a `VX_serial_div_lane` instance sharing one iteration counter
 - Signed and unsigned modes
 - Suitable for area-constrained designs
 

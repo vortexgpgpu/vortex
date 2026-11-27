@@ -34,28 +34,10 @@ module VX_serial_div #(
     output wire [LANES-1:0][WIDTHQ-1:0] quotient,
     output wire [LANES-1:0][WIDTHR-1:0] remainder
 );
-    localparam MIN_ND = (WIDTHN < WIDTHD) ? WIDTHN : WIDTHD;
     localparam CNTRW = `CLOG2(WIDTHN);
-
-    reg [LANES-1:0][WIDTHN + MIN_ND:0] working;
-    reg [LANES-1:0][WIDTHD-1:0] denom_r;
-
-    wire [LANES-1:0][WIDTHN-1:0] numer_qual;
-    wire [LANES-1:0][WIDTHD-1:0] denom_qual;
-    wire [LANES-1:0][WIDTHD:0] sub_result;
-
-    reg [LANES-1:0] inv_quot, inv_rem;
 
     reg [CNTRW-1:0] cntr;
     reg busy_r;
-
-    for (genvar i = 0; i < LANES; ++i) begin : g_setup
-        wire negate_numer = is_signed && numer[i][WIDTHN-1];
-        wire negate_denom = is_signed && denom[i][WIDTHD-1];
-        assign numer_qual[i] = negate_numer ? -$signed(numer[i]) : numer[i];
-        assign denom_qual[i] = negate_denom ? -$signed(denom[i]) : denom[i];
-        assign sub_result[i] = working[i][WIDTHN + MIN_ND : WIDTHN] - denom_r[i];
-    end
 
     always @(posedge clk) begin
         if (reset) begin
@@ -74,25 +56,22 @@ module VX_serial_div #(
         end
     end
 
-    for (genvar i = 0; i < LANES; ++i) begin : g_div
-        always @(posedge clk) begin
-            if (strobe) begin
-                working[i]  <= {{WIDTHD{1'b0}}, numer_qual[i], 1'b0};
-                denom_r[i]  <= denom_qual[i];
-                inv_quot[i] <= (denom[i] != 0) && is_signed && (numer[i][31] ^ denom[i][31]);
-                inv_rem[i]  <= is_signed && numer[i][31];
-            end else if (busy_r) begin
-                working[i]  <= sub_result[i][WIDTHD] ? {working[i][WIDTHN+MIN_ND-1:0], 1'b0} :
-                                                       {sub_result[i][WIDTHD-1:0], working[i][WIDTHN-1:0], 1'b1};
-            end
-        end
-    end
-
-    for (genvar i = 0; i < LANES; ++i) begin : g_output
-        wire [WIDTHQ-1:0] q = working[i][WIDTHQ-1:0];
-        wire [WIDTHR-1:0] r = working[i][WIDTHN+WIDTHR:WIDTHN+1];
-        assign quotient[i]  = inv_quot[i] ? -$signed(q) : q;
-        assign remainder[i] = inv_rem[i] ? -$signed(r) : r;
+    for (genvar i = 0; i < LANES; ++i) begin : g_lanes
+        VX_serial_div_lane #(
+            .WIDTHN (WIDTHN),
+            .WIDTHD (WIDTHD),
+            .WIDTHQ (WIDTHQ),
+            .WIDTHR (WIDTHR)
+        ) div_lane (
+            .clk       (clk),
+            .strobe    (strobe),
+            .busy      (busy_r),
+            .is_signed (is_signed),
+            .numer     (numer[i]),
+            .denom     (denom[i]),
+            .quotient  (quotient[i]),
+            .remainder (remainder[i])
+        );
     end
 
     assign busy = busy_r;
