@@ -184,7 +184,7 @@ if [ -n "$copy_folder" ]; then
   if [ "$preprocessor" != 0 ]; then
     for f in "$copy_folder"/*.sv; do
       [ -f "$f" ] || continue
-      sed -i 's/\.\(master\|slave\|tap\|monitor\)\b//g' "$f"
+      sed -i 's/\b\(VX_[A-Za-z0-9_]*_if\)\.\(master\|slave\|tap\|monitor\)\b/\1/g' "$f"
     done
   fi
 fi

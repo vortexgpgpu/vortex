@@ -175,14 +175,14 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // only the execute port is freed. A warp holds at most one trace, so one entry
     // per warp is exact, not a heuristic.
     reg [NLW-1:0] wait_pend;
-    header_t  wait_hdr [NLW];
+    header_t      wait_hdr [NLW];
 
     // ── result stage (the RAM read is synchronous) ─────────────────────────
     // One op is accepted per cycle into s1; its word arrives from the RAM on the
     // next, where result_if presents it.
     reg          s1_valid;
     reg          s1_from_ram;
-    header_t s1_header;
+    header_t     s1_header;
 
     wire s1_ready = ~s1_valid || result_if.ready;
 

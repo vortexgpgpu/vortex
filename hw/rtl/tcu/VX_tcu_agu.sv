@@ -62,7 +62,7 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `STATIC_ASSERT (LSU_CLIENT_TAG_WIDTH >= PASS_BITS, ("LSU client tag cannot encode the TCU_LD pass"))
 
     reg                     busy_r, issued_r, done_r;
-    header_t            header_r;
+    header_t                header_r;
     reg [4:0]               slot_r;
     reg [`VX_CFG_XLEN-1:0]  addr_r;
 
