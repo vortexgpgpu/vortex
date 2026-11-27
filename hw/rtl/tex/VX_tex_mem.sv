@@ -227,36 +227,45 @@ module VX_tex_mem import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     // always fetched in its place: corner 0 of its level under point filtering,
     // and level 0 when the levels are not blended. The weights that select
     // between them downstream are zero in exactly those cases, so which tap the
-    // fallback lands on only has to be a defined value.
-    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_rsp_data_qual
-        for (genvar k = 0; k < TEX_NUM_LEVELS; ++k) begin : g_k
-            for (genvar j = 0; j < 4; ++j) begin : g_j
-                wire [TAP_SEL_BITS-1:0] src_tap = TAP_SEL_BITS'(
-                    (rsp_mip_linear ? (k * 4) : 0) + (rsp_filter[0] ? j : 0));
-                wire use_lane0 = (i == 0) || mem_rsp_dups[src_tap];
-                wire [31:0] src_data  = use_lane0 ? mem_rsp_data[src_tap][0]  : mem_rsp_data[src_tap][i];
-                wire [1:0]  src_align = use_lane0 ? mem_rsp_align[src_tap][0] : mem_rsp_align[src_tap][i];
-
-                reg [31:0] rsp_data_shifted;
-                always @(*) begin
-                    rsp_data_shifted[31:16] = src_data[31:16];
-                    rsp_data_shifted[15:0]  = src_align[1] ? src_data[31:16]        : src_data[15:0];
-                    rsp_data_shifted[7:0]   = src_align[0] ? rsp_data_shifted[15:8] : rsp_data_shifted[7:0];
-                end
-
-                reg [31:0] rsp_data_stride;
-                always @(*) begin
-                    case (rsp_lgstride)
-                    0:       rsp_data_stride = 32'(rsp_data_shifted[7:0]);
-                    1:       rsp_data_stride = 32'(rsp_data_shifted[15:0]);
-                    2:       rsp_data_stride = rsp_data_shifted;
-                    default: rsp_data_stride = 'x;
-                    endcase
-                end
-
-                assign mem_rsp_data_qual[i][k][j] = rsp_data_stride;
-            end
+    // fallback lands on only has to be a defined value. A source tap all lanes
+    // shared was fetched once, by lane 0. The selection is the same for every
+    // lane, so it is made once here.
+    wire [NUM_TAPS-1:0][TAP_SEL_BITS-1:0] src_tap;
+    wire [NUM_TAPS-1:0]                   src_dup;
+    wire [NUM_TAPS-1:0][31:0]             lane0_data;
+    wire [NUM_TAPS-1:0][1:0]              lane0_align;
+    for (genvar k = 0; k < TEX_NUM_LEVELS; ++k) begin : g_lane0
+        for (genvar j = 0; j < 4; ++j) begin : g_j
+            assign src_tap[k*4+j] = TAP_SEL_BITS'(
+                (rsp_mip_linear ? (k * 4) : 0) + (rsp_filter[0] ? j : 0));
+            assign src_dup[k*4+j]     = mem_rsp_dups[src_tap[k*4+j]];
+            assign lane0_data[k*4+j]  = mem_rsp_data[src_tap[k*4+j]][0];
+            assign lane0_align[k*4+j] = mem_rsp_align[src_tap[k*4+j]][0];
         end
+    end
+
+    // Lane 0 always takes the shared word, which is its own fetch.
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_rsp_data_qual
+        wire [NUM_TAPS-1:0][31:0] lane_data;
+        wire [NUM_TAPS-1:0][1:0]  lane_align;
+        for (genvar t = 0; t < NUM_TAPS; ++t) begin : g_t
+            assign lane_data[t]  = mem_rsp_data[t][i];
+            assign lane_align[t] = mem_rsp_align[t][i];
+        end
+
+        VX_tex_rsp_qual #(
+            .NUM_TAPS     (NUM_TAPS),
+            .TAP_SEL_BITS (TAP_SEL_BITS)
+        ) tex_rsp_qual (
+            .lgstride     (rsp_lgstride),
+            .src_tap      (src_tap),
+            .take_shared  ((i == 0) ? {NUM_TAPS{1'b1}} : src_dup),
+            .shared_data  (lane0_data),
+            .shared_align (lane0_align),
+            .lane_data    (lane_data),
+            .lane_align   (lane_align),
+            .data         (mem_rsp_data_qual[i])
+        );
     end
 
     VX_pipe_buffer #(
