@@ -365,7 +365,14 @@ module VX_lmem_engine import VX_gpu_pkg::*; #(
 
     wire [NUM_LANES-1:0][WORD_WIDTH-1:0] m2_data;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_rsp_data
-        assign m2_data[i] = bank_rdata[m2_bank[i]];
+        VX_mux #(
+            .DATAW (WORD_WIDTH),
+            .N     (NUM_BANKS)
+        ) rsp_data_mux (
+            .data_in  (bank_rdata),
+            .sel_in   (m2_bank[i]),
+            .data_out (m2_data[i])
+        );
     end
 
     // The lane mux reads the SRAM outputs; its result is registered before it
