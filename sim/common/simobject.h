@@ -1227,7 +1227,14 @@ public:
   /// The cycle the oldest packet became, or becomes, visible.
   uint64_t head_cycle() const { return ring_.head_ready(); }
 
-  uint32_t size() const override { return ring_.size(); }
+  /// A bypassed port holds nothing itself: its packets are in flight to, or
+  /// visible at, the port its wire ends in, so it reports that port's size.
+  uint32_t size() const override {
+    if (__builtin_expect(this->bypassed(), 0)) {
+      return this->wire_size();
+    }
+    return ring_.size();
+  }
 
   // Nominal in the functional kernel: large enough never to gate, small
   // enough for a credit counter.
@@ -1269,6 +1276,12 @@ private:
     SimPortOutBase* out;
     SmallFunction<void(T&&, uint64_t), 48> send;
   };
+
+  __attribute__((noinline)) uint32_t wire_size() const {
+    SimPortOutBase* out = fwd_ ? static_cast<SimPortOutBase*>(fwd_) : conv_->out;
+    SimPortInBase* end = out->endpoint();
+    return end ? end->size() : 0;
+  }
 
   // Drop the head: its slot, the credit and wake-ups it owes.
   void remove() {
