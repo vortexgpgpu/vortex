@@ -13,15 +13,6 @@
 
 `include "VX_define.vh"
 
-// reset all GPRs in debug mode
-`ifdef SIMULATION
-`ifndef NDEBUG
-`ifndef GPR_RESET
-`define GPR_RESET
-`endif
-`endif
-`endif
-
 module VX_opc_unit import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_BANKS = 4,
@@ -266,47 +257,30 @@ module VX_opc_unit import VX_gpu_pkg::*; #(
         assign gpr_wr_byteen[i*XLENB+:XLENB] = writeback_if.data.byteen[i];
     end
 
+    // pipe_mdata packs {uuid, wis, cta_id, simd_pid, ...}; skip uuid+wis+cta_id
+    // to extract simd_pid, which must match writeback_if.data.sid on the write path.
+    wire [SIMD_IDX_W-1:0] rd_sid = pipe_mdata_st1[META_DATAW-UUID_WIDTH-ISSUE_WIS_W-NCTA_WIDTH-1 -: SIMD_IDX_W];
+
     // GPR banks
     for (genvar b = 0; b < NUM_BANKS; ++b) begin : g_gpr_rams
-        wire gpr_wr_enabled;
-        if (BANK_SEL_BITS != 0) begin : g_gpr_wr_enabled_bn
-            assign gpr_wr_enabled = writeback_if.valid && (gpr_wr_bank_idx == BANK_SEL_BITS'(b));
-        end else begin : g_gpr_wr_enabled_b1
-            assign gpr_wr_enabled = writeback_if.valid;
-        end
-
-        wire [BANK_ADDR_WIDTH-1:0] gpr_rd_addr;
-        if (SIMD_COUNT != 1) begin : g_gpr_rd_addr_sid
-            wire [PER_OPC_NW_BITS + REG_REM_BITS-1:0] tmp;
-            `CONCAT(tmp, rd_slot,
-                gpr_rd_reg_st1[b], PER_OPC_NW_BITS, REG_REM_BITS)
-            // pipe_mdata packs {uuid, wis, cta_id, simd_pid, ...}; skip uuid+wis+cta_id
-            // to extract simd_pid, which must match writeback_if.data.sid on the write path.
-            assign gpr_rd_addr = {pipe_mdata_st1[META_DATAW-UUID_WIDTH-ISSUE_WIS_W-NCTA_WIDTH-1 -: SIMD_IDX_W], tmp};
-        end else begin : g_gpr_rd_addr
-            `CONCAT(gpr_rd_addr, rd_slot,
-                gpr_rd_reg_st1[b], PER_OPC_NW_BITS, REG_REM_BITS)
-        end
-
-        VX_dp_ram #(
-            .DATAW (BANK_DATA_WIDTH),
-            .SIZE  (BANK_SIZE),
-            .WRENW (BANK_DATA_SIZE),
-         `ifdef GPR_RESET
-            .RESET_RAM (1),
-         `endif
-            .OUT_REG (1),
-            .RDW_MODE ("R")
-        ) gpr_ram (
-            .clk   (clk),
-            .reset (reset),
-            .read  (pipe_fire_st1 && gpr_rd_valid_st1[b]),
-            .wren  (gpr_wr_byteen),
-            .write (gpr_wr_enabled),
-            .waddr (gpr_wr_addr),
-            .wdata (writeback_if.data.data),
-            .raddr (gpr_rd_addr),
-            .rdata (gpr_rd_data_st2[b])
+        VX_opc_gpr_bank #(
+            .NUM_BANKS (NUM_BANKS),
+            .BANK_SIZE (BANK_SIZE)
+        ) gpr_bank (
+            .clk         (clk),
+            .reset       (reset),
+            .bank_id     (BANK_SEL_WIDTH'(b)),
+            .wr_valid    (writeback_if.valid),
+            .wr_bank_idx (gpr_wr_bank_idx),
+            .wr_addr     (gpr_wr_addr),
+            .wr_byteen   (gpr_wr_byteen),
+            .wr_data     (writeback_if.data.data),
+            .rd_fire     (pipe_fire_st1),
+            .rd_valid    (gpr_rd_valid_st1[b]),
+            .rd_slot     (rd_slot),
+            .rd_sid      (rd_sid),
+            .rd_reg      (gpr_rd_reg_st1[b]),
+            .rd_data     (gpr_rd_data_st2[b])
         );
     end
 
