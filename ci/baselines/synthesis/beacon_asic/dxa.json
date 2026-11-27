@@ -5,7 +5,7 @@
     "configs": "",
     "dut": "dxa",
     "result": {
-      "build_time_s": 5,
+      "build_time_s": 15,
       "cells": 85182,
       "endpoints": 11408,
       "env": {

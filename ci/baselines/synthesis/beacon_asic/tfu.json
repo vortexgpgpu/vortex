@@ -5,7 +5,7 @@
     "configs": "",
     "dut": "tfu",
     "result": {
-      "build_time_s": 5,
+      "build_time_s": 10,
       "cells": 15150,
       "endpoints": 2340,
       "env": {

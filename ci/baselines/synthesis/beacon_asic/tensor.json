@@ -5,9 +5,9 @@
     "configs": "",
     "dut": "tcu",
     "result": {
-      "build_time_s": 15,
-      "cells": 1309037,
-      "endpoints": 44327,
+      "build_time_s": 65,
+      "cells": 1309038,
+      "endpoints": 44425,
       "env": {
         "beacon": "beacon 4060e3af4",
         "circt": "CIRCT ab733d13d",
@@ -31,8 +31,8 @@
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "tensor",
     "result": {
-      "build_time_s": 30,
-      "cells": 860480,
+      "build_time_s": 55,
+      "cells": 860482,
       "endpoints": 89490,
       "env": {
         "beacon": "beacon 4060e3af4",
