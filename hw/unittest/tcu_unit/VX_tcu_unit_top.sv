@@ -92,8 +92,9 @@ module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
     localparam TCU_LMEM_BANK_ADDR_W = `VX_CFG_LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE) - `CLOG2(`VX_CFG_LMEM_NUM_BANKS);
 
     VX_mem_bus_if #(
-        .DATA_SIZE  (`VX_CFG_LMEM_NUM_BANKS * (`VX_CFG_XLEN / 8)),
-        .TAG_WIDTH  (UUID_WIDTH),
+        .DATA_SIZE  (`VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE),
+        .TAG_WIDTH  (TCU_LMEM_TAG_W),
+        .ATTR_WIDTH (LMEM_DMA_ATTR_W),
         .ADDR_WIDTH (TCU_LMEM_BANK_ADDR_W)
     ) tcu_lmem_if();
 
