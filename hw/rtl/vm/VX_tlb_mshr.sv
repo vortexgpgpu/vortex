@@ -233,17 +233,27 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
     // ---------------------------------------------------------------------
     // Issue
     // ---------------------------------------------------------------------
+    // Round-robin from the entry after the last issued one: with the walker
+    // saturated, a fixed priority would keep handing low slots, refilled by
+    // new misses, ahead of a pending high slot forever.
     wire [MSHR_SIZE-1:0] issue_pend = valid_r & ~issued_r;
+    reg  [IDX_W-1:0]     issue_rr_r;
+
+    wire [2*MSHR_SIZE-1:0] issue_dup = {issue_pend, issue_pend} >> issue_rr_r;
+    wire [MSHR_SIZE-1:0]   issue_rot = issue_dup[MSHR_SIZE-1:0];
+    `UNUSED_VAR (issue_dup)
+
     wire             has_issue;
-    wire [IDX_W-1:0] issue_sel;
+    wire [IDX_W-1:0] issue_sel_rot;
     VX_priority_encoder #(
         .N (MSHR_SIZE)
     ) issue_enc (
-        .data_in    (issue_pend),
+        .data_in    (issue_rot),
         `UNUSED_PIN (onehot_out),
-        .index_out  (issue_sel),
+        .index_out  (issue_sel_rot),
         .valid_out  (has_issue)
     );
+    wire [IDX_W-1:0] issue_sel = issue_sel_rot + issue_rr_r;
 
     // Register the outgoing issue interface; the entry selection above is combinational.
     localparam ISSUE_W = `UP(ID_WIDTH) + $bits(tlb_access_e) + 1 + TLB_VPN_WIDTH;
@@ -432,6 +442,14 @@ module VX_tlb_mshr import VX_tlb_pkg::*; #(
     // ---------------------------------------------------------------------
     // State update
     // ---------------------------------------------------------------------
+    always @(posedge clk) begin
+        if (reset || flush) begin
+            issue_rr_r <= '0;
+        end else if (issue_fire) begin
+            issue_rr_r <= issue_sel + IDX_W'(1);
+        end
+    end
+
     always @(posedge clk) begin
         if (reset || flush) begin
             valid_r  <= '0;

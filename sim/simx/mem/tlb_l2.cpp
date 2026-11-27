@@ -42,6 +42,7 @@ void L2Tlb::on_reset() {
   pipe_ = {};
   rsp_q_ = {};
   rr_client_ = 0;
+  rr_walk_ = 0;
 }
 
 bool L2Tlb::busy() const {
@@ -207,8 +208,10 @@ void L2Tlb::on_tick() {
     }
   }
 
-  // 4) Issue one pending walk request.
-  for (size_t i = 0; i < mshr_.size(); ++i) {
+  // 4) Issue one pending walk request, round-robin from the entry after the
+  // last issued one so a pending entry cannot be passed over indefinitely.
+  for (size_t n = 0; n < mshr_.size(); ++n) {
+    size_t i = (rr_walk_ + n) % mshr_.size();
     auto& e = mshr_[i];
     if (!e.valid || e.issued) {
       continue;
@@ -225,6 +228,7 @@ void L2Tlb::on_tick() {
     PtwReqOut.send(walk, 1);
     DT(4, this->name() << " walk-req: " << walk);
     e.issued = true;
+    rr_walk_ = uint32_t((i + 1) % mshr_.size());
     break;
   }
 
