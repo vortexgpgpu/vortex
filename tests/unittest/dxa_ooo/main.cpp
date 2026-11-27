@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
+#include <deque>
 #include <iostream>
 #include <memory>
 #include <vector>
@@ -40,13 +41,58 @@ void tick(uint32_t cycles = 1) {
     SimPlatform::instance().tick();
 }
 
-MemReq wait_for_lmem_write(DxaCore *dxa, uint32_t limit = 100) {
+// Stands in for the socket: feeds the DXA its request and GMEM responses.
+class Driver : public SimObject<Driver> {
+public:
+  SimPortOut<DxaReq> req_out{this};
+  SimPortOut<MemRsp> rsp_out{this};
+  using SimObject::SimObject;
+};
+
+// Stands in for L2 and LMEM: records every DXA output for the test to inspect.
+class Sink : public SimObject<Sink> {
+public:
+  std::vector<std::deque<MemReq>> gmem;
+  std::vector<std::deque<MemReq>> lmem;
+  SimPortInArray<MemReq> gmem_in;
+  SimPortInArray<MemReq> lmem_in;
+
+  Sink(const SimContext &ctx, const char *name, uint32_t gmem_ports,
+       uint32_t lmem_ports)
+      : SimObject<Sink>(ctx, name)
+      , gmem(gmem_ports)
+      , lmem(lmem_ports)
+      , gmem_in(this, gmem_ports, 4, &Sink::take_gmem)
+      , lmem_in(this, lmem_ports, 4, &Sink::take_lmem) {
+  }
+
+  bool take_gmem(uint32_t port, MemReq &req) {
+    gmem.at(port).push_back(req);
+    return true;
+  }
+
+  bool take_lmem(uint32_t port, MemReq &req) {
+    lmem.at(port).push_back(req);
+    return true;
+  }
+
+  void on_bar_release(const uint32_t &) {}
+};
+
+bool pop_front(std::deque<MemReq> &queue, MemReq *req) {
+  if (queue.empty()) {
+    return false;
+  }
+  *req = queue.front();
+  queue.pop_front();
+  return true;
+}
+
+MemReq wait_for_lmem_write(Sink *sink, uint32_t limit = 100) {
   for (uint32_t i = 0; i < limit; ++i) {
     tick();
-    auto &output = dxa->lmem_req_out.at(0);
-    if (!output.empty()) {
-      MemReq req = output.peek();
-      output.pop();
+    MemReq req;
+    if (pop_front(sink->lmem.at(0), &req)) {
       return req;
     }
   }
@@ -59,9 +105,8 @@ std::shared_ptr<mem_block_t> make_response_data(uint8_t value) {
   return data;
 }
 
-void send_response(DxaCore *dxa, const MemReq &request, uint8_t value) {
-  dxa->gmem_rsp_in.at(0).send(
-      MemRsp(request.tag, 0, 1, make_response_data(value)));
+void send_response(Driver *driver, const MemReq &request, uint8_t value) {
+  driver->rsp_out.send(MemRsp(request.tag, 0, 1, make_response_data(value)));
 }
 
 void check_write(const MemReq &write, uint64_t expected_addr,
@@ -80,6 +125,21 @@ int main() {
   Processor processor;
   auto *core = processor.get_first_core();
   auto dxa = DxaCore::Create("dxa_ooo_test", nullptr);
+  auto driver = Driver::Create("driver");
+  auto sink = Sink::Create("sink", uint32_t(dxa->gmem_req_out.size()),
+                           uint32_t(dxa->lmem_req_out.size()));
+
+  driver->req_out.bind(&dxa->dxa_req_in.at(0));
+  driver->rsp_out.bind(dxa->gmem_rsp_in.at(0));
+  for (uint32_t i = 0; i < dxa->gmem_req_out.size(); ++i) {
+    dxa->gmem_req_out.at(i)->bind(&sink->gmem_in.at(i));
+  }
+  for (uint32_t i = 0; i < dxa->lmem_req_out.size(); ++i) {
+    dxa->lmem_req_out.at(i).bind(&sink->lmem_in.at(i));
+  }
+  for (auto &link : dxa->bar_release_out) {
+    link.bind(sink.get(), &Sink::on_bar_release);
+  }
 
   SimPlatform::instance().reset();
 
@@ -102,15 +162,14 @@ int main() {
   req.desc_slot = slot;
   req.cta_mask = 1;
   req.smem_addr = smem_base;
-  dxa->dxa_req_in.at(0).send(req);
+  driver->req_out.send(req);
 
   std::vector<MemReq> reads;
   for (uint32_t i = 0; i < 100 && reads.size() < 3; ++i) {
     tick();
-    auto &output = dxa->gmem_req_out.at(0);
-    if (!output.empty()) {
-      reads.push_back(output.peek());
-      output.pop();
+    MemReq read;
+    if (pop_front(sink->gmem.at(0), &read)) {
+      reads.push_back(read);
     }
   }
 
@@ -123,20 +182,20 @@ int main() {
 
   // C is the last work item. Even if it returns first, its completion write
   // must remain deferred while A and B are outstanding.
-  send_response(dxa.get(), reads.at(2), 0xcc);
+  send_response(driver.get(), reads.at(2), 0xcc);
   tick(8);
-  if (!dxa->lmem_req_out.at(0).empty())
+  if (!sink->lmem.at(0).empty())
     fail("last response drained before older outstanding requests");
 
   // B is ready and is not the last work item, so it must bypass A.
-  send_response(dxa.get(), reads.at(1), 0xbb);
-  check_write(wait_for_lmem_write(dxa.get()), smem_base + line_size, 0xbb,
+  send_response(driver.get(), reads.at(1), 0xbb);
+  check_write(wait_for_lmem_write(sink.get()), smem_base + line_size, 0xbb,
               false);
 
   // Once A completes, the previously deferred C response must drain last.
-  send_response(dxa.get(), reads.at(0), 0xaa);
-  check_write(wait_for_lmem_write(dxa.get()), smem_base, 0xaa, false);
-  check_write(wait_for_lmem_write(dxa.get()), smem_base + 2 * line_size, 0xcc,
+  send_response(driver.get(), reads.at(0), 0xaa);
+  check_write(wait_for_lmem_write(sink.get()), smem_base, 0xaa, false);
+  check_write(wait_for_lmem_write(sink.get()), smem_base + 2 * line_size, 0xcc,
               true);
 
   std::cout << "PASSED" << std::endl;
