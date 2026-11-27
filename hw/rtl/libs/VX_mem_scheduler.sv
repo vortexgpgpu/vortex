@@ -545,31 +545,51 @@ module VX_mem_scheduler #(
         end else begin : g_rsp_full
 
             wire [CORE_CHANNELS-1:0][CORE_BATCHES-1:0][WORD_WIDTH-1:0] rsp_store_n;
-            reg [CORE_REQS-1:0] rsp_orig_mask [PENDING_SIZE-1:0];
+            wire [CORE_REQS-1:0] rsp_orig_mask;
 
             for (genvar i = 0; i < CORE_CHANNELS; ++i) begin : g_rsp_store
                 for (genvar j = 0; j < CORE_BATCHES; ++j) begin : g_j
-                    reg [WORD_WIDTH-1:0] rsp_store [0:PENDING_SIZE-1];
+                    wire [WORD_WIDTH-1:0] rsp_store_rdata;
                     wire rsp_wren = mem_rsp_fire_s
                                 && (BATCH_SEL_WIDTH'(j) == rsp_batch_idx)
                                 && ((CORE_CHANNELS == 1) || mem_rsp_mask_s[i]);
-                    always @(posedge clk) begin
-                        if (rsp_wren) begin
-                            rsp_store[ibuf_raddr] <= mem_rsp_data_s[i];
-                        end
-                    end
-                    assign rsp_store_n[i][j] = rsp_wren ? mem_rsp_data_s[i] : rsp_store[ibuf_raddr];
+                    VX_dp_ram #(
+                        .DATAW  (WORD_WIDTH),
+                        .SIZE   (PENDING_SIZE),
+                        .LUTRAM (LUTRAM)
+                    ) rsp_store (
+                        .clk   (clk),
+                        .reset (reset),
+                        .read  (1'b1),
+                        .write (rsp_wren),
+                        .wren  (1'b1),
+                        .waddr (ibuf_raddr),
+                        .wdata (mem_rsp_data_s[i]),
+                        .raddr (ibuf_raddr),
+                        .rdata (rsp_store_rdata)
+                    );
+                    assign rsp_store_n[i][j] = rsp_wren ? mem_rsp_data_s[i] : rsp_store_rdata;
                 end
             end
 
-            always @(posedge clk) begin
-                if (ibuf_push) begin
-                    rsp_orig_mask[ibuf_waddr] <= core_req_mask;
-                end
-            end
+            VX_dp_ram #(
+                .DATAW  (CORE_REQS),
+                .SIZE   (PENDING_SIZE),
+                .LUTRAM (LUTRAM)
+            ) rsp_orig_mask_ram (
+                .clk   (clk),
+                .reset (reset),
+                .read  (1'b1),
+                .write (ibuf_push),
+                .wren  (1'b1),
+                .waddr (ibuf_waddr),
+                .wdata (core_req_mask),
+                .raddr (ibuf_raddr),
+                .rdata (rsp_orig_mask)
+            );
 
             assign crsp_valid = mem_rsp_valid_s && rsp_complete;
-            assign crsp_mask  = rsp_orig_mask[ibuf_raddr];
+            assign crsp_mask  = rsp_orig_mask;
             assign crsp_sop   = 1'b1;
 
             for (genvar r = 0; r < CORE_REQS; ++r) begin : g_crsp_data
