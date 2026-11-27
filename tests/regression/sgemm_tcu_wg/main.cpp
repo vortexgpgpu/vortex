@@ -715,6 +715,10 @@ int main(int argc, char *argv[]) {
 #else
   uint32_t b_smem = wg_cfg::tileK * per_warp_N;
 #endif
+#if B_RELAYOUT
+  // Odd K tiles stage B one bank row short of a B tile further on.
+  b_smem += b_smem - (uint32_t)(NT * (VX_CFG_XLEN / 8) / sizeof(itype_t));
+#endif
   uint32_t smem_size = (a_smem + b_smem) * sizeof(itype_t) + SMEM_PAD_BYTES;
   vx_event_h launch_ev = nullptr;
   {

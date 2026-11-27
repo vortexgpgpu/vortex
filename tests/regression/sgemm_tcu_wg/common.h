@@ -44,6 +44,12 @@
 #ifndef SMEM_PAD_BYTES
 #define SMEM_PAD_BYTES 0
 #endif
+// B_RELAYOUT: even K tiles stage B K-major, odd K tiles block-major at a base
+// one LMEM bank row short of a B tile further on, so the first bank row an odd
+// tile reads is the one the previous WGMMA's last B fetch was keyed on.
+#ifndef B_RELAYOUT
+#define B_RELAYOUT 0
+#endif
 
 typedef struct {
   uint32_t M, N, K;

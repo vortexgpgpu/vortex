@@ -15,6 +15,14 @@ using ctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, W
 [[maybe_unused]] static constexpr uint32_t ldb = ctx::tileK * (1 + B_PAD_K);
 [[maybe_unused]] static constexpr uint32_t b_off = ctx::tileK * B_OFF_K;
 static_assert(a_off + ctx::tileK <= lda && B_OFF_K <= B_PAD_K, "an offset row must fit its padded stride");
+#if B_RELAYOUT
+#ifdef WGMMA_KMAJOR_B
+#error "B_RELAYOUT picks the B layout per K tile; do not combine it with WGMMA_KMAJOR_B"
+#endif
+// Odd K tiles: one bank row short of a B tile past the even tiles' base.
+static constexpr uint32_t b_relayout_off = ctx::tileK * ctx::xtileN
+    - (VX_CFG_NUM_THREADS * (__riscv_xlen / 8)) / sizeof(ctx::input_t);
+#endif
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pA = reinterpret_cast<ctx::input_t *>(arg->A_addr);
@@ -77,12 +85,22 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     //   Default (block-major):  B_smem[(k_blk*N_STEPS + n_blk)*BW + n_in*tcK + k_in]
     //   WGMMA_KMAJOR_B:         B_smem[c * ldb + b_off + r] — N-outer, K-inner.
     uint32_t b_size = ctx::tileK * ctx::xtileN;
+  #if B_RELAYOUT
+    bool b_kmajor = ((k / ctx::tileK) & 1) == 0;
+    auto B_tile = b_kmajor ? B_smem : (B_smem + b_relayout_off);
+  #endif
     for (uint32_t i = 0; i < b_size; i += num_threads) {
       uint32_t idx = i + tid;
       uint32_t r = idx / ctx::xtileN;
       uint32_t c = idx % ctx::xtileN;
     #ifdef WGMMA_KMAJOR_B
       B_smem[c * ldb + b_off + r] = pB[(k + r) * N + (tile_col + c)];
+    #elif B_RELAYOUT
+      if (b_kmajor) {
+        B_tile[c * ctx::tileK + r] = pB[(k + r) * N + (tile_col + c)];
+      } else {
+        B_tile[ctx::b_blockmajor_idx(r, c)] = pB[(k + r) * N + (tile_col + c)];
+      }
     #else
       B_smem[ctx::b_blockmajor_idx(r, c)] = pB[(k + r) * N + (tile_col + c)];
     #endif
@@ -101,7 +119,11 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   #ifdef WGMMA_KMAJOR_B
     auto desc_b = vt::vx_make_smem_desc(B_smem + b_off, ldb * sizeof(ctx::input_t));
   #else
+  #if B_RELAYOUT
+    auto desc_b = vt::vx_make_smem_desc(B_tile, b_kmajor ? ctx::tileK * sizeof(ctx::input_t) : 0);
+  #else
     auto desc_b = vt::vx_make_smem_desc(B_smem, 0); // block-major: stride field unused
+  #endif
   #endif
 
   #if defined(WGMMA_RS) && (WGMMA_NRC <= 16)

@@ -233,13 +233,15 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [BANK_ADDR_WIDTH-1:0] fetch_addr_a =
         req_is_sparse ? fetch_addr_a_sparse : fetch_addr_dense;
 
+    // A block-major hit needs a slot filled block-major: a K-major fill holds
+    // extracted rows under the same address key, not the bank row.
     wire bank_row_resident_dense =
-        slot_a_valid_r && !slot_is_sparse_r
+        slot_a_valid_r && !slot_is_sparse_r && !slot_row_major_r
         && (slot_a_addr_r == fetch_addr_dense)
         && (slot_a_sub_half_r == dense_sub_half);
 
     wire bank_row_resident_sparse =
-        slot_a_valid_r && slot_is_sparse_r
+        slot_a_valid_r && slot_is_sparse_r && !slot_row_major_r
         && (slot_a_addr_r == fetch_addr_a_sparse)
         && (slot_a_sub_half_r == sp_sub_a)
         && (!SPARSE_TWO_SLOT || (slot_b_valid_r
