@@ -25,20 +25,8 @@ inline static constexpr uint32_t wid_to_opc_slot(uint32_t wid) {
   return (wid / VX_CFG_ISSUE_WIDTH) / VX_CFG_NUM_OPCS;
 }
 
-OpcUnit::OpcUnit(const SimContext &ctx, const char* name,
-                 uint32_t num_warp_slots, uint32_t num_threads)
-  : SimObject<OpcUnit>(ctx, name)
-  , Input(this)
-  , Output(this) {
-  __assert(num_threads == VX_CFG_NUM_THREADS, "register file sized for VX_CFG_NUM_THREADS");
-  // The scoreboard's output skid buffer: two entries, the one being collected
-  // among them, with a registered ready.
-  Input.set_registered_ready(true);
-  regs_.resize(num_warp_slots);
-  this->on_reset();
-}
-
-OpcUnit::~OpcUnit() {}
+OpcUnit::OpcUnit(uint32_t num_warp_slots)
+  : regs_(num_warp_slots) {}
 
 void OpcUnit::on_reset() {
   total_stalls_ = 0;
@@ -69,32 +57,13 @@ static uint32_t compute_bank_conflicts(const instr_trace_t* trace) {
   return most ? (most - 1) : 0;
 }
 
-void OpcUnit::on_tick() {
-  auto cur_cycle = SimPlatform::instance().cycles();
-
-  // forward held uop once its collection phase has elapsed
-  if (cur_trace_ != nullptr && cur_cycle >= release_cycle_) {
-    if (!Output.try_send(cur_trace_, 1))
-      return;
-    DT(3, this->name() << "-pipeline operands: " << *cur_trace_);
-    cur_trace_ = nullptr;
-  }
-
-  // accept next uop into the holding slot; it stays in the input buffer
-  // until its last operand read
-  if (cur_trace_ == nullptr && !Input.empty()) {
-    auto trace = Input.peek();
-    uint32_t stalls = compute_bank_conflicts(trace);
-    total_stalls_ += stalls;
-    cur_trace_ = trace;
-    consume_cycle_ = cur_cycle + stalls;
-    release_cycle_ = cur_cycle + 1 + stalls;
-    consumed_ = false;
-  }
-  if (cur_trace_ != nullptr && !consumed_ && cur_cycle >= consume_cycle_) {
-    Input.pop();
-    consumed_ = true;
-  }
+void OpcUnit::accept(instr_trace_t* trace, uint64_t cur_cycle) {
+  uint32_t stalls = compute_bank_conflicts(trace);
+  total_stalls_ += stalls;
+  cur_trace_ = trace;
+  consume_cycle_ = cur_cycle + stalls;
+  release_cycle_ = cur_cycle + 1 + stalls;
+  consumed_ = false;
 }
 
 void OpcUnit::read_src(RegDataVec& out,

@@ -100,7 +100,7 @@ private:
 // ────────────────────────────────────────────────────────────────────
 class ReformationEngine {
 public:
-  ReformationEngine(std::vector<SimChannel<RtuRsp>>& rsp_out,
+  ReformationEngine(SimPortOutArray<RtuRsp>& rsp_out,
                     PerfStats& perf)
     : rsp_out_(rsp_out), perf_(perf) {}
 
@@ -201,7 +201,7 @@ public:
   }
 
 private:
-  std::vector<SimChannel<RtuRsp>>& rsp_out_;
+  SimPortOutArray<RtuRsp>& rsp_out_;
   PerfStats&                        perf_;
   std::deque<QueueEntry>            queue_;
   std::array<bool, VX_CFG_NUM_WARPS> warp_cb_inflight_{};
@@ -782,10 +782,10 @@ private:
 
 RtuCore::RtuCore(const SimContext& ctx, const char* name, Socket* /*socket*/)
   : SimObject<RtuCore>(ctx, name)
-  , rtu_req_in(VX_CFG_NUM_RTU_CORES, this)
-  , rtu_rsp_out(VX_CFG_NUM_RTU_CORES, this)
-  , dcache_req_out(1, this)
-  , dcache_rsp_in(1, this)
+  , rtu_req_in(this, VX_CFG_NUM_RTU_CORES, 2)
+  , rtu_rsp_out(this, VX_CFG_NUM_RTU_CORES)
+  , dcache_req_out(this, 1)
+  , dcache_rsp_in(this, 1, 2)
   , impl_(new Impl(this))
 {}
 

@@ -63,10 +63,11 @@ public:
   // Try to release the lock. Returns true on success (lock cleared,
   // trace forwarded). Conditions: pending-requests table empty AND
   // output channel can accept the trace.
-  bool try_release(SimChannel<instr_trace_t*>& out, bool pending_empty) {
+  bool try_release(SimPortIn<instr_trace_t*>& out, bool pending_empty) {
     if (!locked_) return false;
     if (!pending_empty) return false;
-    if (!out.try_send(trace_)) return false;
+    if (out.full()) return false;
+    out.push(trace_, 1);
     locked_ = false;
     trace_ = nullptr;
     return true;
@@ -81,7 +82,7 @@ private:
   bool locked_ = false;
 };
 
-class LsuUnit : public FuncUnit<VX_CFG_NUM_LSU_BLOCKS> {
+class LsuUnit : public FuncUnit<LsuUnit, VX_CFG_NUM_LSU_BLOCKS> {
 public:
 	LsuUnit(const SimContext& ctx, const char* name, Core*);
 	~LsuUnit();
@@ -91,16 +92,21 @@ public:
 	// load requests arbitrate with the block's own traffic into its
 	// lmem_switch; response fragments return here with the client's own tag
 	// restored.
-	std::vector<SimChannel<LsuReq>> TcuReqIn;
-	std::vector<SimChannel<LsuRsp>> TcuRspOut;
+	SimPortInArray<LsuReq> TcuReqIn;
+	SimPortOutArray<LsuRsp> TcuRspOut;
 #endif
+
+	// Per block: requests toward its lmem switch, and the switch's one-entry
+	// response buffer.
+	SimPortOutArray<LsuReq> mem_req_out;
+	SimPortInArray<LsuRsp> mem_rsp_in;
 
 	// Returns true when all LSU blocks have no in-flight requests.
 	bool drained() const;
 
-protected:
-	void on_reset() override;
-	void on_tick() override;
+	void on_reset();
+	void on_tick();
+	bool busy() const;
 
 private:
 
@@ -196,8 +202,8 @@ private:
 	// result arbiter, whose own two-entry buffer is Outputs: responses, and the
 	// instructions that commit without one (stores, skipped requests, fences).
 	// Each registers its ready.
-	std::vector<SimChannel<instr_trace_t*>> rsp_bufs_;
-	std::vector<SimChannel<instr_trace_t*>> no_rsp_bufs_;
+	SimPortInArray<instr_trace_t*> rsp_bufs_;
+	SimPortInArray<instr_trace_t*> no_rsp_bufs_;
 
 	// Moves one result into the arbiter's buffer, a response first.
 	void arbitrate_results(uint32_t b);

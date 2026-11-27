@@ -86,7 +86,7 @@ class TexUnit {
 public:
   // bus_delay: extra cycles a request spends merging with other SFU blocks'
   // requests onto the core's texture bus.
-  TexUnit(Core* core, SimChannel<TexReq>& req_out, uint32_t bus_delay = 0)
+  TexUnit(Core* core, SimPortOut<TexReq>& req_out, uint32_t bus_delay = 0)
     : core_(core), req_out_(req_out), bus_delay_(bus_delay) {}
 
   // Submit one sample request: u/v/lod ride src_data[0..2], the texel returns in
@@ -95,7 +95,7 @@ public:
 
 private:
   Core*               core_;
-  SimChannel<TexReq>& req_out_;
+  SimPortOut<TexReq>& req_out_;
   uint32_t            bus_delay_;
 };
 

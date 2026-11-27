@@ -785,24 +785,24 @@ public:
   // tag namespace and counts toward the response-sink credit on mem_rsp_in.
   static constexpr uint32_t AMO_PASSTHRU_CAP = 8;
 
-  SimChannel<MemReq> core_req_in;
-  SimChannel<MemRsp> core_rsp_out;
+  SimPortIn<MemReq> core_req_in;
+  SimPortOut<MemRsp> core_rsp_out;
 
-  SimChannel<MemReq> mem_req_out;
+  SimPortOut<MemReq> mem_req_out;
   // Sized to sink every response this bank can solicit (one per MSHR fill
   // plus one per AMO passthrough probe). A memory response must never
   // back-pressure its sender: if it can, the request and response channels
   // deadlock through each other across cache levels — this bank's pipe head
   // stalls on a full mem_req_out while the downstream cache's pipe head
   // stalls on the response it cannot deliver here.
-  SimChannel<MemRsp> mem_rsp_in;
+  SimPortIn<MemRsp> mem_rsp_in;
 
   CacheBank(const SimContext &ctx,
             const char *name,
             const Cache::Config &config,
             const params_t &params,
             uint32_t bank_id)
-      : SimObject<CacheBank>(ctx, name), core_req_in(this), core_rsp_out(this), mem_req_out(this), mem_rsp_in(this, config.mshr_size + AMO_PASSTHRU_CAP), config_(config), params_(params), bank_id_(bank_id), mem_req_delay_(mem_req_delay(config)), sets_(params.sets_per_bank, set_t(params.lines_per_set, params.sectors_per_line)), mshr_(config.mshr_size), pipe_req_(TFifo<bank_req_t>::Create("", config.latency, std::max<uint32_t>(2u, config.latency))), lazy_q_(TFifo<uint32_t>::Create("", 1, lazyq_size(config))), rand_ctr_(0), adm_seq_ctr_(0)
+      : SimObject<CacheBank>(ctx, name), core_req_in(this, 2), core_rsp_out(this), mem_req_out(this), mem_rsp_in(this, config.mshr_size + AMO_PASSTHRU_CAP), config_(config), params_(params), bank_id_(bank_id), mem_req_delay_(mem_req_delay(config)), sets_(params.sets_per_bank, set_t(params.lines_per_set, params.sectors_per_line)), mshr_(config.mshr_size), pipe_req_(this, std::max<uint32_t>(2u, config.latency)), lazy_q_(this, lazyq_size(config)), rand_ctr_(0), adm_seq_ctr_(0)
 #if VX_CFG_EXT_A_ENABLED
       , amo_unit_(__MAX(2u, (uint32_t)VX_CFG_AMO_RS_SIZE))
 #endif
@@ -869,6 +869,13 @@ public:
   }
 
 protected:
+  // Replay, forward or flush work, a fill outstanding (a tick accumulates its
+  // latency), or an atomic's write-back due.
+  bool busy() const {
+    return mshr_.has_ready_reqs() || fwd_active_ || flushing_ || token_flushing_
+        || pending_fill_reqs_ != 0 || amo_wb_pending_;
+  }
+
   void on_reset() {
     // perf_stats_ survives: the MPM counters run from device reset.
     pending_mshr_size_ = 0;
@@ -932,10 +939,10 @@ protected:
     // retire stalls the whole pipeline, its input stage included: a bubble
     // behind the head stays a bubble, and nothing enters or forwards.
     bool pipe_stall = false;
-    if (!pipe_req_->empty()) {
-        uint32_t pipe_size = pipe_req_->size();
+    if (!pipe_req_.empty()) {
+        uint32_t pipe_size = pipe_req_.size();
         this->processRequests();
-        pipe_stall = (pipe_req_->size() == pipe_size);
+        pipe_stall = (pipe_req_.size() == pipe_size);
     }
 
     // Fill-forward drain: complete the read-prefix of a fill's pending chain
@@ -947,7 +954,7 @@ protected:
     }
 
     // Accept one new input if there's room.
-    if (!pipe_req_->full() && !pipe_stall) {
+    if (!pipe_req_.full() && !pipe_stall) {
         this->processInputs(fwd_consumed);
     }
 
@@ -961,17 +968,6 @@ protected:
 
     // calculate memory latency
     perf_stats_.mem_latency += pending_fill_reqs_;
-
-    // sleep when fully drained: no queued or in-flight input, an empty pipe,
-    // and no replay/forward/flush work. pending_fill_reqs_ == 0 also keeps
-    // the mem_latency accumulation exact. flush_begin() re-arms explicitly;
-    // any packet reserved toward core_req_in/mem_rsp_in re-arms on arrival.
-    if (this->core_req_in.size() == 0 && this->mem_rsp_in.size() == 0
-     && pipe_req_->size() == 0 && lazy_q_->size() == 0 && !mshr_.has_ready_reqs()
-     && !fwd_active_ && !flushing_ && !token_flushing_ && pending_fill_reqs_ == 0
-     && !amo_wb_pending_) {
-      this->tick_sleep();
-    }
   }
 
 private:
@@ -1018,14 +1014,14 @@ private:
           bank_req_t park_req = head->bank_req;
           park_req.mshr_id = mshr_.park_next_replay(chain_retry_);
           park_req.type    = bank_req_t::Park;
-          pipe_req_->push(park_req);
+          pipe_req_.push(park_req, config_.latency);
           DT(3, this->name() << " mshr-park: " << park_req);
           return;
         }
       }
       bank_req_t bank_req;
       mshr_.dequeue(&bank_req);
-      pipe_req_->push(bank_req);
+      pipe_req_.push(bank_req, config_.latency);
       DT(3, this->name() << " replay-deq: " << bank_req);
       return;
     }
@@ -1086,7 +1082,7 @@ private:
         bank_req.data    = mem_rsp.data;
         bank_req.refetch = root_peek.refetch;
         bank_req.refetch_retry = root_peek.refetch_retry;
-        pipe_req_->push(bank_req);
+        pipe_req_.push(bank_req, config_.latency);
         // The chain wakes at accept: its replays enter the pipe behind the fill,
         // so they reach the array after the install. The forward window answers
         // the chain's leading reads from the staged sector meanwhile; a refetch
@@ -1108,11 +1104,11 @@ private:
         --pending_fill_reqs_;
         return;
       }
-    } else if (!lazy_q_->empty() && !fwd_active_) {
+    } else if (!lazy_q_.empty() && !fwd_active_) {
       // A data-less fill through the same path, below memory fills in
       // priority: the allocation of a write-miss root, or the refetch of a
       // sector every store has covered.
-      uint32_t mshr_id = lazy_q_->peek();
+      uint32_t mshr_id = lazy_q_.peek();
       const auto &root_peek = mshr_.peek(mshr_id);
       const uint32_t set_id    = root_peek.set_id;
       const uint64_t addr_tag  = root_peek.addr_tag;
@@ -1132,7 +1128,7 @@ private:
         bank_req.nodata  = true;
         bank_req.refetch = root_peek.refetch;
         bank_req.refetch_retry = root_peek.refetch_retry;
-        pipe_req_->push(bank_req);
+        pipe_req_.push(bank_req, config_.latency);
         mshr_.replay(mshr_id);
         // A looped-back refetch completes a fully written sector: like a
         // memory refetch, its chain waits for it to install.
@@ -1142,7 +1138,7 @@ private:
           refetch_hold_retry_ = bank_req.refetch_retry;
         }
         DT(3, this->name() << " lazy-fill: " << bank_req);
-        lazy_q_->pop();
+        lazy_q_.pop();
         return;
       }
     }
@@ -1154,7 +1150,7 @@ private:
       bank_req_t wb_req;
       wb_req.reset();
       wb_req.type = bank_req_t::AmoWb;
-      pipe_req_->push(wb_req);
+      pipe_req_.push(wb_req, config_.latency);
       amo_wb_pending_ = false;
       amo_busy_ = false;
       return;
@@ -1323,7 +1319,7 @@ private:
       bank_req.byteen  = core_req.byteen;
       bank_req.amo_cmp = core_req.amo_cmp;
       bank_req.flags   = core_req.flags;
-      pipe_req_->push(bank_req);
+      pipe_req_.push(bank_req, config_.latency);
       DT(3, this->name() << " core-req: " << core_req);
       // pending_mshr_size_ tracks Core-typed in-flight requests so the
       // MSHR pre-reservation in processInputs is conservative. AmoProbe
@@ -1484,7 +1480,7 @@ private:
   // admitted, and a refetch with no data to read may loop back; one that
   // cannot reads memory instead.
   bool lazyRoom() const {
-    return lazy_q_->size() < lazyq_size(config_) - config_.latency;
+    return lazy_q_.size() < lazyq_size(config_) - config_.latency;
   }
 
   // Fill-forward drain: complete the oldest ready replay directly when it is
@@ -1691,7 +1687,7 @@ private:
   }
 
   void processRequests() {
-    const bank_req_t &bank_req = pipe_req_->peek();
+    const bank_req_t &bank_req = pipe_req_.peek();
 
     // Stores get a response when (a) the cache is configured to always emit
     // them (config_.write_reponse, global), or (b) the request opts in via
@@ -1703,7 +1699,7 @@ private:
     switch (bank_req.type) {
     case bank_req_t::None:
     case bank_req_t::AmoWb:
-      pipe_req_->pop();
+      pipe_req_.pop();
       return;
 
 #if VX_CFG_EXT_A_ENABLED
@@ -1782,7 +1778,7 @@ private:
       DT(3, this->name() << " amo-probe-fwd: " << amo_fwd);
       ++pending_fill_reqs_; // counts as an outstanding mem-roundtrip for perf
       --pending_amo_probes_; // reservation transferred to the table entry
-      pipe_req_->pop();
+      pipe_req_.pop();
       return;
     }
 #endif
@@ -1791,7 +1787,7 @@ private:
       if (!this->processFill(bank_req)) {
         return; // stall
       }
-      pipe_req_->pop();
+      pipe_req_.pop();
     } break;
 
     case bank_req_t::Park: {
@@ -1807,9 +1803,9 @@ private:
       if (resident_id != -1) {
         const auto &sec = set.lines.at(resident_id).sectors.at(sector_id);
         if (sec.valid && sec.partial && sector_written(sec) && this->lazyRoom()) {
-          lazy_q_->push(bank_req.mshr_id);
+          lazy_q_.push(bank_req.mshr_id, 1);
           DT(3, this->name() << " refetch-loop: " << bank_req);
-          pipe_req_->pop();
+          pipe_req_.pop();
           return;
         }
       }
@@ -1821,7 +1817,7 @@ private:
       this->send_mem_req(fill);
       DT(3, this->name() << " refetch-req: " << fill);
       ++pending_fill_reqs_;
-      pipe_req_->pop();
+      pipe_req_.pop();
     } break;
 
     case bank_req_t::Replay: {
@@ -1846,7 +1842,7 @@ private:
         // A write-through merge already propagated its store downstream at
         // miss time, so a vanished line needs no replay — drop it.
         if (bank_req.write && bank_req.skip_core_rsp) {
-          pipe_req_->pop();
+          pipe_req_.pop();
           return;
         }
         // Load / AMO: the sector must be re-fetched before the access can
@@ -1873,7 +1869,7 @@ private:
           this->send_mem_req(fill);
           ++pending_fill_reqs_;
         }
-        pipe_req_->pop();
+        pipe_req_.pop();
         return;
       }
 
@@ -1884,7 +1880,7 @@ private:
           return; // stall
         if (config_.repl_policy == Cache::PLRU)
           set.update_lru(hit_id);
-        pipe_req_->pop();
+        pipe_req_.pop();
         return;
       }
 #endif
@@ -1927,7 +1923,7 @@ private:
       if (config_.repl_policy == Cache::PLRU)
         set.update_lru(hit_id);
 
-      pipe_req_->pop();
+      pipe_req_.pop();
     } break;
 
     case bank_req_t::Core: {
@@ -1986,7 +1982,7 @@ private:
           }
           --pending_mshr_size_;
           this->pipeLineErase(set_id, addr_tag);
-          pipe_req_->pop();
+          pipe_req_.pop();
           return;
         }
 #if VX_CFG_EXT_A_ENABLED
@@ -1998,7 +1994,7 @@ private:
             set.update_lru(hit_id);
           --pending_mshr_size_;
           this->pipeLineErase(set_id, addr_tag);
-          pipe_req_->pop();
+          pipe_req_.pop();
           return;
         }
 #endif
@@ -2102,7 +2098,7 @@ private:
           const bool refetch_loop = partial_resident && !fill_pending
                                  && sector_written(set.lines.at(present_id).sectors.at(sector_id))
                                  && this->lazyRoom();
-          if ((lazy_alloc || refetch_loop) && lazy_q_->full()) {
+          if ((lazy_alloc || refetch_loop) && lazy_q_.full()) {
             return;
           }
           if (!fill_pending && !lazy_alloc && !refetch_loop && this->mem_req_out.full()) {
@@ -2113,7 +2109,7 @@ private:
           int mshr_id = mshr_.enqueue(bank_req, set_id, addr_tag, sector_id, partial_resident);
           DT(3, this->name() << " mshr-enqueue: " << bank_req);
           if (lazy_alloc || refetch_loop) {
-            lazy_q_->push(mshr_id);
+            lazy_q_.push(mshr_id, 1);
             DT(3, this->name() << (lazy_alloc ? " lazy-alloc: " : " refetch-loop: ") << bank_req);
           } else if (!fill_pending) {
             MemReq fill;
@@ -2135,7 +2131,7 @@ private:
         set.update_lru(hit_id);
       --pending_mshr_size_;
       this->pipeLineErase(set_id, addr_tag);
-      pipe_req_->pop();
+      pipe_req_.pop();
     } break;
 
     default:
@@ -2151,7 +2147,7 @@ private:
     // and invisible to empty(), and a replay in that window still carries a
     // store that must merge before its line is walked.
     if (pending_fill_reqs_ != 0
-     || pipe_req_->size() != 0
+     || pipe_req_.size() != 0
      || !mshr_.empty()) {
       return;
     }
@@ -2200,7 +2196,7 @@ private:
     }
     if (pending_fill_reqs_ != 0
      || this->core_req_in.size() != 0
-     || pipe_req_->size() != 0
+     || pipe_req_.size() != 0
      || !mshr_.empty()) {
       return;
     }
@@ -2288,8 +2284,8 @@ private:
     assert(false && "in-pipe line mirror underflow");
   }
 
-  TFifo<bank_req_t>::Ptr pipe_req_;
-  TFifo<uint32_t>::Ptr   lazy_q_;   // roots awaiting a data-less fill: write misses and written refetches
+  SimPortIn<bank_req_t> pipe_req_;
+  SimPortIn<uint32_t>   lazy_q_;   // roots awaiting a data-less fill: write misses and written refetches
 
   Cache::PerfStats perf_stats_;
 
@@ -2371,17 +2367,17 @@ private:
 // and tag.
 class CachePortArb : public SimObject<CachePortArb> {
 public:
-  std::vector<SimChannel<MemReq>> ReqIn;  // core ports
-  std::vector<SimChannel<MemReq>> ReqOut; // banks
-  std::vector<SimChannel<MemReq>> IoOut;  // non-cacheable requests, per port
+  SimPortInArray<MemReq> ReqIn;   // core ports
+  SimPortOutArray<MemReq> ReqOut; // banks
+  SimPortOutArray<MemReq> IoOut;  // non-cacheable requests, per port
 
   CachePortArb(const SimContext& ctx, const char* name, const params_t& params,
                uint32_t num_inputs, uint32_t num_banks, uint32_t merge_group,
                bool merge_line, bool skid)
     : SimObject<CachePortArb>(ctx, name)
-    , ReqIn(num_inputs, this)
-    , ReqOut(num_banks, this)
-    , IoOut(num_inputs, this)
+    , ReqIn(this, num_inputs, 2)
+    , ReqOut(this, num_banks)
+    , IoOut(this, num_inputs)
     , params_(params)
     , lg2_inputs_(log2ceil(num_inputs))
     // the request crossbar registers its output when it has more than two inputs
@@ -2395,7 +2391,7 @@ public:
              "a read-merge group must be a power of two of at most 64 dividing the ports");
     tree_stage_.reserve(levels_.size());
     for (auto slices : levels_) {
-      tree_stage_.emplace_back(num_banks * slices, this);
+      tree_stage_.emplace_back(this, num_banks * slices, 2);
     }
     rr_.resize(levels_.size() + 1);
     for (uint32_t s = 0; s <= levels_.size(); ++s) {
@@ -2413,7 +2409,7 @@ public:
   // the untaken offer is caught there instead and the ports are released; the
   // register's occupancy is the bank's ready, so the bank is offered nothing
   // while it holds a request, the cycle the bank takes it included.
-  void attach_bank(uint32_t b, SimChannel<MemReq>* bank_in) {
+  void attach_bank(uint32_t b, SimPortIn<MemReq>* bank_in) {
     if (!this->offers_enabled()) {
       return;
     }
@@ -2421,6 +2417,9 @@ public:
     offers_.at(b).bank_in = bank_in;
     bank_in->pop_callback([this, b]() { this->on_bank_pop(b); });
   }
+
+  // The unit woken when a flush token reaches the head of a port.
+  void set_token_waiter(SimObjectBase* unit) { token_waiter_ = unit; }
 
   // Bits of the merged-port mask carried below the request tag.
   uint32_t merge_bits() const { return (merge_group_ > 1) ? merge_group_ : 0; }
@@ -2486,7 +2485,12 @@ public:
   void set_init_cycles(uint32_t cycles) { init_cycles_ = cycles; }
 
 protected:
+  // Sleeps once the ports, the tree and the offers have been empty for two
+  // ticks (see tick), or while nothing is left of the line initialization.
+  bool busy() const { return !asleep_; }
+
   void on_reset() {
+    asleep_ = false;
     for (auto &rr : rr_) {
       std::fill(rr.begin(), rr.end(), 0);
     }
@@ -2517,17 +2521,18 @@ protected:
   }
 
   void on_tick() {
+    asleep_ = false;
     if (init_cycles_ != 0) {
       --init_cycles_;
       return;
     }
     // Sleep once the ports, the tree and the offers have been empty for two
     // ticks: the second idle tick settles the realign registers, so a skipped
-    // tick cannot change them. A request reserved toward any port re-arms it.
+    // tick cannot change them. A request sent toward any port wakes it.
     if (this->quiescent()) {
       if (++idle_ticks_ >= 2) {
         idle_ticks_ = 0;
-        this->tick_sleep();
+        asleep_ = true;
       }
     } else {
       idle_ticks_ = 0;
@@ -2559,8 +2564,7 @@ protected:
       uint32_t inputs = levels_.at(s - 1);
       for (uint32_t b = 0; b < nb; ++b) {
         for (uint32_t sl = 0; sl < slices; ++sl) {
-          auto& out = (s < nl) ? tree_stage_.at(s).at(b * slices + sl) : ReqOut.at(b);
-          if (out.full()) {
+          if (!this->can_put(s, b * slices + sl, b)) {
             continue;
           }
           uint32_t lo = (s < nl) ? sl * kMaxFanout : 0;
@@ -2570,8 +2574,7 @@ protected:
             uint32_t j = (rr + k) % size;
             auto& in = tree_stage_.at(s - 1).at(b * inputs + lo + j);
             if (!in.empty()) {
-              out.send(in.peek(), (s < nl) ? 1 : delay_);
-              in.pop();
+              this->put(s, b * slices + sl, b, in.pop(), delay_);
               rr = (j + 1) % size;
               break;
             }
@@ -2651,8 +2654,7 @@ protected:
       bool granted = false;
       for (uint32_t sl = 0; sl < slices; ++sl) {
         uint32_t slice_want = want.at(b * slices + sl);
-        auto& out = (nl != 0) ? tree_stage_.at(0).at(b * slices + sl) : ReqOut.at(b);
-        if (slice_want == 0 || out.full()) {
+        if (slice_want == 0 || !this->can_put(0, b * slices + sl, b)) {
           continue;
         }
         uint32_t size = this->arb_slice_size(0, sl);
@@ -2662,10 +2664,10 @@ protected:
           j = (j + 1) % size;
         }
         if (this->offers_enabled()) {
-          this->offer(b, sl * slice_ports + j, out, merged, wants.at(b) - 1, &rr, (j + 1) % size);
+          this->offer(b, sl * slice_ports + j, merged, wants.at(b) - 1, &rr, (j + 1) % size);
           continue;
         }
-        this->grant(sl * slice_ports + j, out, merged);
+        this->grant(b * slices + sl, b, sl * slice_ports + j, merged);
         rr = (j + 1) % size;
         granted = true;
       }
@@ -2673,11 +2675,14 @@ protected:
         collisions_ += wants.at(b) - 1;
       }
     }
+    if (this->any_token()) {
+      token_waiter_->tick_wake();
+    }
   }
 
   // Offer port i's request, with the ports merged into it, to bank b; the
   // ports are dequeued when the bank takes it (on_bank_pop).
-  void offer(uint32_t b, uint32_t i, SimChannel<MemReq>& out, const std::vector<uint64_t>& merged,
+  void offer(uint32_t b, uint32_t i, const std::vector<uint64_t>& merged,
              uint32_t collisions, uint32_t* rr, uint32_t rr_next) {
     auto req = ReqIn.at(i).peek();
     uint64_t mask = (merge_group_ > 1) ? merged.at(i) : 0;
@@ -2692,7 +2697,7 @@ protected:
     offer.collisions = collisions;
     offer.rr         = rr;
     offer.rr_next    = rr_next;
-    out.send(req, 0);
+    ReqOut.at(b).send(req, 0);
   }
 
   void on_bank_pop(uint32_t b) {
@@ -2712,15 +2717,20 @@ protected:
   void release_ports(uint32_t b) {
     auto& offer = offers_.at(b);
     uint32_t i = offer.port;
+    bool token = false;
     if (offer.mask != 0) {
       uint32_t base = (i / merge_group_) * merge_group_;
       for (uint64_t f = offer.mask; f != 0; f &= f - 1) {
         uint32_t port = base + __builtin_ctzll(f);
         DT(3, this->name() << " read-merge: port=" << port << ", leader=" << i << ", " << ReqIn.at(port).peek());
         ReqIn.at(port).pop();
+        token |= this->is_token(port);
       }
     }
     ReqIn.at(i).pop();
+    if (token || this->is_token(i)) {
+      token_waiter_->tick_wake();
+    }
     *offer.rr = offer.rr_next;
     collisions_ += offer.collisions;
     offer.valid = false;
@@ -2743,8 +2753,26 @@ protected:
     return tags;
   }
 
-  // Send port i's request to its bank, with the ports merged into it.
-  void grant(uint32_t i, SimChannel<MemReq>& out, const std::vector<uint64_t>& merged) {
+  // Level s's output `k` (of bank b): a tree buffer of the level above, or,
+  // past the last level, the bank's input.
+  bool can_put(uint32_t s, uint32_t k, uint32_t b) {
+    if (s < levels_.size()) {
+      return !tree_stage_.at(s).at(k).full();
+    }
+    return !ReqOut.at(b).full();
+  }
+
+  void put(uint32_t s, uint32_t k, uint32_t b, MemReq req, uint32_t delay) {
+    if (s < levels_.size()) {
+      tree_stage_.at(s).at(k).push(std::move(req), 1);
+    } else {
+      ReqOut.at(b).send(std::move(req), delay);
+    }
+  }
+
+  // Send port i's request to its bank (output k of the first level), with the
+  // ports merged into it.
+  void grant(uint32_t k, uint32_t b, uint32_t i, const std::vector<uint64_t>& merged) {
     auto req = ReqIn.at(i).peek();
     uint64_t mask = 0;
     if (merge_group_ > 1) {
@@ -2760,7 +2788,7 @@ protected:
     uint64_t tag = (((uint64_t(req.tag) << this->merge_bits()) | mask) << lg2_inputs_) | i;
     __assert((tag >> 32) == 0, "cache bank tag overflow");
     req.tag = uint32_t(tag);
-    out.send(req, levels_.empty() ? delay_ : 1);
+    this->put(0, k, b, req, delay_);
     ReqIn.at(i).pop();
   }
 
@@ -2870,7 +2898,7 @@ private:
   uint32_t delay_;
   uint32_t init_cycles_ = 0;
   std::vector<uint32_t> levels_;                            // [level] slices per bank
-  std::vector<std::vector<SimChannel<MemReq>>> tree_stage_; // [level][bank][slice]
+  std::vector<SimPortInArray<MemReq>> tree_stage_; // [level][bank][slice]
   std::vector<std::vector<uint32_t>> rr_;                   // [arbiter level][bank][slice] next to grant
   uint32_t merge_group_;
   bool merge_line_;
@@ -2899,8 +2927,10 @@ private:
   std::vector<uint8_t>  start_;
   std::vector<uint8_t>  owes_head_;
   uint32_t idle_ticks_ = 0;
+  bool asleep_ = false;
+  SimObjectBase* token_waiter_ = nullptr;
   struct offer_t {
-    SimChannel<MemReq>* bank_in = nullptr;
+    SimPortIn<MemReq>* bank_in = nullptr;
     bool     valid       = false;
     bool     withdrawing = false;
     bool     held        = false; // caught by the bank's skid register
@@ -2928,15 +2958,15 @@ class CacheRspMcast : public SimObject<CacheRspMcast> {
 public:
   using Ptr = std::shared_ptr<CacheRspMcast>;
 
-  std::vector<SimChannel<MemRsp>> RspIn;  // banks
-  std::vector<SimChannel<MemRsp>> RspOut; // core ports
+  SimPortInArray<MemRsp> RspIn;   // banks
+  SimPortOutArray<MemRsp> RspOut; // core ports
 
   CacheRspMcast(const SimContext& ctx, const char* name, uint32_t num_banks,
                 uint32_t num_outputs, uint32_t merge_group, bool merge_line,
                 uint32_t out_delay)
     : SimObject<CacheRspMcast>(ctx, name)
-    , RspIn(num_banks, this)
-    , RspOut(num_outputs, this)
+    , RspIn(this, num_banks, 2)
+    , RspOut(this, num_outputs)
     , lg2_outputs_(log2ceil(num_outputs))
     , merge_group_(merge_group)
     , merge_line_(merge_line)
@@ -2945,7 +2975,7 @@ public:
     , sent_(num_banks, 0)
     , last_grant_(num_outputs * slices_, num_banks - 1)
     , join_rr_(num_outputs, slices_ - 1)
-    , tree_stage_((slices_ > 1) ? num_outputs * slices_ : 0, this)
+    , tree_stage_(this, (slices_ > 1) ? num_outputs * slices_ : 0, 2)
   {
     __assert(num_outputs <= 64 && merge_group < 64, "the read-merge response network takes at most 64 ports");
     __assert(arb_tree_levels(num_banks).size() <= 1, "the read-merge response network takes one tree level");
@@ -2966,10 +2996,11 @@ protected:
     std::fill(join_rr_.begin(), join_rr_.end(), slices_ - 1);
   }
 
+  bool busy() const { return false; }  // no work beyond its inputs
+
   void on_tick() {
     uint32_t nb = RspIn.size();
     uint32_t no = RspOut.size();
-    bool idle = true;
     // the tree's join level: one slice buffer per port per cycle
     for (uint32_t o = 0; o < no && slices_ > 1; ++o) {
       for (uint32_t k = 1; k <= slices_; ++k) {
@@ -2986,30 +3017,34 @@ protected:
         break;
       }
     }
-    for (auto& stage : tree_stage_) {
-      idle &= (stage.size() == 0);
-    }
     std::vector<uint64_t> pending(nb, 0);
     for (uint32_t b = 0; b < nb; ++b) {
       if (RspIn.at(b).empty()) {
         continue;
       }
-      idle = false;
       auto tag = RspIn.at(b).peek().tag;
       uint32_t port = tag & ((1u << lg2_outputs_) - 1);
       uint64_t mask = (tag >> lg2_outputs_) & ((1ull << merge_group_) - 1);
       uint64_t targets = (1ull << port) | (mask << ((port / merge_group_) * merge_group_));
       pending.at(b) = targets & ~sent_.at(b);
     }
-    if (idle) {
-      this->tick_sleep();
-      return;
-    }
+    // A slice grants into its tree stage; a single slice grants straight into
+    // the port.
+    auto try_put = [&](uint32_t o, uint32_t sl, const MemRsp& rsp) {
+      if (slices_ == 1) {
+        return RspOut.at(o).try_send(rsp, out_delay_);
+      }
+      auto& stage = tree_stage_.at(o * slices_ + sl);
+      if (stage.full()) {
+        return false;
+      }
+      stage.push(rsp, 1);
+      return true;
+    };
     for (uint32_t o = 0; o < no; ++o) {
       for (uint32_t sl = 0; sl < slices_; ++sl) {
         uint32_t lo = (slices_ > 1) ? sl * kMaxFanout : 0;
         uint32_t hi = (slices_ > 1) ? std::min(lo + kMaxFanout, nb) : nb;
-        auto& out = (slices_ > 1) ? tree_stage_.at(o * slices_ + sl) : RspOut.at(o);
         auto& rr = last_grant_.at(o * slices_ + sl);
         for (uint32_t k = 1; k <= nb; ++k) {
           uint32_t b = (rr + k) % nb;
@@ -3023,7 +3058,7 @@ protected:
             __assert(rsp.merged_tags, "a line-merged response lost its merged tags");
             rsp.tag = rsp.merged_tags->at(o % merge_group_);
           }
-          if (out.try_send(rsp, (slices_ > 1) ? 1 : out_delay_)) {
+          if (try_put(o, sl, rsp)) {
             DT(4, this->name() << " rsp" << b << "_" << o << ": " << rsp);
             if (slices_ == 1) {
               DT(3, this->name() << " core-rsp" << o << ": " << rsp);
@@ -3052,7 +3087,7 @@ private:
   std::vector<uint64_t> sent_;       // [bank] ports that took the lane's response
   std::vector<uint32_t> last_grant_; // [port][slice] round-robin pointer
   std::vector<uint32_t> join_rr_;    // [port]
-  std::vector<SimChannel<MemRsp>> tree_stage_; // [port][slice]
+  SimPortInArray<MemRsp> tree_stage_; // [port][slice]
 
   friend class SimObject<CacheRspMcast>;
 };
@@ -3065,12 +3100,12 @@ class FlushTap : public SimObject<FlushTap> {
 public:
   using Ptr = std::shared_ptr<FlushTap>;
 
-  SimChannel<MemRsp> RspIn;
-  SimChannel<MemRsp> RspOut;
+  SimPortIn<MemRsp> RspIn;
+  SimPortOut<MemRsp> RspOut;
 
   FlushTap(const SimContext& ctx, const char* name, uint32_t delay)
     : SimObject<FlushTap>(ctx, name)
-    , RspIn(this)
+    , RspIn(this, 2, &FlushTap::pass)
     , RspOut(this)
     , delay_(delay)
   {}
@@ -3094,19 +3129,14 @@ protected:
     answered_ = false;
   }
 
-  void on_tick() {
-    if (RspIn.empty()) {
-      this->tick_sleep();
-      return;
-    }
+  bool pass(MemRsp& rsp) {
     if (armed_) {
       DT(3, this->name() << " flush-fwd-rsp");
       armed_ = false;
       answered_ = true;
-      RspIn.pop();
-    } else if (RspOut.try_send(RspIn.peek(), delay_)) {
-      RspIn.pop();
+      return true;
     }
+    return RspOut.try_send(rsp, delay_);
   }
 
 private:
@@ -3120,7 +3150,7 @@ private:
 class Cache::Impl {
 public:
   Impl(Cache *simobject, const Config &config)
-      : simobject_(simobject), config_(config), params_(config), banks_(1 << config.B), nc_mem_arbs_(config.mem_ports) {
+      : simobject_(simobject), config_(config), params_(config), banks_(1 << config.B), nc_mem_arbs_(config.mem_ports), nc_rsp_in_(simobject, 0, 2), nc_bypass_out_(simobject, 0), mem_req_net_(simobject, 0, 0), net_out_(simobject, 0), token_out_(simobject, 0), bank_rsp_in_(simobject, 0, 2), io_req_in_(simobject, 0, 2), core_rsp_out_(simobject, 0), mcast_rsp_in_(simobject, 0, 2) {
     char sname[100];
 
     uint32_t num_banks = (1 << config.B);
@@ -3129,12 +3159,12 @@ public:
       snprintf(sname, 100, "%s-bypass_arb", simobject->name().c_str());
       auto bypass_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, config_.num_inputs, config_.mem_ports);
       for (uint32_t i = 0; i < config_.num_inputs; ++i) {
-        simobject->core_req_in.at(i).bind(&bypass_arb->ReqIn.at(i));
-        bypass_arb->RspOut.at(i).bind(&simobject->core_rsp_out.at(i));
+        simobject->core_req_in.at(i) = &bypass_arb->ReqIn.at(i);
+        simobject->core_rsp_out.at(i) = &bypass_arb->RspOut.at(i);
       }
       for (uint32_t i = 0; i < config_.mem_ports; ++i) {
-        bypass_arb->ReqOut.at(i).bind(&simobject->mem_req_out.at(i));
-        simobject->mem_rsp_in.at(i).bind(&bypass_arb->RspIn.at(i));
+        simobject->mem_req_out.at(i) = &bypass_arb->ReqOut.at(i);
+        simobject->mem_rsp_in.at(i) = &bypass_arb->RspIn.at(i);
       }
       return;
     }
@@ -3143,6 +3173,12 @@ public:
     for (uint32_t i = 0; i < config_.mem_ports; ++i) {
       snprintf(sname, 100, "%s-nc_arb%d", simobject->name().c_str(), i);
       nc_mem_arbs_.at(i) = MemArbiter::Create(sname, ArbiterType::Priority, 2, 1);
+    }
+    nc_rsp_in_ = SimPortInArray<MemRsp>(simobject, config_.mem_ports, 2);
+    nc_bypass_out_ = SimPortOutArray<MemReq>(simobject, config_.mem_ports);
+    for (uint32_t i = 0; i < config_.mem_ports; ++i) {
+      nc_mem_arbs_.at(i)->RspOut.at(1).bind(&nc_rsp_in_.at(i));
+      nc_bypass_out_.at(i).bind(&nc_mem_arbs_.at(i)->ReqIn.at(1));
     }
 
     // Bank memory arbiter delays. Each level of the memory-side request
@@ -3174,8 +3210,8 @@ public:
 
     // Connect non-cacheable arbiter output port 0 to outgoing memory ports
     for (uint32_t i = 0; i < config_.mem_ports; ++i) {
-      nc_mem_arbs_.at(i)->ReqOut.at(0).bind(&simobject->mem_req_out.at(i));
-      simobject->mem_rsp_in.at(i).bind(&nc_mem_arbs_.at(i)->RspIn.at(0));
+      simobject->mem_req_out.at(i) = &nc_mem_arbs_.at(i)->ReqOut.at(0);
+      simobject->mem_rsp_in.at(i) = &nc_mem_arbs_.at(i)->RspIn.at(0);
     }
 
     snprintf(sname, 100, "%s-mem_arb", simobject->name().c_str());
@@ -3184,14 +3220,13 @@ public:
 
     // Connect bank's memory arbiter to non-cacheable arbiter's input port 0
     if (mem_net_extra != 0) {
-      mem_req_net_.reserve(config_.mem_ports);
-      for (uint32_t i = 0; i < config_.mem_ports; ++i) {
-        mem_req_net_.emplace_back(simobject, mem_arb_delay + mem_net_extra + 1);
-      }
+      mem_req_net_ = SimPortInArray<MemReq>(simobject, config_.mem_ports, mem_arb_delay + mem_net_extra + 1);
+      net_out_ = SimPortOutArray<MemReq>(simobject, config_.mem_ports);
     }
     for (uint32_t i = 0; i < config_.mem_ports; ++i) {
       if (mem_net_extra != 0) {
         bank_mem_arb->ReqOut.at(i).bind(&mem_req_net_.at(i));
+        net_out_.at(i).bind(&nc_mem_arbs_.at(i)->ReqIn.at(0));
       } else {
         bank_mem_arb->ReqOut.at(i).bind(&nc_mem_arbs_.at(i)->ReqIn.at(0));
       }
@@ -3200,6 +3235,10 @@ public:
       flush_taps_.at(i)->RspOut.bind(&bank_mem_arb->RspIn.at(i));
     }
     bank_arb_ = bank_mem_arb;
+    token_out_ = SimPortOutArray<MemReq>(simobject, num_banks);
+    for (uint32_t l = 0; l < num_banks; ++l) {
+      token_out_.at(l).bind(&bank_arb_->ReqIn.at(l));
+    }
 
     // Create the core-port arbiter ahead of the banks it feeds
     snprintf(sname, 100, "%s-port_arb", simobject->name().c_str());
@@ -3207,8 +3246,16 @@ public:
     const bool merge_line = config_.merge_line && merge_group > 1;
     port_arb_ = CachePortArb::Create(sname, params_, config_.num_inputs, num_banks, merge_group, merge_line,
                                      config_.core_req_skid);
+    port_arb_->set_token_waiter(simobject);
     for (uint32_t i = 0; i < config_.num_inputs; ++i) {
-      simobject->core_req_in.at(i).bind(&port_arb_->ReqIn.at(i));
+      simobject->core_req_in.at(i) = &port_arb_->ReqIn.at(i);
+    }
+
+    // The cache sends core responses itself, and under read merging the
+    // response network feeds the same ports through wires of the cache.
+    core_rsp_out_ = SimPortOutArray<MemRsp>(simobject, config_.num_inputs);
+    for (uint32_t i = 0; i < config_.num_inputs; ++i) {
+      simobject->core_rsp_out.at(i) = &core_rsp_out_.at(i);
     }
 
     // Create bank's core crossbar; it carries the bank responses back to the
@@ -3234,8 +3281,10 @@ public:
     if (port_arb_->merge_bits() != 0) {
       rsp_mcast_ = CacheRspMcast::Create(sname, num_banks, config_.num_inputs, port_arb_->merge_bits(), merge_line,
                                          core_rsp_delay_);
+      mcast_rsp_in_ = SimPortInArray<MemRsp>(simobject, config_.num_inputs, 2);
       for (uint32_t i = 0; i < config_.num_inputs; ++i) {
-        rsp_mcast_->RspOut.at(i).bind(&simobject->core_rsp_out.at(i));
+        mcast_rsp_in_.at(i).bypass_to(core_rsp_out_.at(i));
+        rsp_mcast_->RspOut.at(i).bind(&mcast_rsp_in_.at(i));
       }
     }
 
@@ -3253,6 +3302,19 @@ public:
       banks_.at(i)->mem_req_out.bind(&bank_mem_arb->ReqIn.at(this->bank_lane(i)));
       bank_mem_arb->RspOut.at(this->bank_lane(i)).bind(&banks_.at(i)->mem_rsp_in);
     }
+
+    // The cache reads the core-response crossbar's outputs and the port
+    // arbiter's non-cacheable requests on ports of its own.
+    io_req_in_ = SimPortInArray<MemReq>(simobject, config_.num_inputs, 2);
+    if (bank_core_xbar_) {
+      bank_rsp_in_ = SimPortInArray<MemRsp>(simobject, config_.num_inputs, 2);
+    }
+    for (uint32_t i = 0; i < config_.num_inputs; ++i) {
+      if (bank_core_xbar_) {
+        bank_core_xbar_->RspOut.at(i).bind(&bank_rsp_in_.at(i));
+      }
+      port_arb_->IoOut.at(i).bind(&io_req_in_.at(i));
+    }
   }
 
   void reset() {
@@ -3263,6 +3325,13 @@ public:
     // coherent, so it does not walk them again.
     init_cycles_ = SimPlatform::instance().launch_resetting() ? 0 : params_.sets_per_bank;
     port_arb_->set_init_cycles(init_cycles_);
+  }
+
+  // The line initialization, a flush in progress, or a flush token at a port's
+  // head (the port arbiter wakes the cache when one gets there).
+  bool busy() const {
+    return !config_.bypass
+        && (init_cycles_ != 0 || flush_state_ != FlushState::Idle || port_arb_->any_token());
   }
 
   void tick() {
@@ -3279,7 +3348,7 @@ public:
     // handle cache bypasss responses
     for (uint32_t i = 0, n = config_.mem_ports; i < n; ++i) {
       // Forward non-cacheable arbiter's output (1) to core response ports
-      auto &bypass = nc_mem_arbs_.at(i)->RspOut.at(1);
+      auto &bypass = nc_rsp_in_.at(i);
       if (!bypass.empty()) {
         auto &mem_rsp = bypass.peek();
         if (this->processBypassResponse(mem_rsp)) {
@@ -3293,18 +3362,18 @@ public:
     // bank memory requests through the memory-side network's deeper levels
     for (uint32_t i = 0, n = mem_req_net_.size(); i < n; ++i) {
       auto &net = mem_req_net_.at(i);
-      if (!net.empty() && nc_mem_arbs_.at(i)->ReqIn.at(0).try_send(net.peek(), 0)) {
+      if (!net.empty() && net_out_.at(i).try_send(net.peek(), 0)) {
         net.pop();
       }
     }
 
     // schedule core responses
     for (uint32_t req_id = 0, n = rsp_mcast_ ? 0 : config_.num_inputs; req_id < n; ++req_id) {
-      auto &bank_rsp = bank_core_xbar_->RspOut.at(req_id);
+      auto &bank_rsp = bank_rsp_in_.at(req_id);
       if (bank_rsp.empty())
         continue;
       auto &core_rsp = bank_rsp.peek();
-      if (simobject_->core_rsp_out.at(req_id).try_send(core_rsp, core_rsp_delay_)) {
+      if (simobject_->core_rsp_out.at(req_id)->try_send(core_rsp, core_rsp_delay_)) {
         DT(3, simobject_->name() << " core-rsp: " << core_rsp);
         bank_rsp.pop();
       }
@@ -3312,7 +3381,7 @@ public:
 
     // non-cacheable core requests split off by the port arbiter
     for (uint32_t req_id = 0, n = config_.num_inputs; req_id < n; ++req_id) {
-      auto &io_req = port_arb_->IoOut.at(req_id);
+      auto &io_req = io_req_in_.at(req_id);
       if (!io_req.empty() && this->processBypassRequest(io_req.peek(), req_id)) {
         io_req.pop();
       }
@@ -3421,7 +3490,7 @@ public:
         token.flags.flush = 1;
         token.flags.fence_op = fwd_op_;
         token.tag = 0;
-        if (bank_arb_->ReqIn.at(this->bank_lane(i)).try_send(token, 1)) {
+        if (token_out_.at(this->bank_lane(i)).try_send(token, 1)) {
           DT(3, simobject_->name() << " flush-fwd: " << token);
           flush_taps_.at(i)->arm();
           fwd_sent_ |= 1ull << i;
@@ -3447,7 +3516,7 @@ public:
       uint32_t i = std::distance(rsp_pending_.begin(), next);
       auto &token = port_arb_->ReqIn.at(i).peek();
       MemRsp rsp{token.tag, token.hart_id, token.uuid};
-      if (simobject_->core_rsp_out.at(i).try_send(rsp, core_rsp_delay_)) {
+      if (simobject_->core_rsp_out.at(i)->try_send(rsp, core_rsp_delay_)) {
         DT(3, simobject_->name() << " flush-rsp: " << rsp);
         if (std::find(next + 1, rsp_pending_.end(), true) == rsp_pending_.end()) {
           flush_state_ = FlushState::Idle;
@@ -3548,12 +3617,12 @@ private:
   bool processBypassResponse(const MemRsp &mem_rsp) {
     // core response backpressure check
     uint32_t req_id = mem_rsp.tag & ((1 << params_.log2_num_inputs) - 1);
-    if (simobject_->core_rsp_out.at(req_id).full())
+    if (simobject_->core_rsp_out.at(req_id)->full())
       return false; // stall
     uint64_t tag = mem_rsp.tag >> params_.log2_num_inputs;
     MemRsp core_rsp{tag, mem_rsp.hart_id, mem_rsp.uuid};
     core_rsp.data = mem_rsp.data;  // forward TLM payload through bypass
-    simobject_->core_rsp_out.at(req_id).send(core_rsp, 0);
+    simobject_->core_rsp_out.at(req_id)->send(core_rsp, 0);
     DT(3, simobject_->name() << " bypass-core-rsp: " << core_rsp);
     return true;
   }
@@ -3561,11 +3630,11 @@ private:
   bool processBypassRequest(const MemReq &core_req, uint32_t req_id) {
     // Push core request to non-cacheable arbiter's input (1)
     uint32_t mem = req_id % config_.mem_ports;
-    if (nc_mem_arbs_.at(mem)->ReqIn.at(1).full())
+    if (nc_bypass_out_.at(mem).full())
       return false; // stall
     MemReq mem_req(core_req);
     mem_req.tag = (core_req.tag << params_.log2_num_inputs) + req_id;
-    nc_mem_arbs_.at(mem)->ReqIn.at(1).send(mem_req, 0);
+    nc_bypass_out_.at(mem).send(mem_req, 0);
     DT(3, simobject_->name() << " bypass-dram-req: " << mem_req);
     return true;
   }
@@ -3590,7 +3659,16 @@ private:
   bool fwd_go_ = false;   // nothing is left ahead of the forwarded tokens
   uint32_t fwd_op_ = 0;   // the forwarded tokens' operation
   bool walk_skip_ = false;  // the banks only quiesce: no walk is owed
-  std::vector<SimChannel<MemReq>> mem_req_net_;
+  // The cache's own ports into its network.
+  SimPortInArray<MemRsp>  nc_rsp_in_;     // [mem port] bypass responses
+  SimPortOutArray<MemReq> nc_bypass_out_; // [mem port] bypass requests
+  SimPortInArray<MemReq>  mem_req_net_;   // [mem port] deeper network levels
+  SimPortOutArray<MemReq> net_out_;       // [mem port] their next hop
+  SimPortOutArray<MemReq> token_out_;     // [bank lane] flush tokens
+  SimPortInArray<MemRsp>  bank_rsp_in_;   // [core port] crossbar outputs
+  SimPortInArray<MemReq>  io_req_in_;     // [core port] non-cacheable requests
+  SimPortOutArray<MemRsp> core_rsp_out_;  // [core port] core responses
+  SimPortInArray<MemRsp>  mcast_rsp_in_;  // [core port] wires from the response network
   std::vector<FlushTap::Ptr> flush_taps_;
 
   // Bank i drives memory port i mod mem_ports: its lane into the bank-to-port
@@ -3606,7 +3684,7 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 
 Cache::Cache(const SimContext &ctx, const char *name, const Config &config)
-    : SimObject<Cache>(ctx, name), core_req_in(config.num_inputs, this), core_rsp_out(config.num_inputs, this), mem_req_out(config.mem_ports, this), mem_rsp_in(config.mem_ports, this), impl_(new Impl(this, config)) {}
+    : SimObject<Cache>(ctx, name), core_req_in(config.num_inputs), core_rsp_out(config.num_inputs), mem_req_out(config.mem_ports), mem_rsp_in(config.mem_ports), impl_(new Impl(this, config)) {}
 
 Cache::~Cache() {
   delete impl_;
@@ -3618,6 +3696,10 @@ void Cache::on_reset() {
 
 void Cache::on_tick() {
   impl_->tick();
+}
+
+bool Cache::busy() const {
+  return impl_->busy();
 }
 
 Cache::PerfStats Cache::perf_stats() const {

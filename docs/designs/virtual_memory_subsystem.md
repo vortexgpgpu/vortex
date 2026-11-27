@@ -713,7 +713,7 @@ in a VM build, so VM runs the same on simulators and FPGA
 ## 9. SimX model
 
 [`sim/simx/mem/`](../../sim/simx/mem/) mirrors the RTL shape with three
-SimObjects bound through channels:
+units bound through ports:
 
 - **`Mmu`** ([`mmu.cpp`](../../sim/simx/mem/mmu.cpp)) — the L1 stage.
   `ReqIn/ReqOut` per port, a `Tlb` CAM (`mmu_tlb.cpp`, MRU replacement,
@@ -737,7 +737,7 @@ SimObjects bound through channels:
 - **`Ptw`** ([`ptw.cpp`](../../sim/simx/mem/ptw.cpp)) — `PTW_NUM_WALKERS`
   walkers with the `W_IDLE/W_REQ/W_WAIT/W_FILL` machine, the same structural
   fault rules, the same walk cache (tag = `vpn >> LEVEL_BITS`, written on the
-  1 → 0 step), PTE fetches on a dedicated `MemReqOut` channel demuxed by
+  1 → 0 step), PTE fetches on a dedicated `MemReqOut` port demuxed by
   walker index in the tag, and the first-fault latch.
 
 Wiring ([`cluster.cpp`](../../sim/simx/cluster.cpp)): every core's two `Mmu`
@@ -752,7 +752,7 @@ translated access behind a walk is blocked until it completes, and the
 walkers issue far too little traffic to starve the demand stream (the reverse
 order starves the walker once untranslated clients share the port).
 `Cluster::running()` folds in `l2tlb_->busy() ∨ ptw_->busy()` because a
-pending walk holds no channel packet.
+pending walk holds no packet in a port.
 
 The control plane is identical in shape: `VX_DCR_MMU_SATP_LO` stores the
 half, `SATP_HI` fans the assembled value to the walker and every core's MMUs
@@ -943,7 +943,7 @@ not drive translation.
 slice MMU; a flat 32-entry per-cache-port TLB with an embedded single-walk
 Sv32-only walker (replaced by the L1 / cluster / walker hierarchy); wiring
 the orphaned `sim/common/mem.cpp` `MemoryUnit` (replaced by the dedicated
-SimObjects); the per-core `csrw satp` as the translation root (replaced by
+units); the per-core `csrw satp` as the translation root (replaced by
 the DCR pair); and the original compile-time `VM_ENABLE` + per-transfer
 host-side translation model (replaced by runtime `DEV_CAPS` discovery and an
 MMU-aware CP DMA).

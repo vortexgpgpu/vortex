@@ -425,10 +425,10 @@ private:
 
 TexCore::TexCore(const SimContext& ctx, const char* name, Socket* socket)
   : SimObject<TexCore>(ctx, name)
-  , tex_req_in(kNumTexCores, this)
-  , tex_rsp_out(kNumTexCores, this)
-  , tcache_req_out(kTcacheNumReqs, this)
-  , tcache_rsp_in(kTcacheNumReqs, this)
+  , tex_req_in(this, kNumTexCores, 2)
+  , tex_rsp_out(this, kNumTexCores)
+  , tcache_req_out(this, kTcacheNumReqs)
+  , tcache_rsp_in(this, kTcacheNumReqs, 2)
 {
   __unused(socket);
   impl_ = new Impl(this);

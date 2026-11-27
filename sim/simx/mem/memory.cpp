@@ -40,10 +40,14 @@ private:
 	Memory*   simobject_;
 	Config    config_;
 	MemCrossBar::Ptr mem_xbar_;
+	// Per DRAM channel: the crossbar's requests, and the responses back to it.
+	SimPortInArray<MemReq>  bank_req_in_;
+	SimPortOutArray<MemRsp> bank_rsp_out_;
 	DramSim   dram_sim_;
 	RAM*      ram_;
 	Memory::PreSendHook pre_send_hook_;
 	mutable PerfStats perf_stats_;
+	Occupancy pending_reads_;
 	struct DramCallbackArgs {
 		Memory::Impl* memsim;
 		MemReq request;
@@ -55,6 +59,8 @@ public:
 	Impl(Memory* simobject, const Config& config)
 		: simobject_(simobject)
 		, config_(config)
+		, bank_req_in_(simobject, config.dram.num_channels, 2)
+		, bank_rsp_out_(simobject, config.dram.num_channels)
 		, dram_sim_(config.dram)
 		, ram_(nullptr)
 	{
@@ -66,8 +72,12 @@ public:
 			return (uint32_t)((req.addr >> lg2_block_size) & (num_banks-1));
 		});
 		for (uint32_t i = 0; i < config.num_ports; ++i) {
-			simobject->mem_req_in.at(i).bind(&mem_xbar_->ReqIn.at(i));
-			mem_xbar_->RspOut.at(i).bind(&simobject->mem_rsp_out.at(i));
+			simobject->mem_req_in.at(i) = &mem_xbar_->ReqIn.at(i);
+			simobject->mem_rsp_out.at(i) = &mem_xbar_->RspOut.at(i);
+		}
+		for (uint32_t b = 0; b < config.dram.num_channels; ++b) {
+			mem_xbar_->ReqOut.at(b).bind(&bank_req_in_.at(b));
+			bank_rsp_out_.at(b).bind(&mem_xbar_->RspIn.at(b));
 		}
 	}
 
@@ -75,11 +85,17 @@ public:
 
 	const PerfStats& perf_stats() const {
 		perf_stats_.bank_stalls = mem_xbar_->collisions();
+		perf_stats_.latency = pending_reads_.total();
 		return perf_stats_;
 	}
 
+	// The counters are never cleared; a device reset drops the reads in
+	// flight.
 	void reset() {
 		dram_sim_.reset();
+		if (!SimPlatform::instance().launch_resetting()) {
+			pending_reads_.add(-int64_t(pending_reads_.value()));
+		}
 	}
 
 	void tick() {
@@ -88,10 +104,10 @@ public:
 		uint32_t num_banks = config_.dram.num_channels;
 		uint32_t lg2_block_size = log2ceil(config_.dram.block_size);
 		for (uint32_t i = 0; i < num_banks; ++i) {
-			if (mem_xbar_->ReqOut.at(i).empty() || !dram_sim_.can_accept(i))
+			if (bank_req_in_.at(i).empty() || !dram_sim_.can_accept(i))
 				continue;
 
-			auto& mem_req = mem_xbar_->ReqOut.at(i).peek();
+			auto& mem_req = bank_req_in_.at(i).peek();
 
 			std::shared_ptr<mem_block_t> rsp_data;
 			if (ram_) {
@@ -141,7 +157,8 @@ public:
 					} else {
 								MemRsp mem_rsp{rsp_args->request.tag, rsp_args->request.hart_id, rsp_args->request.uuid};
 						mem_rsp.data = rsp_args->rsp_data;
-						if (rsp_args->memsim->mem_xbar_->RspIn.at(rsp_args->bank_id).try_send(mem_rsp, RSP_BOUNDARY_DELAY)) {
+						if (rsp_args->memsim->bank_rsp_out_.at(rsp_args->bank_id).try_send(mem_rsp, RSP_BOUNDARY_DELAY)) {
+							rsp_args->memsim->pending_reads_.add(-1);
 							DT(3, rsp_args->memsim->simobject_->name() << " mem-rsp" << rsp_args->bank_id << ": " << mem_rsp);
 							delete rsp_args;
 							return true;
@@ -153,7 +170,13 @@ public:
 			);
 
 			DT(3, simobject_->name() << " mem-req" << i << ": " << mem_req);
-			mem_xbar_->ReqOut.at(i).pop();
+			if (mem_req.is_write()) {
+				++perf_stats_.writes;
+			} else {
+				++perf_stats_.reads;
+				pending_reads_.add(+1);
+			}
+			bank_req_in_.at(i).pop();
 		}
 	}
 
@@ -170,8 +193,8 @@ public:
 
 Memory::Memory(const SimContext& ctx, const char* name, const Config& config)
 	: SimObject<Memory>(ctx, name)
-	, mem_req_in(config.num_ports, this)
-	, mem_rsp_out(config.num_ports, this)
+	, mem_req_in(config.num_ports)
+	, mem_rsp_out(config.num_ports)
 	, impl_(new Impl(this, config))
 {}
 

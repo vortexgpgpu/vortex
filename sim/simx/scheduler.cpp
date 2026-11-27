@@ -68,7 +68,7 @@ Scheduler::Scheduler(const SimContext& ctx, const char* name, Core* core)
     , ipdom_size_(VX_CFG_NUM_THREADS - 1)
 {
   // create child SimObjects (CTA dispatcher + barrier unit). Both are
-  // registered with SimPlatform and get their own do_reset()/do_tick() calls.
+  // registered with SimPlatform and get their own do_reset() calls.
   char sname[128];
   snprintf(sname, sizeof(sname), "%s-cta", name);
   cta_dispatcher_ = SimPlatform::instance().create_object<CtaDispatcher>(sname, core);

@@ -17,7 +17,7 @@
 
 namespace vortex {
 
-class AluUnit : public FuncUnit<VX_CFG_NUM_ALU_BLOCKS> {
+class AluUnit : public FuncUnit<AluUnit, VX_CFG_NUM_ALU_BLOCKS> {
 public:
   // Cycles the multiply/divide pipeline adds over the integer result stage.
   static constexpr uint32_t kMulDivLatency = 3;
@@ -29,14 +29,13 @@ public:
   AluUnit(const SimContext& ctx, const char* name, Core*);
 
   // Resolved branch of a stalled warp, registered toward the scheduler.
-  SimChannel<uint32_t> branch_ctl_out;
+  SimPortOut<uint32_t> branch_ctl_out;
   // Full bandwidth: the dispatch queue feeds the unit directly, so an op
   // returns its issue credit as the unit accepts it.
-  SimChannel<instr_trace_t*> ReleaseOut;
+  SimPortOut<instr_trace_t*> ReleaseOut;
 
-protected:
-  void on_reset() override;
-  void on_tick() override;
+  void on_reset();
+  bool issue(uint32_t b, instr_trace_t*& trace);
 
 private:
   // Per-unit functional execution. Called only from this unit's tick().

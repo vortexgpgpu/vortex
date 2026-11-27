@@ -11,33 +11,89 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// simobject.h: the SimX simulation kernel and its component API.
+//
+// A model is a set of units joined by ports. A unit reacts in one of two
+// ways, never both:
+//
+//   one input            a handler port: `bool execute(T& pkt)` is called for
+//                        the packet at the head of the port. Return true when
+//                        you took it (the port pops it), false to leave it.
+//   several inputs       `void on_tick()`: runs on every cycle, or, when the
+//   or internal state    unit defines `bool busy()`, only on cycles where one
+//                        of its inputs holds a packet or busy() is true.
+//
+// A unit that defines busy() sleeps when idle and is woken only when it has
+// something to do: a packet becomes visible on one of its ports, an output it
+// found full frees a slot, or another unit calls tick_wake(). A fixed latency
+// is a property of the connection.
+//
+//   class Alu : public SimObject<Alu> {
+//   public:
+//     SimPortIn<instr_trace_t*>  input{this, 2, &Alu::execute};
+//     SimPortOut<instr_trace_t*> output{this};
+//     using SimObject::SimObject;                // (const SimContext&, name)
+//     bool execute(instr_trace_t*& trace) {
+//       if (output.full()) { return false; }
+//       output.send(trace, latency(trace));
+//       return true;
+//     }
+//   };
+//   auto alu = Alu::Create("alu");
+//   alu->output.bind(&next->input);
+//
+//   SimObject<U>   void on_tick(), bool busy(), void on_reset() (all
+//                  optional; the hooks may be protected with
+//                  `friend class SimObject<U>;`, or virtual in an intermediate
+//                  base U); tick_wake(), name(); create with U::Create(name, ...)
+//   SimPortIn<T>   a port of the unit that READS it: SimPortIn<T> in{this,
+//                  capacity} read by on_tick(), or SimPortIn<T> in{this,
+//                  capacity, &U::execute}. empty(), peek(), pop(), size(),
+//                  set_registered_ready(true) for a port whose freed slot is
+//                  reusable next cycle only, push(pkt, latency) to stage into
+//                  the owner's own port, bypass_to(out[, conv]) to make the
+//                  port a wire to out's reader, pop_callback(fn) for a credit
+//                  return.
+//   SimPortOut<T>  a port of the unit that WRITES it: bind(&in, latency),
+//                  full(), send(pkt[, latency]), try_send(), size(), capacity()
+//   SimPortInArray<T>, SimPortOutArray<T>
+//                  port arrays; ready_mask() for arbitration
+//
+// Timing:
+// - Within a cycle, units and handler ports run in creation order (a handler
+//   port as it is constructed, a unit with on_tick() as Create() returns).
+// - A packet sent at cycle c with latency d is visible at cycle c + d, in
+//   send order among packets visible the same cycle. Latency 0 is visible at
+//   once to units after the sender, next cycle to the others.
+// - Capacity counts packets in flight and visible. A popped slot is reusable
+//   the same cycle unless the port has a registered ready.
+// - A handler port takes at most one packet per cycle.
+//
+// The functional kernel (-DSIMX_FUNCTIONAL) keeps the executor and drops the
+// timing: latencies above one cycle become one, and ports never fill.
+
 #pragma once
 
 #include <algorithm>
-#include <array>
 #include <atomic>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <cstring>
-#include <deque>
+#include <functional>
 #include <iostream>
 #include <limits>
-#include <map>
 #include <memory>
-#include <mutex>
 #include <new>
-#include <sstream>
+#include <stdexcept>
+#include <string>
 #include <thread>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
-#include "linked_list.h"
-#include "mempool.h"
-#include "util.h"
 #include "smallfunc.h"
+#include "util.h"
 
 // The platform's per-thread execution context is read on every send and
 // cycles() query. initial-exec turns each access into one %fs-relative load
@@ -48,200 +104,56 @@
 #ifndef SIMX_TLS_IE
 #define SIMX_TLS_IE __attribute__((tls_model("initial-exec")))
 #endif
-#include "ringqueue.h"
 
 namespace vortex {
 
-// Forward declarations
+// A timed and a functional build must not link together: the functional
+// kernel's symbols live in their own inline namespace.
+#ifdef SIMX_FUNCTIONAL
+inline namespace sim_functional {
+inline constexpr bool kSimFunctional = true;
+#else
+inline constexpr bool kSimFunctional = false;
+#endif
+
 class SimPlatform;
+
 class SimObjectBase;
-template <typename T> class SimChannel;
-template <typename T> class SimEventLink;
-template <typename T> class RegSlice;
+class SimPortInBase;
+class SimPortOutBase;
+template <typename T> class SimPortIn;
+template <typename T> class SimPortOut;
 
 class SimContext {
 private:
   SimContext() = default;
   friend class SimPlatform;
-  template <typename T> friend class SimChannel;
 };
 
-// Base class for all simulation objects (Nodes)
-class SimObjectBase {
+// An entry of its domain's tick scan: a unit with an on_tick(), or a handler
+// port. It is awake while its bit in the domain's ready set is set.
+class SimTask {
 public:
-  using Ptr = std::shared_ptr<SimObjectBase>;
-  virtual ~SimObjectBase() = default;
+  SimTask(const SimTask&) = delete;
+  SimTask& operator=(const SimTask&) = delete;
+  virtual ~SimTask() = default;
 
-  const std::string& name() const { return name_; }
-
-  // Execution domain this object was created under (see SimPlatform::DomainScope).
-  // Domain 0 is the uncore/default domain; topology containers open one scope
-  // per partition. Leaf modules never set this — they inherit the build scope.
+  // The execution domain the task was built in (see SimPlatform::DomainScope).
   uint32_t domain() const { return domain_; }
 
 protected:
-  // Defined after SimPlatform: tags the object with the build-domain scope in
-  // effect at construction (covers by-value member SimObjects that never pass
-  // through create_object).
-  SimObjectBase(const SimContext&, const std::string& name);
-
-  // Tick gating: an object whose on_tick() is provably a no-op in its current
-  // state (all watched input channels empty, nothing in flight toward them)
-  // may drop out of the per-cycle tick scan. Reserving a packet toward one of
-  // its endpoint channels re-arms it before delivery, so a skipped tick never
-  // hides work. Objects opt in by calling tick_sleep() from on_tick();
-  // tick_wake() re-arms from non-channel entry points (e.g. a flush request).
-  void tick_sleep() { tick_active_ = false; }
-  void tick_wake()  { tick_active_ = true; }
+  inline SimTask();
+  virtual void run() = 0;
+  void sleep() { *word_ &= ~bit_; }
 
 private:
-  std::string name_;
-  bool tick_active_ = true;
-  uint32_t domain_ = 0;
-  bool launch_kept_ = false; // built under a LaunchKeepScope
-  virtual void do_reset() = 0;
-  virtual void do_tick()  = 0;
+  uint64_t* word_ = &inert_;   // its ready-set word, once in a scan
+  uint64_t bit_ = 1;
+  uint64_t inert_ = 0;
+  void* scan_domain_ = nullptr;
+  uint32_t scan_idx_ = ~0u;
+  uint32_t domain_;
   friend class SimPlatform;
-  friend class SimChannelBase;
-};
-
-// Base class for channels (Topological introspection)
-class SimChannelBase {
-public:
-  virtual ~SimChannelBase();
-
-  // Introspection API
-  SimObjectBase* module() const { return module_; }
-  SimChannelBase* sink() const { return sink_; }
-  SimChannelBase* source() const { return source_; }
-
-  // Declares this channel as the outgoing side of a registered boundary
-  // stage. Topology validation requires a marked channel on every chain that
-  // crosses an execution-domain boundary; only boundary stages call this.
-  void mark_boundary() { boundary_stage_ = true; }
-
-  // Invoked on every endpoint pop; a boundary stage installs this on its
-  // downstream endpoint to return a flow-control credit.
-  void pop_callback(SmallFunction<void(), 48>&& callback) {
-    pop_cb_ = std::move(callback);
-  }
-
-  virtual bool empty() const = 0;
-  virtual bool full() const = 0;
-  virtual uint32_t size() const = 0;
-  virtual uint32_t capacity() const = 0;
-
-
-protected:
-  // Defined after SimPlatform: registers with the platform channel registry
-  // (used for topology validation).
-  explicit SimChannelBase(SimObjectBase* module);
-
-  virtual void reserve() = 0;
-
-  // Re-arm a tick-gated module (see SimObjectBase::tick_sleep).
-  static void wake_module(SimObjectBase* module) {
-    module->tick_active_ = true;
-  }
-
-  SimObjectBase*  module_;
-  SimChannelBase* sink_;
-  SimChannelBase* source_;
-  SimChannelBase* endpoint_cache_ = nullptr;
-  // Packets sent toward this endpoint and not yet consumed are counted in the
-  // endpoint's domain (resolved on first use): only that domain's context
-  // touches the counter, so it needs no atomic and shares no cache line.
-  int64_t* inflight_ = nullptr;
-  int64_t& inflight() {
-    if (__builtin_expect(inflight_ == nullptr, 0)) {
-      inflight_ = &this->resolve_inflight();
-    }
-    return *inflight_;
-  }
-  int64_t& resolve_inflight();
-  bool boundary_stage_ = false;
-  SmallFunction<void(), 48> pop_cb_;
-
-  // Terminal endpoint of the bind chain (cached: bindings are immutable
-  // after construction).
-  // Bindings are immutable after elaboration, so the endpoint is resolved
-  // once and occupancy queries go straight to it.
-  SimChannelBase* endpoint() const {
-    return const_cast<SimChannelBase*>(this)->resolve_endpoint();
-  }
-
-  SimChannelBase* resolve_endpoint() {
-    if (endpoint_cache_ == nullptr) {
-      auto* e = this;
-      while (e->sink_) {
-        e = e->sink_;
-      }
-      endpoint_cache_ = e;
-    }
-    return endpoint_cache_;
-  }
-
-  friend class SimPlatform;
-  template <typename T> friend class SimChannel;
-};
-
-// Events
-///////////////////////////////////////////////////////////////////////////////
-class SimEventBase {
-public:
-  virtual ~SimEventBase() = default;
-  virtual void fire() = 0;
-  uint64_t cycles() const { return cycles_; }
-
-protected:
-  explicit SimEventBase(uint64_t cycles) : cycles_(cycles) {}
-  uint64_t cycles_;
-  LinkedListNode<SimEventBase> list_;
-  friend class SimPlatform;
-};
-
-// Optimized Event for Channel Transfers
-template <typename Pkt>
-class SimChannelEvent final : public SimEventBase {
-public:
-  template <typename P>
-  SimChannelEvent(SimChannel<Pkt>* channel, P&& pkt, uint64_t cycles)
-      : SimEventBase(cycles), channel_(channel), pkt_(std::forward<P>(pkt)) {}
-
-  void fire() override;
-
-  static void* operator new(std::size_t) { return allocator_.allocate(1); }
-  static void operator delete(void* ptr, std::size_t) noexcept {
-    allocator_.deallocate(static_cast<SimChannelEvent<Pkt>*>(ptr), 1);
-  }
-
-private:
-  SimChannel<Pkt>* channel_;
-  Pkt pkt_;
-  static inline PoolAllocator<SimChannelEvent<Pkt>, 128> allocator_;
-};
-
-// Generic Event for arbitrary callbacks
-template <typename Pkt>
-class SimCallEvent final : public SimEventBase {
-public:
-  using Func = SmallFunction<void(const Pkt&), 48>;
-
-  template <typename F>
-  SimCallEvent(F&& func, Pkt pkt, uint64_t cycles)
-    : SimEventBase(cycles), func_(std::forward<F>(func)), pkt_(std::move(pkt)) {}
-
-  void fire() override { func_(pkt_); }
-
-  static void* operator new(std::size_t) { return allocator_.allocate(1); }
-  static void operator delete(void* ptr, std::size_t) noexcept {
-    allocator_.deallocate(static_cast<SimCallEvent<Pkt>*>(ptr), 1);
-  }
-
-private:
-  Func func_;
-  Pkt pkt_;
-  static inline PoolAllocator<SimCallEvent<Pkt>, 64> allocator_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -256,12 +168,11 @@ public:
   }
 
   bool initialize() { return true; }
-  void finalize() { cleanup(); }
+  void finalize() { this->cleanup(); }
 
-  // In domain context this is the executing phase's cycle (delivery runs one
-  // cycle ahead of tick): thread-local, so workers advance through a cycle's
-  // phases without a global synchronization point. Host context sees the
-  // committed global counter.
+  // In domain context this is the cycle being ticked: thread-local, so
+  // workers advance without a global synchronization point. Host context
+  // sees the committed global counter.
   uint64_t cycles() const {
     return (tl_exec_domain_ == HOST_DOMAIN) ? cycles_ : tl_cycles_;
   }
@@ -270,57 +181,53 @@ public:
   // tagged with the run it belongs to.
   uint64_t reset_gen() const { return reset_gen_; }
 
-  // Sends issued outside any object tick (driver/host calls).
+  // The execution context of sends issued outside any tick (host calls).
   static constexpr uint32_t HOST_DOMAIN = 0xffffffffu;
 
-  // True when the platform holds no undelivered work: no packet sent but not
-  // yet consumed, and no deferred cross-domain delivery in flight. This is
-  // the only valid quiescence test — host loops must not reassemble it from
-  // framework internals.
+  // No packet sent and not yet taken, and no cross-domain call pending: the
+  // only valid quiescence test.
   bool idle() const {
     int64_t inflight = 0;
     for (auto& dom : domains_) {
-      if (dom) {
-        inflight += dom->inflight;
-      }
+      inflight += dom->inflight;
     }
     return inflight == 0 && this->cross_pending() == 0;
   }
 
-  // Domain topology API — used only by topology containers (Socket/Cluster);
-  // leaf modules inherit the scope in effect when they are created.
+  // Domain topology, used by the topology containers (Socket); units inherit
+  // the scope in effect when they are created.
   uint32_t alloc_domain() { return num_domains_++; }
   uint32_t num_domains() const { return num_domains_; }
   uint32_t build_domain() const { return build_domain_; }
   bool build_launch_kept() const { return build_launch_kept_; }
 
-  // True while reset_launch() runs: an object resets its launch state but keeps
+  // True while reset_launch() runs: a unit resets its launch state but keeps
   // what only a device reset clears.
   bool launch_resetting() const { return launch_resetting_; }
 
-  // Cap the parallel thread count (must be called before the first tick).
-  // A limit of 1 forces serial execution — required while the configuration
-  // contains a cross-domain channel edge that is not registered.
-  void mt_limit(uint32_t max_threads) {
-    mt_max_threads_ = std::max(1u, max_threads);
-  }
+  // Cap the worker-thread count (before the first tick).
+  void mt_limit(uint32_t max_threads) { mt_max_threads_ = std::max(1u, max_threads); }
 
-  // Request the worker-thread count for the lockstep executor (must be
-  // called before the first tick); 0 or 1 selects serial execution. Cycle
-  // results are bit-identical for every value.
-  void set_num_workers(uint32_t num_workers) {
-    req_workers_ = std::max(1u, num_workers);
-  }
+  // The worker-thread count (before the first tick); 0 or 1 runs serially.
+  // Cycle results are identical for every value.
+  void set_num_workers(uint32_t num_workers) { req_workers_ = std::max(1u, num_workers); }
 
-  // The timed kernel keeps per-cycle lockstep: its cross-domain latencies are
-  // physical, so only the functional kernel accepts a larger quantum.
+  // Synchronization quantum (before the first tick): domains run this many
+  // cycles between barriers, and a cross-domain call runs at the first quantum
+  // boundary at or after its due cycle. Functional kernel only: the timed
+  // kernel's cross-domain latencies are physical.
   void set_quantum(uint32_t cycles) {
-    __assert(cycles <= 1, "a synchronization quantum requires the functional kernel");
+    if constexpr (kSimFunctional) {
+      __assert(!mt_init_done_, "the quantum is fixed once execution starts");
+      quantum_ = std::max(1u, cycles);
+    } else {
+      __assert(cycles <= 1, "a synchronization quantum requires the functional kernel");
+    }
   }
 
-  // Objects built under a LaunchKeepScope (the last-level cache and the
-  // memory below it, when the command processor writes into that cache)
-  // carry their state and in-flight work across reset_launch().
+  // Units built under a LaunchKeepScope (the last-level cache and the memory
+  // below it, when the command processor writes into that cache) keep their
+  // state and in-flight work across reset_launch().
   class LaunchKeepScope {
   public:
     explicit LaunchKeepScope(bool keep) {
@@ -328,9 +235,7 @@ public:
       saved_ = p.build_launch_kept_;
       p.build_launch_kept_ = saved_ || keep;
     }
-    ~LaunchKeepScope() {
-      SimPlatform::instance().build_launch_kept_ = saved_;
-    }
+    ~LaunchKeepScope() { SimPlatform::instance().build_launch_kept_ = saved_; }
     LaunchKeepScope(const LaunchKeepScope&) = delete;
     LaunchKeepScope& operator=(const LaunchKeepScope&) = delete;
   private:
@@ -344,167 +249,197 @@ public:
       saved_ = p.build_domain_;
       p.build_domain_ = domain;
     }
-    // Open the partition an existing module lives in — used when a boundary
-    // stage must be owned by a peer's domain rather than the current scope.
-    explicit DomainScope(const SimObjectBase* module)
-      : DomainScope(module->domain()) {}
-    ~DomainScope() {
-      SimPlatform::instance().build_domain_ = saved_;
-    }
+    // The domain an existing unit lives in: a boundary stage owned by a
+    // peer's domain rather than the current scope.
+    explicit DomainScope(const SimTask* task) : DomainScope(task->domain()) {}
+    ~DomainScope() { SimPlatform::instance().build_domain_ = saved_; }
     DomainScope(const DomainScope&) = delete;
     DomainScope& operator=(const DomainScope&) = delete;
   private:
     uint32_t saved_;
   };
 
-  // Boundary audit (VX_SIMX_AUDIT_BOUNDARY=1): histogram every cross-domain
-  // send as (exec domain -> endpoint domain, delay, endpoint) so a partition
-  // cut can be checked for illegal zero-delay crossings.
-  bool audit_enabled() const { return audit_enabled_; }
-  void audit_send(SimChannelBase* channel, uint64_t delay);
-  void dump_audit(std::ostream& os);
-
-  // True when the currently executing context must not touch this module's
-  // state directly (it belongs to a different domain and we're inside a
-  // domain tick, not host context).
-  bool is_cross_exec(const SimObjectBase* module) const {
-    return tl_exec_domain_ != HOST_DOMAIN
-        && module->domain() != tl_exec_domain_;
+  // True when the executing context must not touch state of `domain`
+  // directly: inside another domain's tick, not host context.
+  bool is_cross_exec(uint32_t domain) const {
+    return tl_exec_domain_ != HOST_DOMAIN && domain != tl_exec_domain_;
   }
 
-  // True when a parallel worker is touching another domain's channel state —
-  // an unsynchronized access that parallel execution forbids.
-  bool mt_cross_access(const SimObjectBase* module) const {
-    return mt_threads_ > 1 && this->is_cross_exec(module);
-  }
-
-  // Factory
-  template <typename Impl, typename... Args>
-  std::shared_ptr<Impl> create_object(Args&&... args);
-
-  // Scheduling API. The callback overload requires the domain whose state
-  // the callback mutates (it fires on that domain's wheel).
-  template <typename Pkt, typename Func>
-  void schedule(Func&& func, const Pkt& pkt, uint64_t delay, uint32_t domain);
+  template <typename U, typename... Args>
+  std::shared_ptr<U> create_object(Args&&... args);
 
   void reset();
   void reset_launch();
   void tick();
 
-private:
-  // Timing Wheel Configuration
-  static constexpr uint64_t WHEEL_SIZE = 4096;
-  static constexpr uint64_t WHEEL_MASK = WHEEL_SIZE - 1;
+  // Tick until stop() returns true; stop() runs in host context after every
+  // cycle, as in `do { tick(); } while (!stop());`, which it equals cycle for
+  // cycle. With workers, the check runs in the release step of the cycle-end
+  // barrier, so a cycle costs one barrier instead of tick()'s two.
+  template <typename Stop>
+  void run_until(Stop&& stop);
 
-  // Per-domain kernel state: scan list, timing wheel, and immediate-event
-  // list are private to one execution domain, so a domain can be ticked by
-  // its own worker without touching another domain's structures. Events are
-  // routed to the ENDPOINT's domain at schedule time.
+  // Tick until stop(busy) returns true, for a loop that cannot end while any
+  // of `voters` is busy(voter). After each cycle the thread ticking a voter
+  // evaluates it, and stop runs with busy set when one was: it must then
+  // return false and touch only uncore state, since other units may be
+  // ticking. stop(false) sees exactly the state run_until(stop) would. With
+  // workers, neighbor synchronization replaces the barrier (sync_loop).
+  template <typename Stop, typename Obj, typename Busy>
+  void run_until(Stop&& stop, const std::vector<Obj*>& voters, Busy&& busy);
+
+  // Run `fn` in `domain`'s context at the start of its next cycle.
+  template <typename F>
+  void run_in_domain(uint32_t domain, F&& fn) { this->cross_call(domain, std::forward<F>(fn)); }
+
+  void wake(SimTask* task) { *task->word_ |= task->bit_; }
+  inline void wake_at(SimTask* task, uint64_t cycle);
+  SimTask* running_task() const { return tl_exec_task_; }
+
+private:
+  // Per-domain state: scan list, ready set, timed wake-ups and counters are
+  // private to one execution domain, so a domain can be ticked by its own
+  // worker without touching another domain's structures.
+  struct CrossEntry;
   struct Domain {
-    std::vector<SimObjectBase*> scan;   // creation order within the domain
-    std::vector<LinkedList<SimEventBase, &SimEventBase::list_>> wheel;
-    LinkedList<SimEventBase, &SimEventBase::list_> imm;
-    // Packets in flight toward this domain's endpoints (see SimChannelBase).
+    std::vector<SimTask*> scan;   // creation order within the domain
+    // Bit i is set while scan[i] is awake: a cycle visits only the awake
+    // tasks, still in creation order. The words come in cache-line blocks,
+    // each domain's written by its own worker only.
+    struct alignas(64) ActiveBlock {
+      uint64_t words[8] = {};
+    };
+    std::vector<ActiveBlock> active_blocks;
+    uint32_t active_words = 0;
+    uint64_t* active() { return active_blocks.data()->words; }
+    // Packets in flight toward, or held in, this domain's ports.
     alignas(64) int64_t inflight = 0;
-    uint32_t delta = 0;
+    // The cycle this domain is ticking; the next one between cycles. Ports
+    // compare their head's ready cycle against it.
+    uint64_t now = 0;
+    // Timed wake-ups (wake_at): ready-set masks for the next 64 cycles, and
+    // a heap beyond.
+    static constexpr uint32_t kWakeSlots = 64;
+    std::vector<uint64_t> wake_slots[kWakeSlots];
+    uint64_t wake_armed = 0;
+    std::vector<std::pair<uint64_t, uint32_t>> wake_far;  // min-heap on cycle
+    std::vector<CrossEntry*> cross_order;  // drain scratch (quantum > 1)
     uint32_t id = 0;
-    Domain() : wheel(WHEEL_SIZE) {}
   };
 
   Domain& domain_at(uint32_t d) {
     if (__builtin_expect(d < domains_.size(), 1)) {
-      if (auto* dom = domains_[d].get()) {
-        return *dom;
-      }
+      return *domains_[d];
     }
     return this->domain_grow(d);
   }
 
   __attribute__((noinline)) Domain& domain_grow(uint32_t d) {
-    if (domains_.size() <= d) {
-      domains_.resize(d + 1);
-      for (uint32_t i = 0; i < domains_.size(); ++i) {
-        if (!domains_[i]) {
-          domains_[i] = std::make_unique<Domain>();
-          domains_[i]->id = i;
+    __assert(!workers_started_, "domain created during parallel execution");
+    while (domains_.size() <= d) {
+      domains_.push_back(std::make_unique<Domain>());
+      domains_.back()->id = uint32_t(domains_.size() - 1);
+    }
+    return *domains_[d];
+  }
+
+  // Elaboration only: add a task to its domain's scan list, awake.
+  void add_scan(SimTask* task) {
+    auto& dom = this->domain_at(task->domain_);
+    uint32_t idx = uint32_t(dom.scan.size());
+    dom.scan.push_back(task);
+    if ((idx & 63) == 0) {
+      if ((dom.active_words & 7) == 0) {
+        auto* before = dom.active_blocks.data();
+        dom.active_blocks.emplace_back();
+        if (dom.active_blocks.data() != before) {
+          for (uint32_t i = 0; i < idx; ++i) {
+            dom.scan[i]->word_ = &dom.active()[i >> 6];
+          }
         }
       }
+      ++dom.active_words;
+      for (auto& slot : dom.wake_slots) {
+        slot.resize(dom.active_words, 0);
+      }
     }
-    return *domains_.at(d);
+    task->word_ = &dom.active()[idx >> 6];
+    task->bit_ = uint64_t(1) << (idx & 63);
+    task->scan_idx_ = idx;
+    task->scan_domain_ = &dom;
+    *task->word_ |= task->bit_;
   }
 
-  SimPlatform() : cycles_(0) {
-    audit_requested_ = []() {
-      const char* env = std::getenv("VX_SIMX_AUDIT_BOUNDARY");
-      return env != nullptr && env[0] == '1';
-    }();
-    audit_enabled_ = audit_requested_;
+  // Wake every task (a reset re-arms them all).
+  void wake_all() {
+    for (auto& dom : domains_) {
+      uint32_t n = uint32_t(dom->scan.size());
+      for (uint32_t w = 0; w < dom->active_words; ++w) {
+        uint32_t bits = std::min(64u, n - w * 64);
+        dom->active()[w] = (bits == 64) ? ~uint64_t(0) : ((uint64_t(1) << bits) - 1);
+      }
+    }
   }
-  ~SimPlatform() { cleanup(); }
 
-  void cleanup();
-  void tick_domain(Domain& dom);
-  void fire_immediate_events(Domain& dom);
+  SimPlatform() = default;
+  ~SimPlatform() { this->cleanup(); }
 
-  template <typename Pkt>
-  void schedule(SimChannel<Pkt>* channel, const Pkt& pkt, uint64_t delay);
+  inline void cleanup();
+  inline void tick_domain(Domain& dom, bool drain = true);
+  inline void validate_topology();
 
-  template <typename Pkt>
-  void schedule(SimChannel<Pkt>* channel, Pkt&& pkt, uint64_t delay);
+  // One cycle (functional: one quantum) of a domain, then its clock moves
+  // to the next cycle for the host and for cross-domain arrivals.
+  void run_domain(Domain& dom, uint64_t base) {
+    for (uint64_t q = 0; q < quantum_; ++q) {
+      tl_cycles_ = base + q;
+      this->tick_domain(dom, q == 0);
+      dom.now = base + q + 1;
+    }
+  }
 
   std::vector<std::shared_ptr<SimObjectBase>> objects_;
-  // Only objects that override on_reset() (auto-detected at create_object).
-  std::vector<SimObjectBase*> active_reset_;
-  // Per-domain scan/wheel/imm state; objects that override on_tick() are
-  // registered in their domain's scan list.
+  std::vector<SimObjectBase*> resets_;   // units with an on_reset(), in creation order
+  std::vector<SimPortOutBase*> outs_;      // every output port, for the topology
   std::vector<std::unique_ptr<Domain>> domains_;
 
-  uint64_t cycles_;
+  uint64_t cycles_ = 0;
   uint64_t reset_gen_ = 0;
+  uint64_t quantum_ = 1;
 
   uint32_t num_domains_ = 1;
   uint32_t build_domain_ = 0;
   bool build_launch_kept_ = false;
   bool launch_resetting_ = false;
+  bool topo_validated_ = false;
   static inline thread_local uint32_t tl_exec_domain_ SIMX_TLS_IE = HOST_DOMAIN;
-  static inline thread_local SimObjectBase* tl_exec_object_ SIMX_TLS_IE = nullptr;
+  static inline thread_local SimTask* tl_exec_task_ SIMX_TLS_IE = nullptr;
   static inline thread_local uint64_t tl_cycles_ SIMX_TLS_IE = 0;
-  bool audit_enabled_ = false;
-  bool audit_requested_ = false;
-  std::map<std::string, uint64_t> audit_hist_;
 
-  // Deferred cross-domain call: runs in the target domain at the start of
-  // its next cycle, in canonical order (enqueue cycle, then enqueue order).
-  // Framework-internal — model code reaches it only through the channel and
-  // event-link primitives; host loops test quiescence through idle().
+  // ── Cross-domain calls ───────────────────────────────────────────────
+  // A call runs in the target domain at the start of its next cycle (with a
+  // quantum, at the first quantum boundary at or after it), in canonical
+  // order: due cycle, then source domain (host last), then append order.
+  // Each (target, source) pair owns a lane, so a source appends without
+  // locks and the target drains alone. A lane is triple-buffered by epoch (a
+  // quantum): during epoch e a source writes epoch e, while the target
+  // drains epoch e-1 after the barrier that closed it.
   using CrossFn = SmallFunction<void(), 160>;
-
-  // Cross-domain mailboxes. Each (target, source) pair owns a lane, so a
-  // source appends without locks and the target drains alone. A lane is
-  // triple-buffered by epoch (a cycle): during epoch e a source writes
-  // epoch e (its tick) and e+1 (its delivery phase), while the target drains
-  // epoch e-1 after the barrier that closed it. An entry written at cycle t
-  // is due at t+1, which is always in the epoch after the one it was written
-  // in, so draining epoch e-1 at the start of epoch e reproduces the
-  // (due, source, order) delivery of a single shared inbox exactly.
   static constexpr uint32_t kCrossEpochs = 3;
   static constexpr uint32_t kHostLane = 0;   // lane 1 + d belongs to domain d
 
   struct CrossEntry {
     uint64_t due;
-    CrossFn  fn;
+    CrossFn fn;
   };
   struct alignas(64) CrossLane {
     std::vector<CrossEntry> buf[kCrossEpochs];
   };
-  // mail_[target][lane]
-  std::vector<std::vector<std::unique_ptr<CrossLane>>> mail_;
+  std::vector<std::vector<std::unique_ptr<CrossLane>>> mail_;   // [target][lane]
 
-  static uint64_t cross_epoch(uint64_t cycle) {
-    return cycle;
-  }
+  uint64_t cross_epoch(uint64_t cycle) const { return cycle / quantum_; }
 
-  // Undelivered cross-domain calls (host context only: workers parked).
+  // Undelivered calls (host context only: workers parked).
   uint64_t cross_pending() const {
     uint64_t n = 0;
     for (auto& lanes : mail_) {
@@ -519,14 +454,17 @@ private:
     return n;
   }
 
-  // Host-context calls (tl_exec_domain_ == HOST_DOMAIN) must come from one
-  // thread at a time; they share the host lane.
-  void cross_call(uint32_t target_domain, CrossFn&& fn) {
-    assert(target_domain < num_domains_);
+  // Host-context calls must come from one thread at a time: they share the
+  // host lane.
+  void cross_call(uint32_t target, CrossFn&& fn) {
+    assert(target < num_domains_);
     uint32_t src = tl_exec_domain_;
     uint64_t now = this->cycles();
-    auto& lane = this->cross_lane(target_domain, (src == HOST_DOMAIN) ? kHostLane : (src + 1));
-    lane.buf[cross_epoch(now) % kCrossEpochs].push_back({now + 1, std::move(fn)});
+    if (sync_active_ && src != HOST_DOMAIN && src != target && !sync_edge_[target * num_domains_ + src]) {
+      this->sync_unknown_edge(src, target);
+    }
+    auto& lane = this->cross_lane(target, (src == HOST_DOMAIN) ? kHostLane : (src + 1));
+    lane.buf[this->cross_epoch(now) % kCrossEpochs].push_back({now + 1, std::move(fn)});
   }
 
   CrossLane& cross_lane(uint32_t target, uint32_t lane) {
@@ -556,14 +494,6 @@ private:
     return *lanes[lane];
   }
 
-  void materialize_cross_lanes() {
-    for (uint32_t t = 0; t < num_domains_; ++t) {
-      for (uint32_t l = 0; l <= num_domains_; ++l) {
-        (void)this->cross_lane_grow(t, l);
-      }
-    }
-  }
-
   void clear_cross_lanes() {
     for (auto& lanes : mail_) {
       for (auto& lane : lanes) {
@@ -576,72 +506,65 @@ private:
     }
   }
 
-  // Channel registry (elaboration-time only) for topology validation.
-  std::vector<SimChannelBase*> channels_;
-  bool topo_validated_ = false;
-
-  void register_channel(SimChannelBase* ch) {
-    channels_.push_back(ch);
-  }
-
-  void unregister_channel(SimChannelBase* ch) {
-    auto it = std::find(channels_.begin(), channels_.end(), ch);
-    if (it != channels_.end()) {
-      *it = channels_.back();
-      channels_.pop_back();
-    }
-  }
-
-  void validate_topology();
-
-  // Run the calls due this epoch for one domain: the previous epoch's buffer
-  // of each lane, in canonical order — the order that makes serial and
-  // parallel execution agree.
-  void drain_cross_calls_for(uint32_t d) {
+  // Run the calls due this epoch for domain d: the previous epoch's buffer
+  // of each lane, in canonical order. A call may create a lane in serial
+  // execution, which can reallocate mail_, so lanes are indexed afresh.
+  void drain_cross_calls(uint32_t d) {
     if (d >= mail_.size()) {
       return;
     }
     uint32_t nlanes = uint32_t(mail_[d].size());
-    uint32_t idx = uint32_t((cross_epoch(this->cycles()) + kCrossEpochs - 1) % kCrossEpochs);
+    uint32_t idx = uint32_t((this->cross_epoch(this->cycles()) + kCrossEpochs - 1) % kCrossEpochs);
     bool any = false;
     for (auto& lane : mail_[d]) {
-      if (lane && !lane->buf[idx].empty()) {
-        any = true;
-        break;
-      }
+      any |= (lane && !lane->buf[idx].empty());
     }
     if (!any) {
       return;
     }
-    // One epoch is one cycle: every entry has the same due cycle, so the
-    // canonical order is source order, host last.
-    for (uint32_t l = 1; l <= nlanes; ++l) {
-      this->run_lane(d, l % nlanes, idx);
-    }
-  }
-
-  // A call may create a lane in serial execution, which can reallocate
-  // mail_: index it afresh per lane. The lanes themselves never move.
-  void run_lane(uint32_t d, uint32_t l, uint32_t idx) {
-    auto* lane = mail_[d][l].get();
-    if (lane == nullptr) {
+    if (quantum_ == 1) {
+      // every entry has the same due cycle: source order, host last
+      for (uint32_t l = 1; l <= nlanes; ++l) {
+        auto* lane = mail_[d][l % nlanes].get();
+        if (lane) {
+          for (auto& e : lane->buf[idx]) {
+            e.fn();
+          }
+          lane->buf[idx].clear();
+        }
+      }
       return;
     }
-    auto& buf = lane->buf[idx];
-    for (auto& e : buf) {
-      e.fn();
+    // Workers drain their domains concurrently: each domain has its own scratch.
+    auto& order = this->domain_at(d).cross_order;
+    order.clear();
+    for (uint32_t l = 1; l <= nlanes; ++l) {
+      if (auto* lane = mail_[d][l % nlanes].get()) {
+        for (auto& e : lane->buf[idx]) {
+          order.push_back(&e);
+        }
+      }
     }
-    buf.clear();
+    std::stable_sort(order.begin(), order.end(),
+                     [](const CrossEntry* a, const CrossEntry* b) { return a->due < b->due; });
+    for (auto* e : order) {
+      e->fn();
+    }
+    for (auto& lane : mail_[d]) {
+      if (lane) {
+        lane->buf[idx].clear();
+      }
+    }
   }
 
-  // ── Multi-threaded executor ────────────────────────────────────────────
+  // ── Multi-threaded executor ──────────────────────────────────────────
   // One persistent worker per extra thread; domains are assigned round-robin
-  // (coordinator keeps stripe 0). Two phases per cycle, separated by spinning
-  // epoch-counting barriers: A) drain the mailboxes + tick each domain,
-  // B) deliver each domain's due wheel events. All per-domain state, the
-  // inflight count included, is touched only by its owner; the only shared
-  // structures are the mailbox lanes (one writer and one reader each, kept
-  // apart by epoch) and the barrier itself.
+  // (the coordinator, thread 0, keeps the uncore domain). A cycle is: each
+  // thread ticks its domains, then one barrier. All per-domain state is
+  // touched only by its owner; the only shared structures are the mailbox
+  // lanes (one writer and one reader each, kept apart by epoch) and the
+  // barrier. Inside run_until() the cycle-end barrier also starts the next
+  // cycle: its release step commits the cycle and runs the stop check.
   uint32_t mt_threads_ = 1;
   uint32_t req_workers_ = 1;
   uint32_t mt_max_threads_ = std::numeric_limits<uint32_t>::max();
@@ -649,62 +572,151 @@ private:
   bool workers_started_ = false;
   std::vector<std::thread> workers_;
   std::vector<std::vector<Domain*>> stripe_domains_;
-  std::atomic<int>      barrier_count_{0};
   std::atomic<uint64_t> barrier_epoch_{0};
-  std::atomic<bool>     workers_exit_{false};
+  std::atomic<bool> workers_exit_{false};
 
-  // Epoch barrier: no per-thread state, so the coordinator may be a different
-  // OS thread on every call without desynchronizing the workers. The last
-  // thread to arrive runs on_release before publishing the new epoch, so its
-  // writes are visible to every thread on the other side of the barrier.
-  static constexpr uint32_t kBarrierSpins = 4096;
+  // Each worker announces its arrival on its own cache line.
+  struct alignas(64) ArriveFlag {
+    std::atomic<uint64_t> epoch{0};
+  };
+  std::unique_ptr<ArriveFlag[]> arrive_;
 
-  template <typename Fn>
-  void barrier_wait(Fn&& on_release) {
-    int nthreads = int(mt_threads_);
-    uint64_t epoch = barrier_epoch_.load(std::memory_order_acquire);
-    if (barrier_count_.fetch_add(1, std::memory_order_acq_rel) == nthreads - 1) {
-      barrier_count_.store(0, std::memory_order_relaxed);
-      on_release();
-      barrier_epoch_.store(epoch + 1, std::memory_order_release);
-    } else {
-      // Spin briefly (the common case: peers arrive within microseconds),
-      // then yield so a waiting thread does not starve a descheduled peer
-      // on an oversubscribed host.
-      uint32_t spins = 0;
-      while (barrier_epoch_.load(std::memory_order_acquire) == epoch) {
-        if (++spins < kBarrierSpins) {
-        #if defined(__x86_64__)
-          __builtin_ia32_pause();
-        #endif
-        } else {
-          std::this_thread::yield();
+  bool (*run_stop_)(void*) = nullptr;
+  void* run_stop_arg_ = nullptr;
+  bool run_active_ = false;
+
+  // ── Neighbor synchronization (run_until with voters) ─────────────────
+  // Domain d publishes the cycles it has completed and its vote, and starts
+  // the quantum at cycle c once every neighbor has completed c, so neighbors
+  // stay within one quantum and the triple-buffered mailboxes stay valid.
+  // Thread 0 owns the uncore domain, which neighbors every domain, and
+  // decides the stop check for the quantum ending at c when it starts the
+  // next one. A thread with a busy domain may run one quantum ahead, which
+  // rules out a stop at c; a thread whose domains all voted idle waits for
+  // the decision, so an all-idle check runs with every other thread parked.
+  struct alignas(64) SyncProgress {
+    std::atomic<uint64_t> word{0};   // completed cycles << 1 | busy vote
+  };
+  std::unique_ptr<SyncProgress[]> sync_progress_;
+  std::vector<std::vector<uint32_t>> sync_deps_;   // neighbors per domain
+  std::vector<uint8_t> sync_edge_;                 // [target * num_domains_ + source]
+  alignas(64) std::atomic<uint64_t> sync_decided_{0};
+  std::atomic<bool> sync_stop_{false};
+  bool sync_active_ = false;
+  uint64_t sync_start_ = 0;
+  bool (*sync_stop_fn_)(void*, bool) = nullptr;
+  bool (*sync_vote_fn_)(void*, uint32_t) = nullptr;
+  void* sync_stop_arg_ = nullptr;
+  void* sync_vote_arg_ = nullptr;
+
+  // Neighbors: domains joined by a port, and the uncore with every domain.
+  // A cross-domain call along any other pair aborts the run (cross_call).
+  inline void sync_init_graph();
+
+  __attribute__((noinline, noreturn)) void sync_unknown_edge(uint32_t src, uint32_t target) {
+    std::cerr << "error: cross-domain call from domain " << src << " to domain " << target
+              << ", which share no port; neighbor synchronization cannot order it" << std::endl;
+    std::abort();
+  }
+
+  // Thread w's part of a synchronized run_until().
+  void sync_loop(uint32_t w) {
+    const uint64_t step = quantum_;
+    for (uint64_t c = sync_start_;; c += step) {
+      bool any_busy = false;
+      for (auto* dom : stripe_domains_[w]) {
+        if (dom->id == 0 && c > sync_start_) {
+          bool busy = (sync_progress_[0].word.load(std::memory_order_relaxed) & 1) != 0;
+          for (uint32_t d = 1; d < num_domains_; ++d) {
+            uint64_t word;
+            spin_until([&]() {
+              word = sync_progress_[d].word.load(std::memory_order_acquire);
+              return (word >> 1) >= c;
+            });
+            busy |= ((word >> 1) > c) || (word & 1);   // only a busy thread runs ahead
+          }
+          cycles_ = c;
+          tl_exec_domain_ = HOST_DOMAIN;
+          tl_exec_task_ = nullptr;
+          if (sync_stop_fn_(sync_stop_arg_, busy)) {
+            __assert(!busy, "run_until: stop() returned true on a busy cycle");
+            sync_stop_.store(true, std::memory_order_release);
+            return;
+          }
+          sync_decided_.store(c, std::memory_order_release);
+        }
+        for (auto n : sync_deps_[dom->id]) {
+          spin_until([&]() { return (sync_progress_[n].word.load(std::memory_order_acquire) >> 1) >= c; });
+        }
+        this->run_domain(*dom, c);
+        bool vote = sync_vote_fn_(sync_vote_arg_, dom->id);
+        any_busy |= vote;
+        sync_progress_[dom->id].word.store(((c + step) << 1) | (vote ? 1 : 0), std::memory_order_release);
+      }
+      tl_exec_domain_ = HOST_DOMAIN;
+      tl_exec_task_ = nullptr;
+      if (w != 0 && !any_busy) {
+        spin_until([&]() {
+          return sync_stop_.load(std::memory_order_acquire)
+              || sync_decided_.load(std::memory_order_acquire) >= c + step;
+        });
+        if (sync_stop_.load(std::memory_order_acquire)) {
+          return;
         }
       }
     }
   }
 
-  void barrier_wait() {
-    this->barrier_wait([]() {});
+  // Spin briefly (peers usually arrive within microseconds), then yield so a
+  // waiting thread does not starve a descheduled peer.
+  template <typename Cond>
+  static void spin_until(Cond&& cond) {
+    uint32_t spins = 0;
+    while (!cond()) {
+      if (++spins < 4096) {
+      #if defined(__x86_64__)
+        __builtin_ia32_pause();
+      #endif
+      } else {
+        std::this_thread::yield();
+      }
+    }
   }
 
-  void fire_bucket(Domain& dom, uint64_t cycle) {
-    auto& bucket = dom.wheel[cycle & WHEEL_MASK];
-    if (bucket.empty()) {
-      return;
-    }
-    // Delivery callbacks execute in the endpoint's domain context.
-    tl_exec_domain_ = dom.id;
-    tl_exec_object_ = nullptr;
-    for (auto it = bucket.begin(); it != bucket.end();) {
-      auto evt = &*it;
-      if (evt->cycles() <= cycle) {
-        evt->fire();
-        it = bucket.erase(it);
-        delete evt;
-      } else {
-        ++it; // future wraparound collision in this wheel slot
+  // Thread `self` arrives (0 is the coordinator). The coordinator waits for
+  // every worker, runs on_release and publishes the new epoch, so the
+  // release step's writes are visible on the other side of the barrier.
+  template <typename Fn>
+  void barrier_wait(uint32_t self, Fn&& on_release) {
+    uint64_t epoch = barrier_epoch_.load(std::memory_order_acquire);
+    if (self == 0) {
+      for (uint32_t i = 1; i < mt_threads_; ++i) {
+        spin_until([&]() { return arrive_[i].epoch.load(std::memory_order_acquire) == epoch + 1; });
       }
+      on_release();
+      barrier_epoch_.store(epoch + 1, std::memory_order_release);
+    } else {
+      arrive_[self].epoch.store(epoch + 1, std::memory_order_release);
+      spin_until([&]() { return barrier_epoch_.load(std::memory_order_acquire) != epoch; });
+    }
+  }
+
+  void barrier_wait(uint32_t self) { this->barrier_wait(self, []() {}); }
+
+  void run_stripe(uint32_t w) {
+    for (auto* dom : stripe_domains_[w]) {
+      this->run_domain(*dom, cycles_);
+    }
+    tl_exec_domain_ = HOST_DOMAIN;
+    tl_exec_task_ = nullptr;
+  }
+
+  // Release step of the cycle-end barrier: commit the cycle and, inside a
+  // run_until() loop, evaluate the stop check.
+  void cycle_end() {
+    cycles_ += quantum_;
+    if (run_active_ && run_stop_(run_stop_arg_)) {
+      run_active_ = false;
     }
   }
 
@@ -714,39 +726,43 @@ private:
     if (count < 2) {
       return;
     }
-    audit_enabled_ = false;   // the audit histogram is not thread-safe
     mt_threads_ = count;
-    // Materialize every domain and mailbox lane up front: workers must never resize
-    // these containers or construct a slot concurrently.
+    // Materialize every domain and lane up front: workers never resize them.
     (void)this->domain_at(num_domains_ - 1);
-    this->materialize_cross_lanes();
-    stripe_domains_.assign(count, {});
-    for (uint32_t d = 0; d < num_domains_; ++d) {
-      stripe_domains_[d % count].push_back(domains_[d].get());
+    for (uint32_t t = 0; t < num_domains_; ++t) {
+      for (uint32_t l = 0; l <= num_domains_; ++l) {
+        (void)this->cross_lane_grow(t, l);
+      }
     }
+    // Round-robin, with the last partial round placed from the highest
+    // thread down: thread 0 owns the uncore domain and runs the release
+    // steps, so it takes no extra domain.
+    stripe_domains_.assign(count, {});
+    uint32_t full_rounds = (num_domains_ / count) * count;
+    for (uint32_t d = 0; d < num_domains_; ++d) {
+      uint32_t t = (d < full_rounds) ? (d % count) : (count - 1 - (d - full_rounds));
+      stripe_domains_[t].push_back(domains_[d].get());
+    }
+    arrive_.reset(new ArriveFlag[count]);
+    barrier_epoch_.store(0, std::memory_order_relaxed);
     for (uint32_t w = 1; w < count; ++w) {
       workers_.emplace_back([this, w]() {
         while (true) {
-          this->barrier_wait();                          // cycle start
+          this->barrier_wait(w);   // parked between runs
           if (workers_exit_.load(std::memory_order_acquire)) {
             break;
           }
-          // Tick and deliver back-to-back: a domain's wheel is written only
-          // by its own context (cross traffic goes through the mailboxes), so
-          // no synchronization is needed between the two phases — each
-          // worker advances its thread-local cycle view instead.
-          uint64_t cycle = cycles_;
-          tl_cycles_ = cycle;
-          for (auto* dom : stripe_domains_[w]) {
-            this->tick_domain(*dom);
+          if (sync_active_) {
+            this->sync_loop(w);
+            this->barrier_wait(w);   // join
+            continue;
           }
-          tl_cycles_ = cycle + 1;
-          for (auto* dom : stripe_domains_[w]) {
-            this->fire_bucket(*dom, cycle + 1);
-          }
-          tl_exec_domain_ = HOST_DOMAIN;
-          tl_exec_object_ = nullptr;
-          this->barrier_wait([this]() { ++cycles_; });   // cycle end
+          // One cycle for tick(); cycles until the stop check fires for
+          // run_until(). run_active_ is written only in a release step.
+          do {
+            this->run_stripe(w);
+            this->barrier_wait(w, [this]() { this->cycle_end(); });
+          } while (run_active_);
         }
       });
     }
@@ -758,345 +774,71 @@ private:
       return;
     }
     workers_exit_.store(true, std::memory_order_release);
-    this->barrier_wait();       // release parked workers into the exit check
+    this->barrier_wait(0);
     for (auto& t : workers_) {
       t.join();
     }
     workers_.clear();
+    arrive_.reset();
     stripe_domains_.clear();
     workers_started_ = false;
     workers_exit_.store(false, std::memory_order_relaxed);
     mt_threads_ = 1;
   }
 
-  template <typename U> friend class SimChannel;
-  template <typename U> friend class SimEventLink;
-  template <typename U> friend class RegSlice;
-  friend class SimChannelBase;
+  friend class SimTask;
+  friend class SimPortInBase;
+  friend class SimPortOutBase;
+  template <typename T> friend class SimPortIn;
+  template <typename T> friend class SimEventLink;
 };
 
-///////////////////////////////////////////////////////////////////////////////
-// SimChannel Implementation
-///////////////////////////////////////////////////////////////////////////////
+inline SimTask::SimTask() : domain_(SimPlatform::instance().build_domain()) {}
 
-template <typename Pkt>
-class SimChannel : public SimChannelBase {
-public:
-  static_assert(std::is_copy_constructible_v<Pkt>, "Packet must be copy constructible");
-  using TxCallback = SmallFunction<void(const Pkt&, uint64_t), 48>;
-
-  SimChannel(SimObjectBase* module, uint32_t capacity = 2)
-    : SimChannelBase(module)
-    , storage_(capacity)
-    , pending_count_(0) {}
-
-  SimChannel(const SimChannel& other)
-    : SimChannelBase(other.module_)
-    , storage_(other.storage_.capacity())
-    , pending_count_(0)
-    , reg_ready_(other.reg_ready_)
-    , convert_fn_(other.convert_fn_)
-    , tx_cb_(other.tx_cb_) {
-    sink_ = nullptr;
-    source_ = nullptr;
+__attribute__((always_inline)) inline void SimPlatform::wake_at(SimTask* task, uint64_t cycle) {
+  __assert(task->scan_domain_ != nullptr, "a timed wake-up needs a task in a scan");
+  auto& dom = *static_cast<Domain*>(task->scan_domain_);
+  if (cycle <= dom.now) {
+    *task->word_ |= task->bit_;
+    return;
   }
-
-  SimChannel& operator=(const SimChannel& other) {
-    if (this != &other) {
-      this->module_ = other.module_;
-      sink_ = nullptr;
-      source_ = nullptr;
-      endpoint_cache_ = nullptr;
-      inflight_ = nullptr;
-      pop_cb_ = {};
-      storage_ = RingQueue<Pkt>(other.storage_.capacity());
-      pending_count_ = 0;
-      reg_ready_ = other.reg_ready_;
-      freed_cycle_ = ~uint64_t(0);
-      freed_count_ = 0;
-      convert_fn_ = other.convert_fn_;
-      tx_cb_ = other.tx_cb_;
-    }
-    return *this;
+  uint32_t idx = task->scan_idx_;
+  if (cycle - dom.now < Domain::kWakeSlots) {
+    uint32_t slot = uint32_t(cycle & (Domain::kWakeSlots - 1));
+    dom.wake_slots[slot][idx >> 6] |= uint64_t(1) << (idx & 63);
+    dom.wake_armed |= uint64_t(1) << slot;
+  } else {
+    dom.wake_far.emplace_back(cycle, idx);
+    std::push_heap(dom.wake_far.begin(), dom.wake_far.end(), std::greater<>());
   }
-
-  void bind(SimChannel<Pkt>* sink) {
-    this->bind_setup(sink);
-    convert_fn_.reset();
-  }
-
-  template <typename U, typename Converter>
-  void bind(SimChannel<U>* sink, Converter&& converter) {
-    static_assert(std::is_invocable_r_v<U, Converter, Pkt>, "Converter signature mismatch");
-    this->bind_setup(sink);
-    convert_fn_ = [sink, conv = std::forward<Converter>(converter)](const Pkt& pkt) {
-      sink->receive_packet(conv(pkt));
-    };
-  }
-
-  template <typename U, typename = std::enable_if_t<std::is_convertible_v<Pkt, U>>>
-  void bind(SimChannel<U>* sink) {
-    this->bind_setup(sink);
-    convert_fn_ = [sink](const Pkt& pkt) {
-      sink->receive_packet(pkt);
-    };
-  }
-
-  // Fires on delivery, in the endpoint domain's execution context: a
-  // callback on a cross-domain chain must only touch endpoint-side state.
-  template <typename F>
-  void tx_callback(F&& callback) { tx_cb_ = std::forward<F>(callback); }
-
-  bool full() const override {
-    if (sink_) {
-      return this->endpoint()->full();
-    }
-    assert(!SimPlatform::instance().mt_cross_access(module_));
-    return this->occupancy() + this->freed_now() >= storage_.capacity();
-  }
-
-  // A registered ready: a slot freed by a pop is offered to producers from the
-  // next cycle, as a buffer whose full flag is a register does, whatever order
-  // the producer and the consumer tick in.
-  void set_registered_ready(bool enable) { reg_ready_ = enable; }
-
-  void send(const Pkt& pkt, uint64_t delay = 1) {
-    auto& platform = SimPlatform::instance();
-    // A send whose endpoint lives in another domain is handed to that
-    // domain's owner as a deferred call: it re-issues the send locally next
-    // cycle with one less delay, landing on the same absolute cycle. All
-    // channel state is thereby touched only by its owning thread. Capacity
-    // needs no check here — cross-domain producers are credit-gated at the
-    // boundary, so a deferred send always finds space.
-    if (platform.is_cross_exec(this->endpoint()->module_)) {
-      __assert(delay >= 1, "cross-domain send requires a registered delay");
-      this->cross_send(Pkt(pkt), delay);
-      return;
-    }
-    __assert(!this->full(), "channel is full");
-    if (platform.audit_enabled()) {
-      platform.audit_send(this, delay);
-    }
-    this->reserve();
-    platform.schedule(this, pkt, delay);
-  }
-
-  void send(Pkt&& pkt, uint64_t delay = 1) {
-    auto& platform = SimPlatform::instance();
-    if (platform.is_cross_exec(this->endpoint()->module_)) {
-      __assert(delay >= 1, "cross-domain send requires a registered delay");
-      this->cross_send(std::move(pkt), delay);
-      return;
-    }
-    __assert(!this->full(), "channel is full");
-    if (platform.audit_enabled()) {
-      platform.audit_send(this, delay);
-    }
-    this->reserve();
-    platform.schedule(this, std::move(pkt), delay);
-  }
-
-  [[nodiscard]] bool try_send(const Pkt& pkt, uint64_t delay = 1) {
-    if (this->full()) return false;
-    this->send(pkt, delay);
-    return true;
-  }
-
-  [[nodiscard]] bool try_send(Pkt&& pkt, uint64_t delay = 1) {
-    if (this->full()) return false;
-    this->send(std::move(pkt), delay);
-    return true;
-  }
-
-  // Hand a send to the endpoint's domain: it re-issues the send locally with
-  // one less delay, landing on the same absolute cycle. A packet that fits
-  // the call's inline buffer rides by value; a larger one is boxed.
-  void cross_send(Pkt&& pkt, uint64_t delay) {
-    auto& platform = SimPlatform::instance();
-    uint32_t target = this->endpoint()->module_->domain();
-    if constexpr (sizeof(Pkt) <= kInlineCrossPkt) {
-      platform.cross_call(target, [this, p = std::move(pkt), delay]() {
-        this->send(p, delay - 1);
-      });
-    } else {
-      platform.cross_call(target, [this, p = std::make_shared<Pkt>(std::move(pkt)), delay]() {
-        this->send(*p, delay - 1);
-      });
-    }
-  }
-
-  static constexpr size_t kInlineCrossPkt = 128;
-
-  bool empty() const override {
-    this->assert_endpoint();
-    return this->queue_empty();
-  }
-
-  const Pkt& peek() const {
-    this->assert_endpoint();
-    __assert(!this->queue_empty(), "channel is empty");
-    return this->queue_front();
-  }
-
-  void pop() {
-    this->assert_endpoint();
-    __assert(!this->queue_empty(), "channel is empty");
-    this->queue_pop();
-  }
-
-  [[nodiscard]] bool try_pop(Pkt* out) {
-    __assert(out != nullptr, "output target is null");
-    if (this->empty()) return false;
-    *out = this->peek();
-    this->pop();
-    return true;
-  }
-
-  uint32_t size() const override {
-    if (sink_) {
-      return this->endpoint()->size();
-    }
-    assert(!SimPlatform::instance().mt_cross_access(module_));
-    return this->occupancy();
-  }
-
-  uint32_t capacity() const override {
-    if (sink_) {
-      return this->endpoint()->capacity();
-    }
-    return storage_.capacity();
-  }
-
-protected:
-  void reserve() override {
-    if (sink_) {
-      this->endpoint()->reserve();
-    } else {
-      ++pending_count_;
-      ++this->inflight();
-      wake_module(module_);
-    }
-  }
-
-  void receive_packet(const Pkt& pkt) {
-    if (tx_cb_) {
-      tx_cb_(pkt, SimPlatform::instance().cycles());
-    }
-    if (sink_) {
-      if (convert_fn_) {
-        convert_fn_(pkt);
-      } else {
-        auto* sink = static_cast<SimChannel<Pkt>*>(sink_);
-        sink->receive_packet(pkt);
-      }
-      return;
-    }
-    __assert(pending_count_ > 0, "pending count underflow");
-    --pending_count_;
-    this->queue_push(pkt);
-  }
-
-private:
-  bool forwarded() const { return sink_ != nullptr; }
-
-  void bind_setup(SimChannelBase* sink) {
-    __assert(sink != nullptr, "bind target is null");
-    __assert(sink_ == nullptr, "channel already bound");
-    sink_ = sink;
-    sink->source_ = this;
-  }
-
-  void assert_endpoint() const {
-    __assert(!forwarded(), "cannot read from a forwarded channel");
-  }
-
-  uint32_t occupancy() const { return this->queue_size() + pending_count_; }
-
-  bool queue_empty() const { return storage_.empty(); }
-  uint32_t queue_size() const { return storage_.size(); }
-  const Pkt& queue_front() const { return storage_.front(); }
-  uint32_t freed_now() const {
-    auto& platform = SimPlatform::instance();
-    return (reg_ready_ && freed_cycle_ == platform.cycles() && freed_gen_ == platform.reset_gen())
-         ? freed_count_ : 0;
-  }
-  void queue_pop() {
-    if (reg_ready_) {
-      auto& platform = SimPlatform::instance();
-      if (freed_cycle_ != platform.cycles() || freed_gen_ != platform.reset_gen()) {
-        freed_cycle_ = platform.cycles();
-        freed_gen_ = platform.reset_gen();
-        freed_count_ = 0;
-      }
-      ++freed_count_;
-    }
-    storage_.pop();
-    --this->inflight();
-    if (pop_cb_) {
-      pop_cb_();
-    }
-  }
-  void queue_push(const Pkt& pkt) { storage_.push(pkt); }
-
-  RingQueue<Pkt> storage_;
-  uint32_t pending_count_;
-  bool reg_ready_ = false;
-  uint64_t freed_cycle_ = ~uint64_t(0);
-  uint64_t freed_gen_ = 0;
-  uint32_t freed_count_ = 0;
-  SmallFunction<void(const Pkt&), 48> convert_fn_;
-  TxCallback tx_cb_;
-
-  template <typename U> friend class SimChannel;
-  template <typename U> friend class SimChannelEvent;
-  friend class SimChannelBase;
-};
-
-// Constructs a std::array of N SimChannel<Pkt> instances, each bound to owner.
-// SimChannel is not default-constructible, so a plain brace-init list cannot be used.
-//     std::array<SimChannel<Pkt>, N> Inputs = make_sim_channels<Pkt, N>(this);
-
-namespace detail {
-template <typename Pkt, std::size_t N, std::size_t... Is>
-inline std::array<SimChannel<Pkt>, N> make_sim_channels_impl(SimObjectBase* owner, uint32_t capacity, std::index_sequence<Is...>) {
-  return std::array<SimChannel<Pkt>, N>{ ((void)Is, SimChannel<Pkt>(owner, capacity))... };
-}
-} // namespace detail
-
-template <typename Pkt, std::size_t N>
-inline std::array<SimChannel<Pkt>, N> make_sim_channels(SimObjectBase* owner, uint32_t capacity = 2) {
-  return detail::make_sim_channels_impl<Pkt, N>(owner, capacity, std::make_index_sequence<N>{});
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // SimEventLink
 ///////////////////////////////////////////////////////////////////////////////
 
-// One-way, typed event link for control-plane strobes (doorbells, barrier
-// arrive/resume, completion kicks). Both ends are declared members: the
-// receiver binds a member-function handler to its end, and the sender's end
-// is wired to the receiver's at elaboration with the same bind() idiom
-// channels use (fan-in is allowed: multiple out-ends may target one handler
-// end). Delivery is non-refusable and carries a registered >= 1 cycle
-// latency: the bound handler runs in the receiving module's execution
-// context at cycle C + delay, with same-cycle deliveries merged in canonical
-// (due, src, seq) order — identical serial and parallel. Unlike a channel, a
-// link has no queue, no occupancy, and no back-pressure; it is the only way
-// to trigger behavior on a module in another execution domain.
+// One-way, typed event link for control strobes (doorbells, barrier arrive
+// and resume). The receiver binds a member-function handler to its end; the
+// sender's end binds to the receiver's (fan-in allowed). Delivery cannot be
+// refused and takes a registered delay of at least one cycle: the handler
+// runs in the receiver's domain at the start of cycle now + delay, ahead of
+// its tick scan, in canonical order with other cross-domain calls. A link
+// has no queue and no back-pressure; it is the way to act on a unit in
+// another execution domain.
 template <typename Msg>
 class SimEventLink {
 public:
   static_assert(std::is_copy_constructible_v<Msg>, "Message must be copy constructible");
 
-  SimEventLink(SimObjectBase* module) : module_(module) {}
+  SimEventLink(const SimTask* owner) : domain_(owner->domain()) {}
 
   // Copying is only for container fill at construction: bindings do not
   // carry over.
-  SimEventLink(const SimEventLink& other) : module_(other.module_) {}
+  SimEventLink(const SimEventLink& other) : domain_(other.domain_) {}
 
   SimEventLink& operator=(const SimEventLink& other) {
     if (this != &other) {
-      module_ = other.module_;
+      domain_ = other.domain_;
       sink_ = nullptr;
       handler_ = {};
     }
@@ -1110,7 +852,7 @@ public:
     sink_ = sink;
   }
 
-  // Receiver end: bind the member-function handler invoked on delivery.
+  // Receiver end: the member-function handler invoked on delivery.
   template <typename Impl>
   void bind(Impl* obj, void (Impl::*handler)(const Msg&)) {
     __assert(obj != nullptr, "handler object is null");
@@ -1118,185 +860,835 @@ public:
     handler_ = [obj, handler](const Msg& msg) { (obj->*handler)(msg); };
   }
 
-  // Fire-and-forget delivery: the endpoint handler runs in its module's
-  // context at cycle C + delay. Cannot fail and cannot be refused.
   void send(const Msg& msg, uint64_t delay = 1) {
     __assert(delay >= 1, "event link delivery requires a registered delay");
-    auto* ep = this->endpoint();
+    auto* ep = this;
+    while (ep->sink_ != nullptr) {
+      ep = ep->sink_;
+    }
     __assert(!!ep->handler_, "event link has no bound handler");
-    SimPlatform::instance().cross_call(ep->module_->domain(),
-      [ep, msg, delay]() {
-        if (delay > 1) {
-          ep->send(msg, delay - 1);  // re-issued from the endpoint's own context
-        } else {
-          ep->handler_(msg);
-        }
-      });
+    SimPlatform::instance().cross_call(ep->domain_, [ep, msg, delay]() {
+      if (delay > 1) {
+        ep->send(msg, delay - 1);   // re-issued from the receiver's own context
+      } else {
+        ep->handler_(msg);
+      }
+    });
   }
 
 private:
-  SimEventLink<Msg>* endpoint() {
-    auto* e = this;
-    while (e->sink_) {
-      e = e->sink_;
-    }
-    return e;
-  }
-
-  SimObjectBase* module_;
+  uint32_t domain_;
   SimEventLink<Msg>* sink_ = nullptr;
   SmallFunction<void(const Msg&), 48> handler_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-// Object Creation & Platform Implementation
+// Units and ports
 ///////////////////////////////////////////////////////////////////////////////
 
-// Detects whether on_tick()/on_reset() are public on T via SFINAE.
-// create_object<Impl> static_asserts these are not public.
 namespace detail {
-  template <typename T>
-  auto detect_on_tick_public(int)
-      -> decltype(std::declval<T&>().on_tick(), std::true_type{});
-  template <typename T>
-  std::false_type detect_on_tick_public(...);
 
-  template <typename T>
-  auto detect_on_reset_public(int)
-      -> decltype(std::declval<T&>().on_reset(), std::true_type{});
-  template <typename T>
-  std::false_type detect_on_reset_public(...);
-}
+// Set when an output refused during the running handler.
+inline thread_local bool tl_blocked SIMX_TLS_IE = false;
 
+// A port's packets: each slot holds a packet and the cycle it becomes
+// visible, in ready order (equal cycles in send order). A send writes its
+// packet here at once. The functional kernel grows the ring on demand.
 template <typename T>
-struct is_on_tick_public  : decltype(detail::detect_on_tick_public<T>(0))  {};
-template <typename T>
-struct is_on_reset_public : decltype(detail::detect_on_reset_public<T>(0)) {};
-
-template <typename Impl>
-class SimObject : public SimObjectBase {
+class DelayRing {
 public:
-  using Ptr = std::shared_ptr<Impl>;
+  explicit DelayRing(uint32_t capacity)
+    : capacity_(capacity)
+    , slots_(new Slot[capacity]) {
+    __assert(capacity > 0, "a port needs a capacity");
+  }
+  DelayRing(const DelayRing&) = delete;
+  DelayRing& operator=(const DelayRing&) = delete;
+  ~DelayRing() {
+    while (size_ != 0) {
+      this->pop();
+    }
+  }
+
+  uint32_t size() const { return size_; }
+  uint32_t capacity() const { return capacity_; }
+
+  // Ready cycle of the oldest packet; all ones when empty.
+  uint64_t head_ready() const { return head_ready_; }
+  const uint64_t* head_ready_ptr() const { return &head_ready_; }
+
+  T& front() { return *slots_[head_].pkt(); }
+  const T& front() const { return *slots_[head_].pkt(); }
+
+  void pop() {
+    slots_[head_].pkt()->~T();
+    head_ = this->wrap(head_ + 1);
+    --size_;
+    head_ready_ = (size_ != 0) ? slots_[head_].ready : ~uint64_t(0);
+  }
+
+  template <typename P>
+  void insert(P&& pkt, uint64_t ready) {
+    if (size_ == capacity_) {
+      __assert(kSimFunctional, "port overflow");
+      this->grow();
+    }
+    uint32_t i = size_;
+    uint32_t pos = this->wrap(head_ + i);
+    while (i > 0) {
+      uint32_t prev = this->wrap(head_ + i - 1);
+      if (slots_[prev].ready <= ready) {
+        break;
+      }
+      new (slots_[pos].buf) T(std::move(*slots_[prev].pkt()));
+      slots_[pos].ready = slots_[prev].ready;
+      slots_[prev].pkt()->~T();
+      pos = prev;
+      --i;
+    }
+    new (slots_[pos].buf) T(std::forward<P>(pkt));
+    slots_[pos].ready = ready;
+    ++size_;
+    if (i == 0) {
+      head_ready_ = ready;
+    }
+  }
+
+private:
+  struct Slot {
+    uint64_t ready;
+    alignas(T) unsigned char buf[sizeof(T)];
+    T* pkt() { return std::launder(reinterpret_cast<T*>(buf)); }
+    const T* pkt() const { return std::launder(reinterpret_cast<const T*>(buf)); }
+  };
+
+  uint32_t wrap(uint32_t i) const { return (i >= capacity_) ? i - capacity_ : i; }
+
+  // Functional kernel: no back-pressure, so a port doubles when it fills; a
+  // feedback loop that outruns its reader fails at the high-water mark.
+  __attribute__((noinline)) void grow() {
+    __assert(capacity_ < (1u << 20), "functional port high-water exceeded");
+    std::unique_ptr<Slot[]> slots(new Slot[capacity_ * 2]);
+    for (uint32_t i = 0; i < size_; ++i) {
+      auto& src = slots_[this->wrap(head_ + i)];
+      new (slots[i].buf) T(std::move(*src.pkt()));
+      slots[i].ready = src.ready;
+      src.pkt()->~T();
+    }
+    slots_ = std::move(slots);
+    capacity_ *= 2;
+    head_ = 0;
+  }
+
+  uint32_t capacity_;
+  std::unique_ptr<Slot[]> slots_;
+  uint32_t head_ = 0;
+  uint32_t size_ = 0;
+  uint64_t head_ready_ = ~uint64_t(0);
+};
+
+}  // namespace detail
+
+/// The non-template part of every unit: its scan task and its ports.
+class SimObjectBase : public SimTask {
+public:
+  const std::string& name() const { return name_; }
+
+  /// Run the unit again from the earliest legal point: its on_tick(), or its
+  /// handler ports. For state another unit changed by a direct call.
+  inline void tick_wake();
+
+protected:
+  SimObjectBase(const std::string& name, bool ticks)
+    : name_(name)
+    , ticks_(ticks)
+    , launch_kept_(SimPlatform::instance().build_launch_kept()) {}
+
+private:
+  virtual void do_reset() = 0;
+  inline bool inputs_ready() const;
+
+  std::string name_;
+  bool ticks_;
+  bool launch_kept_;
+  std::vector<SimPortInBase*> plain_;
+  std::vector<SimPortInBase*> handlers_;
+
+  friend class vortex::SimPlatform;
+  template <typename U> friend class SimObject;
+  friend class SimPortInBase;
+  template <typename T> friend class SimPortIn;
+};
+
+/// The base of every model. `using SimObject::SimObject;` inherits the
+/// (const SimContext&, name) constructor; create units with U::Create(...).
+/// The hooks are found on U, so U may keep them protected by declaring
+/// `friend class SimObject<U>;`, or declare them virtual for its subclasses.
+template <typename U>
+class SimObject : public SimObjectBase {
+  template <typename V>
+  static auto detect_tick(int) -> decltype(std::declval<V&>().on_tick(), std::true_type{});
+  template <typename V>
+  static std::false_type detect_tick(...);
+  template <typename V>
+  static auto detect_reset(int) -> decltype(std::declval<V&>().on_reset(), std::true_type{});
+  template <typename V>
+  static std::false_type detect_reset(...);
+  template <typename V>
+  static auto detect_busy(int) -> decltype(bool(std::declval<V&>().busy()), std::true_type{});
+  template <typename V>
+  static std::false_type detect_busy(...);
+
+public:
+  using Ptr = std::shared_ptr<U>;
+  static constexpr bool kTicks = decltype(detect_tick<U>(0))::value;
+  static constexpr bool kResets = decltype(detect_reset<U>(0))::value;
+  static constexpr bool kSleeps = decltype(detect_busy<U>(0))::value;
 
   template <typename... Args>
   static Ptr Create(Args&&... args) {
-    return SimPlatform::instance().create_object<Impl>(std::forward<Args>(args)...);
+    return SimPlatform::instance().create_object<U>(std::forward<Args>(args)...);
   }
 
-protected:
-  SimObject(const SimContext& ctx, const std::string& name)
-    : SimObjectBase(ctx, name) {}
-
-  // Lifecycle callbacks — must remain protected. Each derivative must declare
-  // `friend class SimObject<Self>` for override-detection to work.
-  void on_tick()  {}
-  void on_reset() {}
+  SimObject(const SimContext&, const std::string& name) : SimObjectBase(name, kTicks) {}
 
 private:
-  Impl* impl() { return static_cast<Impl*>(this); }
-  void do_reset() override { impl()->on_reset(); }
-  void do_tick()  override { impl()->on_tick();  }
-
-  // Returns true if Impl overrides on_tick()/on_reset() rather than inheriting
-  // the base no-op. Uses member-pointer comparison; must be a static member of
-  // SimObject<Impl> to access the protected member pointer across boundaries.
-  template <typename T = Impl>
-  static bool has_own_tick() {
-    using F = void (T::*)();
-    return static_cast<F>(&T::on_tick) != static_cast<F>(&SimObject<Impl>::on_tick);
+  void run() override {
+    if constexpr (kTicks) {
+      static_cast<U*>(this)->on_tick();
+      // Without busy(), a unit is always busy: it ticks every cycle.
+      if constexpr (!kSleeps) {
+        return;
+      } else if (this->inputs_ready() || static_cast<U*>(this)->busy()) {
+        return;
+      }
+    }
+    this->sleep();
   }
 
-  template <typename T = Impl>
-  static bool has_own_reset() {
-    using F = void (T::*)();
-    return static_cast<F>(&T::on_reset) != static_cast<F>(&SimObject<Impl>::on_reset);
+  void do_reset() override {
+    if constexpr (kResets) {
+      static_cast<U*>(this)->on_reset();
+    }
   }
-
-  friend class SimPlatform;
 };
 
-// True only for direct SimObject<Impl> CRTP derivatives.
-// Multi-level chains (Derived→Intermediate→SimObject<Intermediate>) yield false,
-// so they are conservatively treated as always-active.
-template <typename Impl, typename = void>
-struct has_direct_simobject_base : std::false_type {};
+/// The non-template part of an input port.
+class SimPortInBase {
+public:
+  SimPortInBase(const SimPortInBase&) = delete;
+  SimPortInBase& operator=(const SimPortInBase&) = delete;
+  virtual ~SimPortInBase() = default;
 
-template <typename Impl>
-struct has_direct_simobject_base<Impl,
-    std::void_t<decltype(static_cast<SimObject<Impl>*>(std::declval<Impl*>()))>>
-  : std::true_type {};
+  /// A wire through the unit (see SimPortIn::bypass_to): the unit never reads it.
+  bool bypassed() const { return bypassed_; }
 
-template <typename Impl, typename... Args>
-std::shared_ptr<Impl> SimPlatform::create_object(Args&&... args) {
-  static_assert(!is_on_tick_public<Impl>::value,
-      "on_tick() must be protected — only SimPlatform may call it");
-  static_assert(!is_on_reset_public<Impl>::value,
-      "on_reset() must be protected — only SimPlatform may call it");
-  auto obj = std::make_shared<Impl>(SimContext{}, std::forward<Args>(args)...);
+  /// Packets in flight and visible, and the port's room.
+  virtual uint32_t size() const = 0;
+  virtual uint32_t capacity() const = 0;
+
+  /// Called on every pop, in the reader's context: a credit return.
+  template <typename F>
+  void pop_callback(F&& fn) { pop_cb_.reset(new PopCallback(std::forward<F>(fn))); }
+
+protected:
+  using ServeFn = bool (*)(SimPortInBase*);   // true: run again next cycle
+
+  // The scan entry of a handler port, woken by arrivals on its port.
+  struct Entry final : SimTask {
+    SimPortInBase* in = nullptr;
+    ServeFn serve = nullptr;
+    void run() override {
+      detail::tl_blocked = false;
+      if (!serve(in)) {
+        this->sleep();
+      }
+    }
+  };
+
+  SimPortInBase(SimObjectBase* owner, ServeFn serve) : owner_(owner) {
+    if (serve != nullptr) {
+      __assert(!owner->ticks_, "a unit with on_tick() reads its ports itself: SimPortIn<T>{this, capacity}");
+      entry_.reset(new Entry());
+      entry_->in = this;
+      entry_->serve = serve;
+      SimPlatform::instance().add_scan(entry_.get());
+      owner->handlers_.push_back(this);
+      reader_ = entry_.get();
+    } else {
+      __assert(owner->ticks_, "a port without a handler is read by the unit's on_tick()");
+      owner->plain_.push_back(this);
+      reader_ = owner;
+    }
+  }
+
+  void unlist() {
+    auto& plain = owner_->plain_;
+    plain.erase(std::remove(plain.begin(), plain.end(), this), plain.end());
+    bypassed_ = true;
+  }
+
+  virtual bool has_room() const = 0;
+
+  // A packet is visible: a plain load and compare, no virtual call, since
+  // the owner asks this of every port after each tick.
+  bool ready_now() const { return *head_ready_ <= *clock_; }
+
+  virtual void wait_for_room(SimTask* waiter) = 0;
+
+  // One cache line, read on every tick of the owner; the handler's scan entry
+  // and the pop callback are allocated only by the ports that use them.
+  using PopCallback = SmallFunction<void(), 48>;
+  SimObjectBase* owner_;
+  SimTask* reader_;   // woken when a packet becomes visible
+  const uint64_t* head_ready_ = nullptr;   // the ring's head ready cycle
+  const uint64_t* clock_ = nullptr;        // the owner domain's cycle
+  std::unique_ptr<Entry> entry_;           // handler ports only
+  std::unique_ptr<PopCallback> pop_cb_;
+  bool bypassed_ = false;
+
+  friend class SimObjectBase;
+  friend class vortex::SimPlatform;
+  template <typename T> friend class SimPortOut;
+};
+
+/// An output port, for the topology walk and the boundary stages.
+class SimPortOutBase {
+public:
+  SimPortOutBase(const SimPortOutBase&) = delete;
+  SimPortOutBase& operator=(const SimPortOutBase&) = delete;
+  virtual ~SimPortOutBase() = default;
+
+  /// The port this output's packets land in, through any wires; null while
+  /// unbound.
+  virtual SimPortInBase* endpoint() = 0;
+
+  /// This output crosses an execution-domain boundary through a registered,
+  /// credit-gated stage (RegSlice): parallel execution may cut here.
+  void mark_boundary() { boundary_ = true; }
+
+protected:
+  explicit SimPortOutBase(SimObjectBase* owner) : owner_(owner) {
+    SimPlatform::instance().outs_.push_back(this);
+  }
+
+  SimObjectBase* owner_;
+  bool boundary_ = false;
+
+  friend class vortex::SimPlatform;
+};
+
+/// An input port, owned by the unit that reads it.
+template <typename T>
+class SimPortIn final : public SimPortInBase {
+public:
+  /// A port read by the owner's on_tick().
+  SimPortIn(SimObjectBase* owner, uint32_t capacity = 2)
+    : SimPortInBase(owner, nullptr)
+    , ring_(capacity) {
+    this->bind_domain();
+  }
+
+  /// A handler port: `handler(pkt)` returns true when it took the packet.
+  template <typename U>
+  SimPortIn(U* owner, uint32_t capacity, bool (U::*handler)(T&))
+    : SimPortInBase(owner, &SimPortIn::serve)
+    , ring_(capacity)
+    , handler_(static_cast<Handler>(handler)) {
+    this->bind_domain();
+  }
+
+  /// Port `index` of a handler array: `handler(index, pkt)`.
+  template <typename U>
+  SimPortIn(U* owner, uint32_t capacity, bool (U::*handler)(uint32_t, T&), uint32_t index)
+    : SimPortInBase(owner, &SimPortIn::serve_indexed)
+    , ring_(capacity)
+    , indexed_(static_cast<IndexedHandler>(handler))
+    , index_(index) {
+    this->bind_domain();
+  }
+
+  /// No packet visible this cycle.
+  bool empty() const { return ring_.head_ready() > *clock_; }
+
+  const T& peek() const {
+    __assert(!this->empty(), "port is empty");
+    return ring_.front();
+  }
+
+  /// Take the oldest visible packet.
+  T pop() {
+    __assert(!this->empty(), "port is empty");
+    T pkt(std::move(ring_.front()));
+    this->remove();
+    return pkt;
+  }
+
+  /// The cycle the oldest packet became, or becomes, visible.
+  uint64_t head_cycle() const { return ring_.head_ready(); }
+
+  uint32_t size() const override { return ring_.size(); }
+
+  // Nominal in the functional kernel: large enough never to gate, small
+  // enough for a credit counter.
+  uint32_t capacity() const override {
+    return kSimFunctional ? (1u << 30) : ring_.capacity();
+  }
+
+  /// The owner stages a packet into its own port, visible `latency` cycles
+  /// on: an internal pipeline register. Requires !full().
+  void push(T pkt, uint32_t latency) { this->arrive(std::move(pkt), latency); }
+  bool full() const { return !this->has_room(); }
+
+  /// A registered ready: a slot freed by a pop is offered to producers from
+  /// the next cycle only. Set before simulation starts.
+  void set_registered_ready(bool enable) { reg_ready_ = enable; }
+
+  /// Make this port a wire to whatever `out` is bound to: producers bound
+  /// here reach that reader directly, with no added latency.
+  void bypass_to(SimPortOut<T>& out) {
+    fwd_ = &out;
+    this->unlist();
+  }
+
+  /// As bypass_to, converting each packet on the way: `conv(T) -> V`.
+  template <typename V, typename Conv>
+  void bypass_to(SimPortOut<V>& out, Conv&& conv) {
+    conv_.reset(new Converted{&out, [&out, c = std::forward<Conv>(conv)](T&& pkt, uint64_t latency) {
+      out.send(c(std::move(pkt)), latency);
+    }});
+    this->unlist();
+  }
+
+private:
+  template <typename V> friend class SimPortOut;
+  using Handler = bool (SimObjectBase::*)(T&);
+  using IndexedHandler = bool (SimObjectBase::*)(uint32_t, T&);
+
+  struct Converted {
+    SimPortOutBase* out;
+    SmallFunction<void(T&&, uint64_t), 48> send;
+  };
+
+  // Drop the head: its slot, the credit and wake-ups it owes.
+  void remove() {
+    if (!kSimFunctional && reg_ready_) {
+      auto& platform = SimPlatform::instance();
+      if (freed_cycle_ != platform.cycles() || freed_gen_ != platform.reset_gen()) {
+        freed_cycle_ = platform.cycles();
+        freed_gen_ = platform.reset_gen();
+        freed_count_ = 0;
+      }
+      ++freed_count_;
+    }
+    ring_.pop();
+    --*inflight_;
+    if (num_waiters_ != 0) {
+      for (uint32_t i = 0; i < num_waiters_; ++i) {
+        SimPlatform::instance().wake(waiters_[i]);
+      }
+      num_waiters_ = 0;
+    }
+    if (pop_cb_) {
+      (*pop_cb_)();
+    }
+  }
+
+  void bind_domain() {
+    auto& dom = SimPlatform::instance().domain_at(owner_->domain());
+    clock_ = &dom.now;
+    head_ready_ = ring_.head_ready_ptr();
+    inflight_ = &dom.inflight;
+  }
+
+  // The sender's capacity rule: room for one more packet now.
+  __attribute__((always_inline)) bool has_room() const override {
+    if constexpr (kSimFunctional) {
+      return true;
+    }
+    auto& platform = SimPlatform::instance();
+    uint32_t freed = (reg_ready_ && freed_cycle_ == platform.cycles() && freed_gen_ == platform.reset_gen())
+                   ? freed_count_ : 0;
+    return ring_.size() + freed < ring_.capacity();
+  }
+
+  // A producer found the port full: wake it when a slot frees. Under a
+  // registered ready a slot popped this cycle frees next cycle, with no
+  // further pop to announce it, so the waiter is then woken next cycle.
+  void wait_for_room(SimTask* waiter) override {
+    if (ring_.size() < ring_.capacity()) {
+      SimPlatform::instance().wake_at(waiter, *clock_ + 1);
+      return;
+    }
+    for (uint32_t i = 0; i < num_waiters_; ++i) {
+      if (waiters_[i] == waiter) {
+        return;
+      }
+    }
+    __assert(num_waiters_ < kMaxWaiters, "too many producers waiting on one port");
+    waiters_[num_waiters_++] = waiter;
+  }
+
+  // A packet sent toward this port. From another domain it is handed to
+  // this port's domain as a deferred call, which re-issues it there next
+  // cycle with one less latency, landing on the same cycle: a port's state
+  // is touched only by its own domain. Cross-domain producers are credit-
+  // gated at a boundary stage, so a deferred packet always finds room.
+  void arrive(T&& pkt, uint64_t latency) {
+    if constexpr (kSimFunctional) {
+      latency = std::min<uint64_t>(latency, 1);
+    }
+    auto& platform = SimPlatform::instance();
+    uint32_t domain = reader_->domain();
+    if (platform.is_cross_exec(domain)) {
+      __assert(latency >= 1, "a cross-domain send needs a registered latency");
+      if constexpr (sizeof(T) <= 128) {
+        platform.cross_call(domain, [this, p = std::move(pkt), latency]() {
+          this->arrive(T(p), latency - 1);
+        });
+      } else {
+        platform.cross_call(domain, [this, p = std::make_shared<T>(std::move(pkt)), latency]() {
+          this->arrive(T(*p), latency - 1);
+        });
+      }
+      return;
+    }
+    __assert(this->has_room(), "send on a full port");
+    uint64_t ready = *clock_ + latency;
+    ++*inflight_;
+    ring_.insert(std::move(pkt), ready);
+    // The reader wakes when the packet becomes visible. The functional kernel
+    // also wakes it at the send, as its event delivery always did.
+    if (ready > *clock_) {
+      platform.wake_at(reader_, ready);
+      if constexpr (kSimFunctional) {
+        platform.wake(reader_);
+      }
+    } else {
+      platform.wake(reader_);
+    }
+  }
+
+  template <typename Call>
+  static bool serve_with(SimPortIn* in, Call&& call) {
+    if (in->empty()) {
+      return false;
+    }
+    if (!call(in->ring_.front())) {
+      return !detail::tl_blocked;   // retry next cycle, or when the output has room
+    }
+    in->remove();
+    return !in->empty();   // one packet per cycle
+  }
+
+  static bool serve(SimPortInBase* base) {
+    auto* in = static_cast<SimPortIn*>(base);
+    return serve_with(in, [in](T& pkt) { return (in->owner_->*in->handler_)(pkt); });
+  }
+
+  static bool serve_indexed(SimPortInBase* base) {
+    auto* in = static_cast<SimPortIn*>(base);
+    return serve_with(in, [in](T& pkt) { return (in->owner_->*in->indexed_)(in->index_, pkt); });
+  }
+
+  static constexpr uint32_t kMaxWaiters = 4;
+
+  // The ring header and the room check's state first: the hot line after
+  // the base's.
+  detail::DelayRing<T> ring_;
+  int64_t* inflight_ = nullptr;
+  bool reg_ready_ = false;
+  uint32_t freed_count_ = 0;
+  uint64_t freed_cycle_ = ~uint64_t(0);
+  uint64_t freed_gen_ = 0;
+  uint32_t num_waiters_ = 0;
+  Handler handler_ = nullptr;
+  IndexedHandler indexed_ = nullptr;
+  uint32_t index_ = 0;
+  SimTask* waiters_[kMaxWaiters] = {};
+  SimPortOut<T>* fwd_ = nullptr;
+  std::unique_ptr<Converted> conv_;
+};
+
+/// An output port, owned by the unit that writes it, bound once to a reader.
+template <typename T>
+class SimPortOut final : public SimPortOutBase {
+public:
+  explicit SimPortOut(SimObjectBase* owner) : SimPortOutBase(owner) {}
+
+  /// Bind to a reader. `latency` is the one send(pkt) uses.
+  void bind(SimPortIn<T>* sink, uint32_t latency = 1) {
+    __assert(sink != nullptr, "bind target is null");
+    __assert(sink_ == nullptr, "output already bound");
+    sink_ = sink;
+    latency_ = latency;
+  }
+
+  /// The reader has no room now. The running unit or handler is then woken
+  /// when it has.
+  __attribute__((always_inline)) bool full() {
+    this->resolve();
+    if (__builtin_expect(direct_ != nullptr ? direct_->has_room() : ep_->has_room(), 1)) {
+      return false;
+    }
+    this->block();
+    return true;
+  }
+
+  /// Send with the link's latency. Requires !full().
+  void send(T pkt) { this->send(std::move(pkt), latency_); }
+
+  /// Send with an explicit latency. Requires !full().
+  void send(T pkt, uint32_t latency) {
+    this->resolve();
+    if (direct_ != nullptr) {
+      direct_->arrive(std::move(pkt), latency);
+    } else {
+      conv_in_->conv_->send(std::move(pkt), latency);
+    }
+  }
+
+  /// Send if the reader has room (as full()); returns whether it sent.
+  /// The packet is copied only when it is sent.
+  bool try_send(const T& pkt) { return this->try_send(pkt, latency_); }
+  bool try_send(T&& pkt) { return this->try_send(std::move(pkt), latency_); }
+  __attribute__((always_inline)) bool try_send(const T& pkt, uint32_t latency) {
+    if (this->full()) {
+      return false;
+    }
+    this->send(T(pkt), latency);
+    return true;
+  }
+  __attribute__((always_inline)) bool try_send(T&& pkt, uint32_t latency) {
+    if (this->full()) {
+      return false;
+    }
+    this->send(std::move(pkt), latency);
+    return true;
+  }
+
+  /// Packets sent and not yet taken by the reader, and the reader's room.
+  uint32_t size() const { this->resolve(); return ep_->size(); }
+  uint32_t capacity() const { this->resolve(); return ep_->capacity(); }
+
+  SimPortInBase* endpoint() override {
+    if (sink_ == nullptr) {
+      return nullptr;
+    }
+    this->resolve();
+    return ep_;
+  }
+
+private:
+  // Follow the wires to the reader once, on first use: bindings are fixed
+  // by then.
+  void resolve() const {
+    if (__builtin_expect(ep_ == nullptr, 0)) {
+      this->resolve_first();
+    }
+  }
+
+  // The reader has no room: wake the running unit or handler when it has.
+  __attribute__((noinline, cold)) void block() {
+    ep_->wait_for_room(SimPlatform::instance().running_task());
+    detail::tl_blocked = true;
+  }
+
+  __attribute__((noinline, cold)) void resolve_first() const {
+    __assert(sink_ != nullptr, "send on an unbound output");
+    SimPortIn<T>* in = sink_;
+    while (in->fwd_ != nullptr) {
+      __assert(in->fwd_->sink_ != nullptr, "a wire to an unbound output");
+      in = in->fwd_->sink_;
+    }
+    if (in->conv_) {
+      conv_in_ = in;
+      ep_ = in->conv_->out->endpoint();
+    } else {
+      direct_ = in;
+      ep_ = in;
+    }
+  }
+
+  SimPortIn<T>* sink_ = nullptr;
+  mutable SimPortIn<T>* direct_ = nullptr;    // the reader, when no conversion is on the way
+  mutable SimPortIn<T>* conv_in_ = nullptr;   // otherwise, the converting wire
+  mutable SimPortInBase* ep_ = nullptr;
+  uint32_t latency_ = 1;
+};
+
+namespace detail {
+
+[[noreturn]] __attribute__((noinline, cold)) inline void port_index_fault(size_t i, size_t n) {
+  throw std::out_of_range("port index " + std::to_string(i) + " >= " + std::to_string(n));
+}
+
+// at(i) of a port array: checked like std::vector::at, with the fault path
+// out of line so the check inlines.
+inline void check_port_index(size_t i, size_t n) {
+  if (__builtin_expect(i >= n, 0)) {
+    port_index_fault(i, n);
+  }
+}
+
+// Iterates a vector of owned ports by reference.
+template <typename P, typename It>
+class PortIter {
+public:
+  explicit PortIter(It it) : it_(it) {}
+  P& operator*() const { return **it_; }
+  PortIter& operator++() { ++it_; return *this; }
+  bool operator!=(const PortIter& other) const { return it_ != other.it_; }
+
+private:
+  It it_;
+};
+
+}  // namespace detail
+
+/// N input ports of one unit.
+template <typename T>
+class SimPortInArray {
+public:
+  SimPortInArray(SimObjectBase* owner, uint32_t count, uint32_t capacity = 2) {
+    for (uint32_t i = 0; i < count; ++i) {
+      ports_.emplace_back(new SimPortIn<T>(owner, capacity));
+    }
+  }
+
+  /// N handler ports: `handler(i, pkt)` serves port i.
+  template <typename U>
+  SimPortInArray(U* owner, uint32_t count, uint32_t capacity, bool (U::*handler)(uint32_t, T&)) {
+    for (uint32_t i = 0; i < count; ++i) {
+      ports_.emplace_back(new SimPortIn<T>(owner, capacity, handler, i));
+    }
+  }
+
+  SimPortIn<T>& operator[](uint32_t i) { return *ports_[i]; }
+  const SimPortIn<T>& operator[](uint32_t i) const { return *ports_[i]; }
+  SimPortIn<T>& at(uint32_t i) { detail::check_port_index(i, ports_.size()); return *ports_[i]; }
+  const SimPortIn<T>& at(uint32_t i) const { detail::check_port_index(i, ports_.size()); return *ports_[i]; }
+  auto begin() { return detail::PortIter<SimPortIn<T>, typename Ports::iterator>(ports_.begin()); }
+  auto end() { return detail::PortIter<SimPortIn<T>, typename Ports::iterator>(ports_.end()); }
+  auto begin() const { return detail::PortIter<const SimPortIn<T>, typename Ports::const_iterator>(ports_.begin()); }
+  auto end() const { return detail::PortIter<const SimPortIn<T>, typename Ports::const_iterator>(ports_.end()); }
+  uint32_t size() const { return uint32_t(ports_.size()); }
+  bool empty() const { return ports_.empty(); }
+
+  /// Bit k set when port first + k has a visible packet (count <= 64).
+  uint64_t ready_mask(uint32_t first, uint32_t count) const {
+    uint64_t mask = 0;
+    uint32_t end = std::min<uint32_t>(first + count, uint32_t(ports_.size()));
+    for (uint32_t i = first; i < end; ++i) {
+      mask |= uint64_t(!ports_[i]->empty()) << (i - first);
+    }
+    return mask;
+  }
+
+  uint64_t ready_mask() const { return this->ready_mask(0, this->size()); }
+
+private:
+  using Ports = std::vector<std::unique_ptr<SimPortIn<T>>>;
+  Ports ports_;
+};
+
+/// N output ports of one unit.
+template <typename T>
+class SimPortOutArray {
+public:
+  SimPortOutArray(SimObjectBase* owner, uint32_t count) {
+    for (uint32_t i = 0; i < count; ++i) {
+      ports_.emplace_back(new SimPortOut<T>(owner));
+    }
+  }
+
+  SimPortOut<T>& operator[](uint32_t i) { return *ports_[i]; }
+  const SimPortOut<T>& operator[](uint32_t i) const { return *ports_[i]; }
+  SimPortOut<T>& at(uint32_t i) { detail::check_port_index(i, ports_.size()); return *ports_[i]; }
+  const SimPortOut<T>& at(uint32_t i) const { detail::check_port_index(i, ports_.size()); return *ports_[i]; }
+  auto begin() { return detail::PortIter<SimPortOut<T>, typename Ports::iterator>(ports_.begin()); }
+  auto end() { return detail::PortIter<SimPortOut<T>, typename Ports::iterator>(ports_.end()); }
+  auto begin() const { return detail::PortIter<const SimPortOut<T>, typename Ports::const_iterator>(ports_.begin()); }
+  auto end() const { return detail::PortIter<const SimPortOut<T>, typename Ports::const_iterator>(ports_.end()); }
+  uint32_t size() const { return uint32_t(ports_.size()); }
+  bool empty() const { return ports_.empty(); }
+
+private:
+  using Ports = std::vector<std::unique_ptr<SimPortOut<T>>>;
+  Ports ports_;
+};
+
+inline void SimObjectBase::tick_wake() {
+  auto& platform = SimPlatform::instance();
+  if (ticks_) {
+    platform.wake(this);
+  }
+  for (SimPortInBase* in : handlers_) {
+    platform.wake(in->entry_.get());
+  }
+}
+
+inline bool SimObjectBase::inputs_ready() const {
+  for (const SimPortInBase* in : plain_) {
+    if (in->ready_now()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Platform implementation
+///////////////////////////////////////////////////////////////////////////////
+
+template <typename U, typename... Args>
+std::shared_ptr<U> SimPlatform::create_object(Args&&... args) {
+  auto obj = std::make_shared<U>(SimContext{}, std::forward<Args>(args)...);
   objects_.push_back(obj);
-  // Skip-inactive optimization applies only to direct CRTP derivatives; multi-level
-  // chains are conservatively kept active because &Impl::on_tick is inaccessible there.
-  if constexpr (has_direct_simobject_base<Impl>::value) {
-    if (SimObject<Impl>::template has_own_tick<Impl>()) {
-      domain_at(obj->domain_).scan.push_back(obj.get());
-    }
-    if (SimObject<Impl>::template has_own_reset<Impl>()) {
-      active_reset_.push_back(obj.get());
-    }
-  } else {
-    domain_at(obj->domain_).scan.push_back(obj.get());
-    active_reset_.push_back(obj.get());
+  // A unit with an on_tick() joins the scan as it is created: after its ports
+  // and the units its constructor made.
+  if constexpr (U::kTicks) {
+    this->add_scan(obj.get());
+  }
+  if constexpr (U::kResets) {
+    resets_.push_back(obj.get());
   }
   return obj;
 }
 
-template <typename Pkt>
-void SimPlatform::schedule(SimChannel<Pkt>* channel, const Pkt& pkt, uint64_t delay) {
-  auto& dom = domain_at(channel->endpoint()->module_->domain_);
-  if (delay == 0) {
-    // Same-cycle delivery is legal only within one domain (or from host
-    // context between cycles) — a cross-domain edge must be registered.
-    __assert(tl_exec_domain_ == HOST_DOMAIN
-        || &dom == &domain_at(tl_exec_domain_), "cross-domain delta send");
-    auto evt = new SimChannelEvent<Pkt>(channel, pkt, dom.delta);
-    dom.imm.push_back(evt);
-    ++dom.delta;
-  } else {
-    uint64_t fire_cycle = this->cycles() + delay;
-    auto evt = new SimChannelEvent<Pkt>(channel, pkt, fire_cycle);
-    dom.wheel[fire_cycle & WHEEL_MASK].push_back(evt);
+inline void SimPlatform::sync_init_graph() {
+  uint32_t n = num_domains_;
+  sync_edge_.assign(size_t(n) * n, 0);
+  auto link = [&](uint32_t a, uint32_t b) {
+    if (a != b) {
+      sync_edge_[size_t(a) * n + b] = 1;
+      sync_edge_[size_t(b) * n + a] = 1;
+    }
+  };
+  for (auto* out : outs_) {
+    if (auto* ep = out->endpoint()) {
+      link(out->owner_->domain(), ep->owner_->domain());
+    }
   }
-}
-template <typename Pkt>
-void SimPlatform::schedule(SimChannel<Pkt>* channel, Pkt&& pkt, uint64_t delay) {
-  auto& dom = domain_at(channel->endpoint()->module_->domain_);
-  if (delay == 0) {
-    __assert(tl_exec_domain_ == HOST_DOMAIN
-        || &dom == &domain_at(tl_exec_domain_), "cross-domain delta send");
-    auto evt = new SimChannelEvent<Pkt>(channel, std::move(pkt), dom.delta);
-    dom.imm.push_back(evt);
-    ++dom.delta;
-  } else {
-    uint64_t fire_cycle = this->cycles() + delay;
-    auto evt = new SimChannelEvent<Pkt>(channel, std::move(pkt), fire_cycle);
-    dom.wheel[fire_cycle & WHEEL_MASK].push_back(evt);
+  for (uint32_t d = 1; d < n; ++d) {
+    link(0, d);
   }
+  sync_deps_.assign(n, {});
+  for (uint32_t a = 0; a < n; ++a) {
+    for (uint32_t b = 0; b < n; ++b) {
+      if (sync_edge_[size_t(a) * n + b]) {
+        sync_deps_[a].push_back(b);
+      }
+    }
+  }
+  sync_progress_.reset(new SyncProgress[n]);
 }
 
-template <typename Pkt, typename Func>
-void SimPlatform::schedule(Func&& func, const Pkt& pkt, uint64_t delay, uint32_t domain) {
-  __assert(delay != 0, "scheduled callbacks require a registered delay");
-  auto& dom = domain_at(domain);
-  uint64_t fire_cycle = this->cycles() + delay;
-  auto evt = new SimCallEvent<Pkt>(std::forward<Func>(func), pkt, fire_cycle);
-  dom.wheel[fire_cycle & WHEEL_MASK].push_back(evt);
-}
-
-// One-time topology validation, run at the first reset after elaboration:
-// every bound channel chain crossing an execution-domain boundary must pass
-// through a registered boundary stage. An unregistered crossing is safe
-// serially (sends marshal through the inboxes) but couples timing to the
-// partition layout, so it is reported once and caps execution at one thread.
+// At the first reset: every output that crosses an execution-domain boundary
+// must do so through a registered boundary stage. An unregistered crossing
+// is safe serially (its sends go through the mailboxes) but its capacity
+// check reads another domain's port, so it is reported once and execution
+// stays on one thread.
 inline void SimPlatform::validate_topology() {
   if (topo_validated_) {
     return;
@@ -1306,27 +1698,14 @@ inline void SimPlatform::validate_topology() {
     return;
   }
   bool clamped = false;
-  for (auto* ch : channels_) {
-    if (ch->source_ != nullptr || ch->sink_ == nullptr) {
-      continue; // interior link or standalone endpoint
-    }
-    auto* ep = ch->endpoint();
-    if (ep->module_->domain() == ch->module_->domain()) {
+  for (auto* out : outs_) {
+    auto* ep = out->endpoint();
+    if (ep == nullptr || out->boundary_ || ep->owner_->domain() == out->owner_->domain()) {
       continue;
     }
-    bool registered = false;
-    for (auto* e = ch; e != nullptr; e = e->sink_) {
-      if (e->boundary_stage_) {
-        registered = true;
-        break;
-      }
-    }
-    if (!registered) {
-      std::cout << "SIMX-MT: unregistered cross-domain edge: "
-                << ch->module_->name() << " -> " << ep->module_->name()
-                << std::endl;
-      clamped = true;
-    }
+    std::cout << "SIMX-MT: unregistered cross-domain edge: "
+              << out->owner_->name() << " -> " << ep->owner_->name() << std::endl;
+    clamped = true;
   }
   if (clamped) {
     std::cout << "SIMX-MT: parallel execution disabled until every "
@@ -1335,65 +1714,39 @@ inline void SimPlatform::validate_topology() {
   }
 }
 
-// A kernel launch resets every object but those built under a
-// LaunchKeepScope: the hardware does not reset between a transfer and the
-// launch that follows it, so the transfer's line fills may still be in
-// flight in the kept memory side when the kernel starts. Their events stay
-// scheduled and time keeps counting; the rest of the model is quiescent.
+// A kernel launch resets every unit but those built under a LaunchKeepScope:
+// the hardware does not reset between a transfer and the launch that follows
+// it, so the transfer's line fills may still be in flight in the kept memory
+// side when the kernel starts.
 inline void SimPlatform::reset_launch() {
   launch_resetting_ = true;
-  for (auto* object : active_reset_) {
-    if (!object->launch_kept_) {
-      object->do_reset();
+  for (auto* unit : resets_) {
+    if (!unit->launch_kept_) {
+      unit->do_reset();
     }
   }
   launch_resetting_ = false;
-  for (auto& object : objects_) {
-    object->tick_active_ = true;
-  }
+  this->wake_all();
 }
 
+// Callers reset only from quiescence (see idle()).
 inline void SimPlatform::reset() {
   this->validate_topology();
-
-  // Clear any lingering events from the previous run. Dropping an
-  // undelivered event does not unwind its reservation accounting, so
-  // callers reset only from quiescence (see idle()).
-  for (auto& dom : domains_) {
-    for (auto& bucket : dom->wheel) {
-      while (!bucket.empty()) {
-        auto it = bucket.begin();
-        auto evt = &*it;
-        bucket.erase(it);
-        delete evt;
-      }
-    }
-    while (!dom->imm.empty()) {
-      auto it = dom->imm.begin();
-      auto evt = &*it;
-      dom->imm.erase(it);
-      delete evt;
-    }
-    dom->delta = 0;
+  for (auto* unit : resets_) {
+    unit->do_reset();
   }
-
-  // clear sim objects (only those that override reset())
-  for (auto* object : active_reset_) {
-    object->do_reset();
-  }
-
-  // Re-arm every tick-gated object for the new run.
-  for (auto& object : objects_) {
-    object->tick_active_ = true;
-  }
-
-  // Drop undelivered cross-domain calls from the previous run. The lanes
-  // themselves are kept: workers index them concurrently once started,
-  // so the vector must never shrink after init_mt materialized it.
+  this->wake_all();
+  // The lanes themselves are kept: workers index them once started.
   this->clear_cross_lanes();
-
-  // Reset timing
   cycles_ = 0;
+  for (auto& dom : domains_) {
+    dom->now = 0;
+    for (auto& slot : dom->wake_slots) {
+      std::fill(slot.begin(), slot.end(), 0);
+    }
+    dom->wake_armed = 0;
+    dom->wake_far.clear();
+  }
   ++reset_gen_;
 }
 
@@ -1402,178 +1755,162 @@ inline void SimPlatform::tick() {
     this->init_mt(req_workers_);
   }
   if (workers_started_) {
-    // Parallel cycle: workers are parked on the entry barrier between
-    // tick() calls, so everything outside this function is single-threaded.
-    // Two barriers per cycle — release and join; the global counter is
-    // committed in the join barrier's release step, and each thread's
-    // per-phase cycle view is thread-local (see cycles()).
-    this->barrier_wait();                          // release workers
-    uint64_t cycle = cycles_;
-    tl_cycles_ = cycle;
-    for (auto* dom : stripe_domains_[0]) {
-      this->tick_domain(*dom);
-    }
-    tl_cycles_ = cycle + 1;
-    for (auto* dom : stripe_domains_[0]) {
-      this->fire_bucket(*dom, cycle + 1);
-    }
-    tl_exec_domain_ = HOST_DOMAIN;
-    tl_exec_object_ = nullptr;
-    this->barrier_wait([this]() { ++cycles_; });   // join; workers park
+    // Workers park on the entry barrier between tick() calls, so everything
+    // outside this function is single-threaded.
+    this->barrier_wait(0);
+    this->run_stripe(0);
+    this->barrier_wait(0, [this]() { this->cycle_end(); });
     return;
   }
-
-  // Serial reference path: tick each domain — its due cross calls, immediate
-  // events, then its scan list in creation order (the order fixes the
-  // delta-event interleaving within the domain). Domains only interact
-  // through registered (latency >= 1) edges, so the domain execution order
-  // within a cycle is not observable.
-  tl_cycles_ = cycles_;
+  // Serial: domains interact only through registered (latency >= 1) edges,
+  // so their order within a cycle is not observable.
   for (auto& dom : domains_) {
-    this->tick_domain(*dom);
+    this->run_domain(*dom, cycles_);
   }
-  ++cycles_;
-  tl_cycles_ = cycles_;
-
-  // Deliver each domain's registered events due this cycle.
-  for (auto& dom : domains_) {
-    this->fire_bucket(*dom, cycles_);
-  }
+  cycles_ += quantum_;
   tl_exec_domain_ = HOST_DOMAIN;
-  tl_exec_object_ = nullptr;
+  tl_exec_task_ = nullptr;
 }
 
-inline void SimPlatform::tick_domain(Domain& dom) {
+template <typename Stop>
+void SimPlatform::run_until(Stop&& stop) {
+  if (!mt_init_done_) {
+    this->init_mt(req_workers_);
+  }
+  if (!workers_started_) {
+    do {
+      this->tick();
+    } while (!stop());
+    return;
+  }
+  __assert(!run_active_, "run_until() is not reentrant");
+  using StopFn = std::remove_reference_t<Stop>;
+  run_stop_ = [](void* arg) -> bool { return (*static_cast<StopFn*>(arg))(); };
+  run_stop_arg_ = const_cast<void*>(static_cast<const void*>(&stop));
+  // Set in the release step: a worker reads the flag after each cycle-end
+  // barrier, and one slow to leave the previous run's last barrier must not
+  // see this run's value.
+  this->barrier_wait(0, [this]() { run_active_ = true; });
+  do {
+    this->run_stripe(0);
+    this->barrier_wait(0, [this]() { this->cycle_end(); });
+  } while (run_active_);
+  run_stop_ = nullptr;
+  run_stop_arg_ = nullptr;
+}
+
+template <typename Stop, typename Obj, typename Busy>
+void SimPlatform::run_until(Stop&& stop, const std::vector<Obj*>& voters, Busy&& busy) {
+  if (!mt_init_done_) {
+    this->init_mt(req_workers_);
+  }
+  if (!workers_started_) {
+    do {
+      this->tick();
+    } while (!stop(false));
+    return;
+  }
+  __assert(!run_active_ && !sync_active_, "run_until() is not reentrant");
+  __assert(stripe_domains_[0].front()->id == 0, "thread 0 owns the uncore domain");
+  if (sync_progress_ == nullptr) {
+    this->sync_init_graph();
+  }
+  std::vector<std::vector<Obj*>> domain_voters(num_domains_);
+  for (auto* voter : voters) {
+    domain_voters.at(voter->domain()).push_back(voter);
+  }
+  auto vote = [&](uint32_t domain) {
+    for (auto* voter : domain_voters[domain]) {
+      if (busy(voter)) {
+        return true;
+      }
+    }
+    return false;
+  };
+  using StopFn = std::remove_reference_t<Stop>;
+  using VoteFn = decltype(vote);
+  sync_stop_fn_ = [](void* arg, bool any_busy) -> bool { return (*static_cast<StopFn*>(arg))(any_busy); };
+  sync_vote_fn_ = [](void* arg, uint32_t d) -> bool { return (*static_cast<VoteFn*>(arg))(d); };
+  sync_stop_arg_ = const_cast<void*>(static_cast<const void*>(&stop));
+  sync_vote_arg_ = const_cast<void*>(static_cast<const void*>(&vote));
+  sync_start_ = cycles_;
+  for (uint32_t d = 0; d < num_domains_; ++d) {
+    sync_progress_[d].word.store(sync_start_ << 1, std::memory_order_relaxed);
+  }
+  sync_decided_.store(sync_start_, std::memory_order_relaxed);
+  sync_stop_.store(false, std::memory_order_relaxed);
+  sync_active_ = true;
+  this->barrier_wait(0);
+  this->sync_loop(0);
+  this->barrier_wait(0);
+  sync_active_ = false;
+  sync_stop_fn_ = nullptr;
+  sync_vote_fn_ = nullptr;
+  sync_stop_arg_ = nullptr;
+  sync_vote_arg_ = nullptr;
+}
+
+inline void SimPlatform::tick_domain(Domain& dom, bool drain) {
+  dom.now = tl_cycles_;
+  // timed wake-ups due this cycle join the ready set
+  uint32_t slot = uint32_t(dom.now & (Domain::kWakeSlots - 1));
+  if ((dom.wake_armed >> slot) & 1) {
+    auto& bits = dom.wake_slots[slot];
+    for (uint32_t w = 0; w < dom.active_words; ++w) {
+      dom.active()[w] |= bits[w];
+      bits[w] = 0;
+    }
+    dom.wake_armed &= ~(uint64_t(1) << slot);
+  }
+  while (!dom.wake_far.empty() && dom.wake_far.front().first <= dom.now) {
+    uint32_t idx = dom.wake_far.front().second;
+    dom.active()[idx >> 6] |= uint64_t(1) << (idx & 63);
+    std::pop_heap(dom.wake_far.begin(), dom.wake_far.end(), std::greater<>());
+    dom.wake_far.pop_back();
+  }
   tl_exec_domain_ = dom.id;
-  tl_exec_object_ = nullptr;
-  // Start-of-cycle for this domain: integrate deferred cross-domain work.
-  {
-    this->drain_cross_calls_for(dom.id);
+  tl_exec_task_ = nullptr;
+  if (drain) {
+    this->drain_cross_calls(dom.id);
   }
-  if (dom.delta != 0) {
-    fire_immediate_events(dom);
-  }
-  // Every object on a domain's scan list belongs to that domain, so the
-  // execution domain set above holds for the whole scan. The current object
-  // is tracked only for the boundary audit, its sole reader.
-  const bool track_object = audit_enabled_;
-  for (auto* object : dom.scan) {
-    if (!object->tick_active_) {
-      continue;
-    }
-    if (track_object) {
-      tl_exec_object_ = object;
-    }
-    object->do_tick();
-    if (dom.delta != 0) {
-      fire_immediate_events(dom);
+  // Visit the ready set in creation order. The word is re-read after each
+  // task, so a task woken by one ahead of it runs this cycle and one woken by
+  // a task behind it runs next cycle, as in a scan of every task that tests
+  // a flag.
+  uint64_t* words = dom.active_words ? dom.active() : nullptr;
+  SimTask* const* tasks = dom.scan.data();
+  for (uint32_t w = 0, nw = dom.active_words; w < nw; ++w) {
+    uint64_t bits = words[w];
+    while (bits != 0) {
+      uint32_t b = uint32_t(__builtin_ctzll(bits));
+      auto* task = tasks[size_t(w) * 64 + b];
+      tl_exec_task_ = task;
+      task->run();
+      bits = words[w] & (~uint64_t(1) << b);
     }
   }
 }
 
 inline void SimPlatform::cleanup() {
   this->stop_workers();
-  if (audit_enabled_ && !audit_hist_.empty()) {
-    this->dump_audit(std::cout);
-    audit_hist_.clear();
-  }
-  active_reset_.clear();
+  resets_.clear();
+  outs_.clear();
   objects_.clear();
-
-  for (auto& dom : domains_) {
-    for (auto& bucket : dom->wheel) {
-      while (!bucket.empty()) {
-        auto it = bucket.begin();
-        auto evt = &*it;
-        bucket.erase(it);
-        delete evt;
-      }
-    }
-    while (!dom->imm.empty()) {
-      auto it = dom->imm.begin();
-      auto evt = &*it;
-      dom->imm.erase(it);
-      delete evt;
-    }
-  }
   domains_.clear();
   mail_.clear();
+  sync_progress_.reset();
+  sync_deps_.clear();
+  sync_edge_.clear();
   num_domains_ = 1;
   cycles_ = 0;
-  // Allow a subsequent initialize() to elaborate and parallelize afresh.
+  // A later initialize() elaborates and parallelizes afresh.
   mt_init_done_ = false;
   mt_max_threads_ = std::numeric_limits<uint32_t>::max();
   topo_validated_ = false;
-  audit_enabled_ = audit_requested_;
 }
 
-inline void SimPlatform::fire_immediate_events(Domain& dom) {
-  // Each immediate event gets a unique, monotonically increasing delta at
-  // schedule time, so the list is already ordered by delta — including events
-  // appended mid-firing, which receive a delta above all queued ones. Firing
-  // front-to-back is therefore identical to draining delta levels in order.
-  while (!dom.imm.empty()) {
-    auto it = dom.imm.begin();
-    auto evt = &*it;
-    evt->fire();
-    dom.imm.erase(it);
-    delete evt;
-  }
-  dom.delta = 0;
-}
+#ifdef SIMX_FUNCTIONAL
+}  // inline namespace sim_functional
+#endif
 
-template <typename Pkt>
-void SimChannelEvent<Pkt>::fire() {
-  channel_->receive_packet(pkt_);
-}
-
-inline SimObjectBase::SimObjectBase(const SimContext&, const std::string& name)
-    : name_(name)
-    , domain_(SimPlatform::instance().build_domain())
-    , launch_kept_(SimPlatform::instance().build_launch_kept()) {}
-
-inline SimChannelBase::SimChannelBase(SimObjectBase* module)
-    : module_(module)
-    , sink_(nullptr)
-    , source_(nullptr) {
-  SimPlatform::instance().register_channel(this);
-}
-
-inline int64_t& SimChannelBase::resolve_inflight() {
-  return SimPlatform::instance().domain_at(module_->domain()).inflight;
-}
-
-inline SimChannelBase::~SimChannelBase() {
-  SimPlatform::instance().unregister_channel(this);
-}
-
-inline void SimPlatform::audit_send(SimChannelBase* channel, uint64_t delay) {
-  auto* endpoint = channel;
-  while (endpoint->sink_) {
-    endpoint = endpoint->sink_;
-  }
-  uint32_t dst = endpoint->module_->domain_;
-  if (tl_exec_domain_ == dst) {
-    return;
-  }
-  std::stringstream key;
-  if (tl_exec_domain_ == HOST_DOMAIN) {
-    key << "host";
-  } else {
-    key << "d" << tl_exec_domain_ << ":"
-        << (tl_exec_object_ ? tl_exec_object_->name() : "?");
-  }
-  key << " -> d" << dst << ":" << endpoint->module_->name()
-      << " delay=" << delay;
-  ++audit_hist_[key.str()];
-}
-
-inline void SimPlatform::dump_audit(std::ostream& os) {
-  os << "BOUNDARY-AUDIT: " << num_domains_ << " domains, "
-     << audit_hist_.size() << " distinct cross-domain edges" << std::endl;
-  for (auto& [key, count] : audit_hist_) {
-    os << "BOUNDARY-AUDIT: " << key << " count=" << count << std::endl;
-  }
-}
-
-} // namespace vortex
+}  // namespace vortex

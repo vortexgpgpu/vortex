@@ -45,12 +45,12 @@ public:
   // Per-core launch lanes. Each lane is bound to a registered boundary stage
   // feeding the core dispatcher's endpoint; readiness is the lane's local
   // full() view — the KMU never reads a consumer's state.
-  std::vector<SimChannel<kmu_req_t>> bus_out;
+  SimPortOutArray<kmu_req_t> bus_out;
 
   // Per-core credit returns: the dispatcher sends one message per admitted
   // CTA. Dispatch is additionally gated on the in-flight count so pacing
   // rests on explicit slot accounting, not on transport back-pressure.
-  std::vector<SimChannel<uint8_t>> credit_in;
+  SimPortInArray<uint8_t> credit_in;
 
   // Each core's launch buffer holds two CTAs it has not yet admitted. A
   // deeper buffer would commit work to a busy core early and keep it from a
@@ -82,6 +82,9 @@ public:
 protected:
   void on_reset();
   void on_tick();
+  // CTAs remain and a lane can take one now or once a slot frees next cycle;
+  // a credit or a lane pop wakes it otherwise.
+  bool busy() const { return running_ && !blocked_; }
 
 private:
   // Fill *req with the next CTA for `core_id`; false when the grid is
@@ -99,6 +102,7 @@ private:
   uint32_t warp_step_[3];
   uint32_t cluster_dim_[3];
   bool     running_;
+  bool     blocked_ = false;
   uint32_t cta_id_;
   // Round-robin pointer over launch lanes; advances past the granted core
   // when a message (cluster or standalone CTA) completes.

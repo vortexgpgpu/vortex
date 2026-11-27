@@ -63,6 +63,7 @@ public:
 protected:
   void on_reset();
   void on_tick();
+  bool busy() const { return !pending_releases_.empty(); }
 
 private:
   static uint32_t get_reg_id(const RegOpd& reg, uint32_t wid) {

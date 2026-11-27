@@ -4,8 +4,8 @@
 simulator ([`sim/simx/`](../../sim/simx/)), and its SST integration
 ([`sim/simx/sst/`](../../sim/simx/sst/)).
 
-This document is architectural. The `SimObject`/`SimChannel` framework
-mechanics are in [`docs/designs/simobject.md`](simobject.md) and usage is in
+This document is architectural. The unit/port framework mechanics are in
+[`docs/simobject.md`](../simobject.md) and usage is in
 [`docs/simulation.md`](../simulation.md); this doc covers the v3 model —
 how functional and timing meet, the module decomposition, and the SST
 boundary — without repeating those.
@@ -33,44 +33,46 @@ it serves as the RTL oracle for cycle-parity debugging.
 
 [`sim/common/simobject.h`](../../sim/common/simobject.h) provides:
 
-- **`SimObject<Impl>`** (CRTP) — a hardware block with `on_tick`/`on_reset`
-  hooks; passive objects auto-skip.
-- **`SimChannel<Pkt>`** — a typed, backpressured link: a producer
-  `send(pkt, delay)` schedules delivery; `pending_count_` enforces
-  capacity-based occupancy; `tx_callback` allows snooping. **The channel
-  is the pipeline** — latency is the `send` delay and occupancy is the
-  output channel's capacity, so pipelined units need no internal stage
-  deque.
-- **`SimPlatform`** — the singleton tick engine: a 4096-bucket timing
-  wheel plus immediate/delta event queues. Each `tick()` settles delta
-  events, ticks every active object in creation order, settles deltas
-  again, advances the cycle, then fires wheel events for that cycle.
-  With `SIMX_MT > 1` (a build define set via `CONFIGS`) the engine
-  executes execution domains (one per socket, uncore = domain 0) on
-  parallel workers in cycle lockstep, with results bit-identical to
-  serial execution. The functional kernel can instead synchronize every
-  `SIMX_QUANTUM` cycles (see [SimObject](simobject.md)).
+- **`SimObject<U>`** — a hardware block. It reacts either through handler
+  ports (`bool handler(T&)` per input) or through `on_tick()`, every cycle
+  unless the unit defines `busy()`; then the kernel runs it only on cycles
+  where it has work: a visible packet, a freed output slot, `busy()`, or
+  `tick_wake()`.
+- **`SimPortIn<T>` / `SimPortOut<T>`** — typed, back-pressured ports, owned by
+  the unit that reads or writes them. `out.bind(&in, latency)` sets the
+  link latency; `full()`/`send()` follow RTL valid/ready, and a port's
+  capacity counts packets in flight. **The port is the pipeline**: latency
+  is on the link and occupancy is the reader's capacity, and a unit's
+  internal stage is its own port (`in.push(pkt, latency)`), so pipelined
+  units need no stage deque.
+- **`SimPlatform`** — the singleton cycle engine: each cycle it visits the
+  awake units and handler ports of every execution domain in creation
+  order. With `SIMX_MT > 1` (a build define set via `CONFIGS`) it runs the
+  execution domains (one per socket, uncore = domain 0) on parallel workers
+  in cycle lockstep, with results bit-identical to serial execution. The
+  functional kernel can instead synchronize every `SIMX_QUANTUM` cycles
+  (see [simobject.md](../simobject.md)).
 - **`SimEventLink<Msg>`** — a one-way, typed control-plane link (barrier
   arrive/resume, FWD arm/done, doorbells): both ends are declared members,
   the receiver binds a member-function handler, elaboration wires
   sender→receiver with `bind()`. `send(msg, delay >= 1)` is non-refusable
-  and invokes the handler in the receiving module's context, in canonical
-  order — the only way to trigger behavior on a module in another domain.
-- **`RegSlice<Pkt>`** ([`sim/simx/regslice.h`](../../sim/simx/regslice.h))
-  — a credit-gated registered stage owned by the sending domain; every
-  channel chain that crosses an execution-domain boundary must pass
-  through one. `SimPlatform` validates this at the first reset and caps
-  execution at one thread (with a report) if an edge is unregistered.
+  and invokes the handler in the receiving unit's domain, in canonical
+  order.
+- **`RegSlice<T>`** ([`sim/common/simobject_lib.h`](../../sim/common/simobject_lib.h),
+  with the buffers, arbiters and crossbars) — a credit-gated registered
+  stage owned by the sending domain; every port that crosses an
+  execution-domain boundary must pass through one. `SimPlatform` validates
+  this at the first reset and caps execution at one thread (with a report)
+  if an edge is unregistered.
 
 ### Communication contract
 
-A component mutates only its own state, schedules events only for itself,
-and talks to other components exclusively through its own channels and
-links — never by calling a method on, or reading occupancy of, anything
-across a domain boundary. Quiescence is `SimPlatform::idle()`; host code
-(driver calls between ticks, when all workers are parked) may read any
-component's state and mutate only through component APIs (`reset`,
-`start`, `dcr_write`). Model code carries no threading vocabulary — no
+A unit mutates only its own state and talks to other units exclusively
+through its own ports and event links — never by calling a method on, or
+reading occupancy of, anything across a domain boundary. Quiescence is
+`SimPlatform::idle()`; host code (driver calls between ticks, when all
+workers are parked) may read any unit's state and mutate only through
+unit APIs (`reset`, `start`, `dcr_write`). Model code carries no threading vocabulary — no
 atomics, threads, locks, or deferred-call plumbing — enforced by
 `ci/check_simx_mt_boundary.sh`.
 
@@ -86,7 +88,7 @@ atomics, threads, locks, or deferred-call plumbing — enforced by
 - `cluster.{cpp,h}` → `socket.{cpp,h}` → `core.{cpp,h}` — the GPU
   hierarchy; `Core` wires the per-core pipeline.
 
-**Per-core pipeline** (mostly `SimObject`s)
+**Per-core pipeline** (each a `SimObject`)
 - `scheduler.{cpp,h}` — per-warp lifecycle: PC/tmask/fcsr/IPDOM stack,
   barriers, trap state; owns the `CtaDispatcher` and a `BarrierUnit`.
 - `cta_dispatcher.{cpp,h}` — CTA → warp (block/grid) mapping.
@@ -101,8 +103,8 @@ atomics, threads, locks, or deferred-call plumbing — enforced by
   (mirrors RTL `VX_opc_unit.sv`).
 - `dispatcher.{cpp,h}` — aggregates `ISSUE_WIDTH` issue ports onto per-FU
   execution lanes.
-- `func_unit.h` — `FuncUnit<NUM_BLOCKS>` CRTP base; each FU owns
-  `Inputs[]`/`Outputs[]` channels.
+- `func_unit.h` — `FuncUnit<U, NUM_BLOCKS>` base; each FU owns `inputs`/`outputs`
+  port arrays.
 
 **Functional units**
 - `alu_unit`, `fpu_unit` — own private `execute()` (ISA semantics).
@@ -185,8 +187,7 @@ source of truth via a hook, without a polymorphic `MemorySST` subclass.
    consolidated into one hostless runner).
 4. **Memory-model headroom** the design deliberately left open: cache
    coherency (MESI/MOESI) is now an additive change since lines carry
-   data + dirty state, and a "sleep-until-input" optimization for the
-   per-cycle O(N_objects) tick is noted for future scaling.
+   data + dirty state.
 
 **Superseded directions** (recorded to avoid revival): the central
 `Emulator` god-object and `MemBackend`/`core->mem_read` data path (deleted

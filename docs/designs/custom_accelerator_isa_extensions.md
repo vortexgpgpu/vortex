@@ -457,13 +457,13 @@ Each of these was built or drafted, and each is wrong.
 | rule | reason |
 |---|---|
 | classify the instruction in decode: functional unit, operation, source and destination register types, macro-op or not | the timing model and the RTL must agree on what is issued |
-| every memory access is a real request through a channel | reading memory behind the timing model's back produces results the RTL cannot reproduce |
+| every memory access is a real request through a port | reading memory behind the timing model's back produces results the RTL cannot reproduce |
 | the micro-op generator mirrors the RTL expander's order and count | the per-micro-op cycle accounting is what gives the macro-op its latency |
 | a bounded in-flight pool with real back-pressure | an unbounded queue hides exactly the stalls the design must survive |
 | deterministic ordering: insertion-order containers, stable arbitration | runs reproduce bit for bit |
 
-A module may touch another only through its channels — see
-[`simobject.md`](simobject.md).
+A unit may touch another only through its ports and event links — see
+[`simobject.md`](../simobject.md).
 
 ---
 

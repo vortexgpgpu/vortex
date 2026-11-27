@@ -26,14 +26,10 @@ class Core;
 //   wis  = wid / VX_CFG_ISSUE_WIDTH       — warp-in-slice index
 //   opc  = wis % VX_CFG_NUM_OPCS          — which OpcUnit within the lane
 //   slot = wis / VX_CFG_NUM_OPCS          — local slot inside this OpcUnit
-class OpcUnit : public SimObject<OpcUnit> {
+// Operands steps each collector once a cycle (see Operands::on_tick).
+class OpcUnit {
 public:
-  SimChannel<instr_trace_t *> Input;
-  SimChannel<instr_trace_t *> Output;
-
-  OpcUnit(const SimContext& ctx, const char* name,
-          uint32_t num_warp_slots, uint32_t num_threads);
-  virtual ~OpcUnit();
+  explicit OpcUnit(uint32_t num_warp_slots);
 
   // Functional regfile writeback applied at unit-tick.
   void writeback(instr_trace_t* trace, uint32_t wid);
@@ -57,8 +53,10 @@ public:
   }
 
 protected:
-  virtual void on_reset();
-  virtual void on_tick();
+  void on_reset();
+  // Start collecting `trace` at cycle `now`: it stays at the head of the issue
+  // buffer until its last operand read, and leaves the collector a cycle later.
+  void accept(instr_trace_t* trace, uint64_t cur_cycle);
 
 private:
   // Register files sized by the build's thread count: lane loops get a
@@ -76,7 +74,6 @@ private:
   uint64_t       consume_cycle_ = 0;
   bool           consumed_ = false;
 
-  friend class SimObject<OpcUnit>;
   friend class Operands;  // Operands::get_exit_code reads regs_ directly
 };
 
