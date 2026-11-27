@@ -59,7 +59,7 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class TcuUnit : public FuncUnit<VX_CFG_NUM_TCU_BLOCKS> {
+class TcuUnit : public FuncUnit<TcuUnit, VX_CFG_NUM_TCU_BLOCKS> {
 public:
   using Ptr = std::shared_ptr<TcuUnit>;
 
@@ -87,13 +87,13 @@ public:
   // Metadata AGU ports (TCU_AGU_PORTS): TCU_LD issues load requests through
   // the LSU client ports; response fragments return here and accumulate into
   // the metadata SRAM.
-  std::vector<SimChannel<LsuReq>> agu_req_out;
-  std::vector<SimChannel<LsuRsp>> agu_rsp_in;
+  SimPortOutArray<LsuReq> agu_req_out;
+  SimPortInArray<LsuRsp> agu_rsp_in;
 #endif
 
   // Per block: the cycles its lane-gather buffer refuses a result (its ready
   // is a register, sent the cycle before).
-  std::vector<SimChannel<uint64_t>> result_stall_in;
+  SimPortInArray<uint64_t> result_stall_in;
 
 	void wmma(uint32_t wid,
 	          uint32_t fmt_s,
@@ -131,9 +131,9 @@ public:
 
 	const PerfStats& perf_stats() const;
 
-protected:
-  void on_reset() override;
-  void on_tick() override;
+  void on_reset();
+  void on_tick();
+  // The Core reports a full result queue every cycle it stays full.
 
 private:
 	class Impl;

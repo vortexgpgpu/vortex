@@ -5,7 +5,7 @@
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "vm",
     "result": {
-      "build_time_s": 20,
+      "build_time_s": 40,
       "cells": 1130502,
       "endpoints": 115499,
       "env": {

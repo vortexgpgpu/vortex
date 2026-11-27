@@ -6,7 +6,7 @@
     "dut": "gfx",
     "result": {
       "bram": 183.5,
-      "build_time_s": 80,
+      "build_time_s": 125,
       "deep_endpoints": 1707,
       "deepest_paths": [
         "19  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/g1_idx.d[4]",
@@ -35,7 +35,7 @@
       "lutram": 14119,
       "max_levels": 19,
       "pred_fmax_mhz": 264.7,
-      "risk_endpoints": 470,
+      "risk_endpoints": 474,
       "tied_bits": 1071,
       "tied_ports": [
         {
@@ -178,7 +178,7 @@
     "dut": "gfxvm",
     "result": {
       "bram": 183.5,
-      "build_time_s": 90,
+      "build_time_s": 135,
       "deep_endpoints": 1858,
       "deepest_paths": [
         "19  g_rtu_core_0.rtu_core/scheduler/g_recip_pe.recip_tags/g_shift.g_partial_reset.pipe_free[219] -> g_rtu_core_0.rtu_core/scheduler/g1_idx.d[4]",
@@ -207,7 +207,7 @@
       "lutram": 14557,
       "max_levels": 19,
       "pred_fmax_mhz": 255.6,
-      "risk_endpoints": 474,
+      "risk_endpoints": 472,
       "tied_bits": 1073,
       "tied_ports": [
         {
@@ -364,7 +364,7 @@
         "ummu/tlb/mshr/reqpool": 10
       },
       "uram": 0,
-      "watch_endpoints": 17575,
+      "watch_endpoints": 17576,
       "watch_levels": 8
     }
   },
@@ -375,7 +375,7 @@
     "dut": "om",
     "result": {
       "bram": 0.0,
-      "build_time_s": 5,
+      "build_time_s": 10,
       "deep_endpoints": 96,
       "deepest_paths": [
         "13  om_core/om_dcr/rt_dcrs[28] -> om_core/om_blend/pipe_reg1/g_pipe.g_partial_reset.pipe_free.d[6]",
@@ -439,7 +439,7 @@
     "dut": "raster",
     "result": {
       "bram": 8.0,
-      "build_time_s": 5,
+      "build_time_s": 10,
       "deep_endpoints": 49,
       "deepest_paths": [
         "14  raster_core/raster_dcr/dcrs[0] -> raster_core/raster_mem/mem_req_addr.d[24]",
@@ -502,7 +502,7 @@
     "dut": "rtu",
     "result": {
       "bram": 16.5,
-      "build_time_s": 20,
+      "build_time_s": 30,
       "deep_endpoints": 813,
       "deepest_paths": [
         "15  rtu_core/scheduler/ray_q[128] -> rtu_core/scheduler/tri_pe/q_a.d[32]",
@@ -561,7 +561,7 @@
     "dut": "tex",
     "result": {
       "bram": 0.0,
-      "build_time_s": 30,
+      "build_time_s": 50,
       "deep_endpoints": 0,
       "deepest_paths": [
         "11  tex_core/tex_addr/pipe_reg0/g_pipe.g_partial_reset.pipe_free[4197] -> tex_core/tex_addr/pipe_reg1/g_pipe.g_partial_reset.pipe_free.d[831]",

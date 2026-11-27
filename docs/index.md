@@ -24,7 +24,7 @@
 - [Kernel Debugging](kernel_debugging.md): source-level kernel debugging with GDB and OpenOCD
 - [Perfetto Analysis](perfetto_analysis.md): performance analysis with Perfetto traces
 - [Synthesis and Power Analysis](synthesis_analysis.md): FPGA/ASIC synthesis flows and PPA reporting
-- [SimObject Framework](designs/simobject.md): the SimX simulator's component model
+- [SimX Simulation Framework](simobject.md): the SimX simulator's units, ports and kernel
 - [Coding Guidelines — Verilog](coding_guidelines_verilog.md)
 - [Coding Guidelines — C++](coding_guidelines_cpp.md)
 - [Bug-Fix Discipline](bug_fixes.md): root-cause-first rules for fixing defects

@@ -38,6 +38,9 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     VX_execute_if.slave         execute_if,
     VX_result_if.master         result_if
 );
+
+    typedef result_if.data_t result_t;
+
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam PID_BITS = `CLOG2(`VX_CFG_NUM_THREADS / NUM_LANES);
     localparam LANE_BITS = `CLOG2(NUM_LANES);
@@ -280,7 +283,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     end
 
     VX_elastic_buffer #(
-        .DATAW ($bits(sfu_result_t)),
+        .DATAW ($bits(result_t)),
         .SIZE  (2)
     ) rsp_buf (
         .clk       (clk),

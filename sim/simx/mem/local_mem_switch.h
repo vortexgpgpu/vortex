@@ -21,14 +21,14 @@ class LocalMemSwitch : public SimObject<LocalMemSwitch> {
 public:
   using Ptr = std::shared_ptr<LocalMemSwitch>;
 
-  SimChannel<LsuReq> ReqIn;
-  SimChannel<LsuRsp> RspOut;
+  SimPortIn<LsuReq> ReqIn;
+  SimPortOut<LsuRsp> RspOut;
 
-  SimChannel<LsuReq> ReqOutLmem;
-  SimChannel<LsuRsp> RspInLmem;
+  SimPortOut<LsuReq> ReqOutLmem;
+  SimPortIn<LsuRsp> RspInLmem;
 
-  SimChannel<LsuReq> ReqOutDC;
-  SimChannel<LsuRsp> RspInDC;
+  SimPortOut<LsuReq> ReqOutDC;
+  SimPortIn<LsuRsp> RspInDC;
 
   LocalMemSwitch(
     const SimContext& ctx,
@@ -38,7 +38,7 @@ public:
 
   // The output buffers a request addresses can take it this cycle: to the data
   // cache, to local memory, or both.
-  bool req_ready(bool to_dc, bool to_lmem) const {
+  bool req_ready(bool to_dc, bool to_lmem) {
     return ReqIn.size() == 0
         && !(to_dc && ReqOutDC.full())
         && !(to_lmem && ReqOutLmem.full());
@@ -46,6 +46,7 @@ public:
 
 protected:
   void on_tick();
+  bool busy() const { return false; }  // no work beyond its inputs
 
 private:
   uint32_t delay_;

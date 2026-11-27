@@ -20,7 +20,7 @@ namespace vortex {
 
 class Core;
 
-// DxaReq — per-SFU dispatch packet. The SFU owns the outbound SimChannel;
+// DxaReq — per-SFU dispatch packet. The SFU owns the outbound SimPortOut;
 // DxaUnit is a plain helper sub-class of SfuUnit that decodes lanes and
 // pushes onto that channel.
 struct DxaReq {
@@ -45,7 +45,7 @@ public:
   // The outbound channel lives on SfuUnit (which is the SimObject).
   // bus_delay: extra cycles a request spends merging with other SFU blocks'
   // requests onto the core's DXA bus.
-  DxaUnit(Core* core, SimChannel<DxaReq>& req_out, uint32_t bus_delay = 0)
+  DxaUnit(Core* core, SimPortOut<DxaReq>& req_out, uint32_t bus_delay = 0)
     : core_(core), req_out_(req_out), bus_delay_(bus_delay) {}
 
   // Decode lanes 0..3 from the trace's source operands and try to push a
@@ -56,7 +56,7 @@ public:
 
 private:
   Core*               core_;
-  SimChannel<DxaReq>& req_out_;
+  SimPortOut<DxaReq>& req_out_;
   uint32_t            bus_delay_;
 };
 

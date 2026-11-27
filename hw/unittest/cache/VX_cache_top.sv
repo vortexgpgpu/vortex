@@ -83,7 +83,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     // Hashed set index
     parameter SET_HASH              = `VX_CFG_DCACHE_SET_HASH,
 
-    parameter MEM_TAG_WIDTH         = `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, MEM_PORTS, UUID_WIDTH)
+    parameter MEM_TAG_WIDTH         = cache_mem_tag_width(MSHR_SIZE, NUM_BANKS, MEM_PORTS, UUID_WIDTH)
  ) (
     input wire clk,
     input wire reset,

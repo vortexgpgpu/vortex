@@ -1071,10 +1071,10 @@ private:
 
 RasterCore::RasterCore(const SimContext& ctx, const char* name, Cluster* cluster)
   : SimObject<RasterCore>(ctx, name)
-  , raster_req_in(kNumRasterLanes, this)
-  , raster_rsp_out(kNumRasterLanes, this)
-  , rcache_req_out(kRcacheNumReqs, this)
-  , rcache_rsp_in(kRcacheNumReqs, this)
+  , raster_req_in(this, kNumRasterLanes, 2)
+  , raster_rsp_out(this, kNumRasterLanes)
+  , rcache_req_out(this, kRcacheNumReqs)
+  , rcache_rsp_in(this, kRcacheNumReqs, 2)
   , fwd_arm_out(NUM_SOCKETS * VX_CFG_SOCKET_SIZE, this)
   , fwd_done_in(this)
 {

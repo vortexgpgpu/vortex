@@ -50,8 +50,9 @@ public:
 #endif
   };
 
-  std::vector<SimChannel<MemReq>> mem_req_out;
-  std::vector<SimChannel<MemRsp>> mem_rsp_in;
+  // The registered stages of the socket's memory ports.
+  std::vector<SimPortOut<MemReq>*> mem_req_out;
+  std::vector<SimPortIn<MemRsp>*>  mem_rsp_in;
 
   Socket(const SimContext& ctx,
          const char* name,
@@ -107,8 +108,8 @@ public:
 #ifdef SIMX_SOCKET_UNIT_MMU
   // Unit MMU: its miss/fill link to the cluster TLB, and the device satp
   // (Cluster::set_mmu_satp), which flushes its TLB on an actual change.
-  SimChannel<TlbReq>& tlb_miss_out();
-  SimChannel<TlbRsp>& tlb_fill_in();
+  SimPortOut<TlbReq>& tlb_miss_out();
+  SimPortIn<TlbRsp>& tlb_fill_in();
   void set_satp(uint64_t satp);
 #endif
 

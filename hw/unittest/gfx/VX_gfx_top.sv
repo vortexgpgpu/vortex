@@ -345,8 +345,12 @@ module VX_gfx_top import VX_gpu_pkg::*
     );
 
     for (genvar i = 1; i < `VX_CFG_NUM_TEX_CORES * TCACHE_NUM_REQS; ++i) begin : g_tcache_passthru
-        `ASSIGN_VX_MEM_BUS_IF_EX (tcache_flushable_bus_if[i], tcache_bus_if[i],
-                                  TCACHE_BUS_TAG_WIDTH, TCACHE_TAG_WIDTH, 0);
+        VX_mem_bus_connect #(
+            .UUID_TAG (0)
+        ) tcache_flushable_bus_connect (
+            .bus_in_if  (tcache_bus_if[i]),
+            .bus_out_if (tcache_flushable_bus_if[i])
+        );
     end
 
     VX_cache_cluster #(
@@ -390,7 +394,7 @@ module VX_gfx_top import VX_gpu_pkg::*
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
     localparam RTU_CORES_PER_RTU = NC / `VX_CFG_NUM_RTU_CORES;
-    localparam RTU_SRC_WIDTH     = `UP(`ARB_SEL_BITS(RTU_CORES_PER_RTU, 1));
+    localparam RTU_SRC_WIDTH     = `UP(arb_sel_bits(RTU_CORES_PER_RTU, 1));
 
     VX_rtu_bus_if #(
         .NUM_LANES (SFU_LANES),
@@ -499,8 +503,12 @@ module VX_gfx_top import VX_gpu_pkg::*
     );
 
     for (genvar i = 1; i < `VX_CFG_NUM_RTU_CORES * RTCACHE_NUM_REQS; ++i) begin : g_rtcache_passthru
-        `ASSIGN_VX_MEM_BUS_IF_EX (rtcache_flushable_bus_if[i], rtcache_bus_if[i],
-                                  RTCACHE_BUS_TAG_WIDTH, RTCACHE_TAG_WIDTH, 0);
+        VX_mem_bus_connect #(
+            .UUID_TAG (0)
+        ) rtcache_flushable_bus_connect (
+            .bus_in_if  (rtcache_bus_if[i]),
+            .bus_out_if (rtcache_flushable_bus_if[i])
+        );
     end
 
     VX_cache_cluster #(
@@ -554,10 +562,16 @@ module VX_gfx_top import VX_gpu_pkg::*
     ) unit_phys_bus_if[UMMU_NUM_REQS]();
 
 `ifdef VX_CFG_EXT_TEX_ENABLE
-    `ASSIGN_VX_MEM_BUS_IF_EX (unit_mem_bus_if[UMMU_TCACHE_IDX], tcache_mem_bus_tmp_if[0], SOCKET_MEM_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+    VX_mem_bus_connect unit_mem_bus_ummu_tcache_idx_connect (
+        .bus_in_if  (tcache_mem_bus_tmp_if[0]),
+        .bus_out_if (unit_mem_bus_if[UMMU_TCACHE_IDX])
+    );
 `endif
 `ifdef VX_CFG_EXT_RTU_ENABLE
-    `ASSIGN_VX_MEM_BUS_IF_EX (unit_mem_bus_if[UMMU_RTCACHE_IDX], rtcache_mem_bus_tmp_if[0], SOCKET_MEM_TAG_WIDTH, RTCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+    VX_mem_bus_connect unit_mem_bus_ummu_rtcache_idx_connect (
+        .bus_in_if  (rtcache_mem_bus_tmp_if[0]),
+        .bus_out_if (unit_mem_bus_if[UMMU_RTCACHE_IDX])
+    );
 `endif
 `ifdef VX_CFG_EXT_DXA_ENABLE
     // DXA gmem slot (read-only tile fetches from the ports)
@@ -678,20 +692,35 @@ module VX_gfx_top import VX_gpu_pkg::*
 
         `ifdef SOCKET_UNIT_MMU_ENABLE
         `ifdef VX_CFG_EXT_TEX_ENABLE
-            `ASSIGN_VX_MEM_BUS_IF (socket_arb_in_if[TCACHE_MEM_ARB_IDX], unit_phys_bus_if[UMMU_TCACHE_IDX]);
+            VX_mem_bus_connect socket_arb_in_tcache_mem_arb_idx_connect (
+                .bus_in_if  (unit_phys_bus_if[UMMU_TCACHE_IDX]),
+                .bus_out_if (socket_arb_in_if[TCACHE_MEM_ARB_IDX])
+            );
         `endif
         `ifdef VX_CFG_EXT_RTU_ENABLE
-            `ASSIGN_VX_MEM_BUS_IF (socket_arb_in_if[RTCACHE_MEM_ARB_IDX], unit_phys_bus_if[UMMU_RTCACHE_IDX]);
+            VX_mem_bus_connect socket_arb_in_rtcache_mem_arb_idx_connect (
+                .bus_in_if  (unit_phys_bus_if[UMMU_RTCACHE_IDX]),
+                .bus_out_if (socket_arb_in_if[RTCACHE_MEM_ARB_IDX])
+            );
         `endif
         `ifdef VX_CFG_EXT_DXA_ENABLE
-            `ASSIGN_VX_MEM_BUS_IF (socket_arb_in_if[DXA_MEM_ARB_IDX], unit_phys_bus_if[UMMU_DXA_IDX]);
+            VX_mem_bus_connect socket_arb_in_dxa_mem_arb_idx_connect (
+                .bus_in_if  (unit_phys_bus_if[UMMU_DXA_IDX]),
+                .bus_out_if (socket_arb_in_if[DXA_MEM_ARB_IDX])
+            );
         `endif
         `else
         `ifdef VX_CFG_EXT_TEX_ENABLE
-            `ASSIGN_VX_MEM_BUS_IF_EX (socket_arb_in_if[TCACHE_MEM_ARB_IDX], tcache_mem_bus_tmp_if[0], SOCKET_MEM_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+            VX_mem_bus_connect socket_arb_in_tcache_mem_arb_idx_connect (
+                .bus_in_if  (tcache_mem_bus_tmp_if[0]),
+                .bus_out_if (socket_arb_in_if[TCACHE_MEM_ARB_IDX])
+            );
         `endif
         `ifdef VX_CFG_EXT_RTU_ENABLE
-            `ASSIGN_VX_MEM_BUS_IF_EX (socket_arb_in_if[RTCACHE_MEM_ARB_IDX], rtcache_mem_bus_tmp_if[0], SOCKET_MEM_TAG_WIDTH, RTCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+            VX_mem_bus_connect socket_arb_in_rtcache_mem_arb_idx_connect (
+                .bus_in_if  (rtcache_mem_bus_tmp_if[0]),
+                .bus_out_if (socket_arb_in_if[RTCACHE_MEM_ARB_IDX])
+            );
         `endif
         `endif
         `ifdef VX_CFG_EXT_DXA_ENABLE
@@ -737,7 +766,10 @@ module VX_gfx_top import VX_gpu_pkg::*
                 .bus_out_if (socket_arb_out_if)
             );
 
-            `ASSIGN_VX_MEM_BUS_IF (socket_mem_bus_if[0], socket_arb_out_if[0]);
+            VX_mem_bus_connect socket_mem_bus_0_connect (
+                .bus_in_if  (socket_arb_out_if[0]),
+                .bus_out_if (socket_mem_bus_if[0])
+            );
         end else begin : g_i
             // Extra dcache banks pass straight through, as VX_socket does.
             VX_mem_bus_if #(
@@ -758,7 +790,10 @@ module VX_gfx_top import VX_gpu_pkg::*
             assign dc_mem_rsp_tag[i]   = dc_bank_bus_if.rsp_data.tag;
             assign dc_bank_bus_if.rsp_ready = dc_mem_rsp_ready[i];
 
-            `ASSIGN_VX_MEM_BUS_IF_EX (socket_mem_bus_if[i], dc_bank_bus_if, SOCKET_MEM_ARB_TAG_WIDTH, SOCKET_MEM_TAG_WIDTH, UUID_WIDTH);
+            VX_mem_bus_connect socket_mem_bus_connect (
+                .bus_in_if  (dc_bank_bus_if),
+                .bus_out_if (socket_mem_bus_if[i])
+            );
         end
     end
 
@@ -847,11 +882,17 @@ module VX_gfx_top import VX_gpu_pkg::*
 
 `ifdef VX_CFG_EXT_OM_ENABLE
     for (genvar i = 0; i < L2_SOCKET_REQS; ++i) begin : g_socket_l2
-        `ASSIGN_VX_MEM_BUS_IF (l2_core_if[i], gfx_l2_out_bus_if[i]);
+        VX_mem_bus_connect l2_core_connect (
+            .bus_in_if  (gfx_l2_out_bus_if[i]),
+            .bus_out_if (l2_core_if[i])
+        );
     end
 `else
     for (genvar i = 0; i < L2_SOCKET_REQS; ++i) begin : g_socket_l2
-        `ASSIGN_VX_MEM_BUS_IF (l2_core_if[i], socket_mem_bus_if[i]);
+        VX_mem_bus_connect l2_core_connect (
+            .bus_in_if  (socket_mem_bus_if[i]),
+            .bus_out_if (l2_core_if[i])
+        );
     end
 `endif
 
@@ -868,12 +909,24 @@ module VX_gfx_top import VX_gpu_pkg::*
     ) gfx_phys_bus_if[CMMU_NUM_REQS]();
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-    `ASSIGN_VX_MEM_BUS_IF (gfx_mem_bus_if[CMMU_RCACHE_IDX], rcache_l2_bus_if);
-    `ASSIGN_VX_MEM_BUS_IF (l2_core_if[L2_GFX_RASTER_IDX], gfx_phys_bus_if[CMMU_RCACHE_IDX]);
+    VX_mem_bus_connect gfx_mem_bus_cmmu_rcache_idx_connect (
+        .bus_in_if  (rcache_l2_bus_if),
+        .bus_out_if (gfx_mem_bus_if[CMMU_RCACHE_IDX])
+    );
+    VX_mem_bus_connect l2_core_l2_gfx_raster_idx_connect (
+        .bus_in_if  (gfx_phys_bus_if[CMMU_RCACHE_IDX]),
+        .bus_out_if (l2_core_if[L2_GFX_RASTER_IDX])
+    );
 `endif
 `ifdef VX_CFG_EXT_OM_ENABLE
-    `ASSIGN_VX_MEM_BUS_IF (gfx_mem_bus_if[CMMU_OCACHE_IDX], ocache_l2_bus_if);
-    `ASSIGN_VX_MEM_BUS_IF (l2_core_if[L2_GFX_OM_IDX], gfx_phys_bus_if[CMMU_OCACHE_IDX]);
+    VX_mem_bus_connect gfx_mem_bus_cmmu_ocache_idx_connect (
+        .bus_in_if  (ocache_l2_bus_if),
+        .bus_out_if (gfx_mem_bus_if[CMMU_OCACHE_IDX])
+    );
+    VX_mem_bus_connect l2_core_l2_gfx_om_idx_connect (
+        .bus_in_if  (gfx_phys_bus_if[CMMU_OCACHE_IDX]),
+        .bus_out_if (l2_core_if[L2_GFX_OM_IDX])
+    );
 `endif
 
     VX_tlb_bus_if #(
@@ -924,10 +977,16 @@ module VX_gfx_top import VX_gpu_pkg::*
     );
 `else
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-    `ASSIGN_VX_MEM_BUS_IF (l2_core_if[L2_GFX_RASTER_IDX], rcache_l2_bus_if);
+    VX_mem_bus_connect l2_core_l2_gfx_raster_idx_connect (
+        .bus_in_if  (rcache_l2_bus_if),
+        .bus_out_if (l2_core_if[L2_GFX_RASTER_IDX])
+    );
 `endif
 `ifdef VX_CFG_EXT_OM_ENABLE
-    `ASSIGN_VX_MEM_BUS_IF (l2_core_if[L2_GFX_OM_IDX], ocache_l2_bus_if);
+    VX_mem_bus_connect l2_core_l2_gfx_om_idx_connect (
+        .bus_in_if  (ocache_l2_bus_if),
+        .bus_out_if (l2_core_if[L2_GFX_OM_IDX])
+    );
 `endif
 `endif // CLUSTER_UNIT_MMU_ENABLE
 
@@ -940,14 +999,21 @@ module VX_gfx_top import VX_gpu_pkg::*
     `UNUSED_VAR (dcr_req_data)
 
     for (genvar i = 0; i < L2_SOCKET_REQS; ++i) begin : g_socket_l2
-        `ASSIGN_VX_MEM_BUS_IF (l2_core_if[i], socket_mem_bus_if[i]);
+        VX_mem_bus_connect l2_core_connect (
+            .bus_in_if  (socket_mem_bus_if[i]),
+            .bus_out_if (l2_core_if[i])
+        );
     end
 `endif // EXT_GFX_CLUSTER_ENABLE
 
     // Under VM the walker's PTE fetches take an L2 client slot; the walker is
     // covered by the vm DUT, so the slot idles here.
     if (PTW_ON_L2 != 0) begin : g_ptw_l2_idle
-        `INIT_VX_MEM_BUS_IF (l2_core_if[L2_PTW_IDX])
+        // Tied here, not through VX_mem_bus_idle_master, so the harness ties stay visible to Beacon.
+        assign l2_core_if[L2_PTW_IDX].req_valid = 1'b0;
+        assign l2_core_if[L2_PTW_IDX].req_data  = '0;
+        assign l2_core_if[L2_PTW_IDX].rsp_ready = 1'b0;
+        `UNUSED_VAR ({l2_core_if[L2_PTW_IDX].req_ready, l2_core_if[L2_PTW_IDX].rsp_valid, l2_core_if[L2_PTW_IDX].rsp_data})
     end
 
     assign flush_done = & flush_done_w;

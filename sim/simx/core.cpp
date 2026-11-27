@@ -70,6 +70,15 @@ static bool commit_single_hop(uint32_t fu) {
   }
 }
 
+// Stage `trace` into one of the core's own queues, if it has room.
+static bool try_stage(SimPortIn<instr_trace_t*>& queue, instr_trace_t* trace, uint32_t delay) {
+  if (queue.full()) {
+    return false;
+  }
+  queue.push(trace, delay);
+  return true;
+}
+
 // Lanes per pass of a unit whose lane gather merges the passes of one SIMD
 // slice of an instruction into a single commit beat; 0 when the unit takes a
 // whole SIMD slice per pass.
@@ -90,7 +99,7 @@ static uint32_t gather_merge_lanes(uint32_t fu) {
 
 class Core::Impl {
 public:
-  Impl(const SimContext& ctx, Core* simobject)
+  explicit Impl(Core* simobject)
     : simobject_(simobject)
     , sequencers_(VX_CFG_NUM_WARPS)
     , mpm_class_(0)
@@ -121,10 +130,8 @@ public:
     // per frontend slice: scheduler-to-fetch and fetch-to-decode latches, and the
     // icache tags of the slice's in-flight fetches
     for (uint32_t f = 0; f < VX_CFG_FETCH_WIDTH; ++f) {
-      snprintf(sname, 100, "fetch_latch%d", f);
-      fetch_latch_.emplace_back(std::make_unique<TFifo<instr_trace_t*>>(ctx, sname, 1, 2));
-      snprintf(sname, 100, "decode_latch%d", f);
-      decode_latch_.emplace_back(std::make_unique<TFifo<instr_trace_t*>>(ctx, sname, 1, 2));
+      fetch_latch_.emplace_back(std::make_unique<SimPortIn<instr_trace_t*>>(simobject_, 2));
+      decode_latch_.emplace_back(std::make_unique<SimPortIn<instr_trace_t*>>(simobject_, 2));
       pending_icache_.emplace_back(PER_FETCH_WARPS);
     }
 
@@ -159,14 +166,17 @@ public:
     for (uint32_t iw = 0; iw < VX_CFG_ISSUE_WIDTH; ++iw) {
       snprintf(sname, 100, "%s-operand%d", name.c_str(), iw);
       operands_.at(iw) = Operands::Create(sname, simobject_);
+      operand_ports_.emplace_back(std::make_unique<SimPortIn<instr_trace_t*>>(simobject_, 2));
+      operands_.at(iw)->Output.bind(operand_ports_.back().get());
+      operand_out_.emplace_back(std::make_unique<SimPortOut<instr_trace_t*>>(simobject_));
+      operand_out_.back()->bind(&operands_.at(iw)->Input);
     }
 
     // create ibuffers
     for (uint32_t i = 0; i < ibuffers_.size(); ++i) {
-      snprintf(sname, 100, "%s-ibuffer%d", name.c_str(), i);
       // IBUF_SIZE entries plus the head, which stands for the warp's staging
       // register once it has moved there
-      ibuffers_.at(i) = TFifo<instr_trace_t*>::Create(sname, 1, VX_CFG_IBUF_SIZE + 1);
+      ibuffers_.at(i) = std::make_unique<SimPortIn<instr_trace_t*>>(simobject_, VX_CFG_IBUF_SIZE + 1);
     }
 
     // The LSU ticks ahead of the coalescer, the lane adapters and the lmem
@@ -216,9 +226,12 @@ public:
     });
 
     // create lmem switch
+    auto lsu = std::static_pointer_cast<LsuUnit>(func_units_.at((int)FUType::LSU));
     for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
       snprintf(sname, 100, "%s-lmem_switch%d", name.c_str(), b);
       lmem_switch_.at(b) = LocalMemSwitch::Create(sname, 1);
+      lsu->mem_req_out.at(b).bind(&lmem_switch_.at(b)->ReqIn);
+      lmem_switch_.at(b)->RspOut.bind(&lsu->mem_rsp_in.at(b));
     }
 
     // connect lmem switch to local memory
@@ -228,8 +241,8 @@ public:
     }
 
     // Per-channel request/response endpoints facing the dcache ports.
-    std::vector<SimChannel<MemReq>*> dc_req_out(VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS);
-    std::vector<SimChannel<MemRsp>*> dc_rsp_in(VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS);
+    std::vector<SimPortOut<MemReq>*> dc_req_out(VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS);
+    std::vector<SimPortIn<MemRsp>*> dc_rsp_in(VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS);
 
     if (dcache_coalescing) {
       // connect memory coalescer; its memory side drives the dcache
@@ -238,7 +251,7 @@ public:
         lmem_switch_.at(b)->ReqOutDC.bind(&mem_coalescers_.at(b)->ReqIn);
         // the coalescer's response reaches the switch's response buffer
         // combinationally, ahead of a local-memory response
-        mem_coalescers_.at(b)->RspOut.bind(&lmem_switch_.at(b)->RspOut);
+        mem_coalescers_.at(b)->RspOut.bind(&lsu->mem_rsp_in.at(b));
         for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {
           dc_req_out.at(b * DCACHE_CHANNELS + c) = &mem_coalescers_.at(b)->ReqOut.at(c);
           dc_rsp_in.at(b * DCACHE_CHANNELS + c) = &mem_coalescers_.at(b)->RspIn.at(c);
@@ -253,7 +266,7 @@ public:
         // switch's response buffer; a single-channel one passes the cache's
         // own output buffer through, which the switch then drains.
         if (DCACHE_CHANNELS > 1) {
-          lsu_dcache_adapter.at(b)->RspOut.bind(&lmem_switch_.at(b)->RspOut);
+          lsu_dcache_adapter.at(b)->RspOut.bind(&lsu->mem_rsp_in.at(b));
         } else {
           lsu_dcache_adapter.at(b)->RspOut.bind(&lmem_switch_.at(b)->RspInDC);
         }
@@ -280,6 +293,7 @@ public:
     // The first icache port does the same for the icache.
     snprintf(sname, 100, "%s-icache_flush_buf", name.c_str());
     icache_flush_buf_ = TxBuffer<MemReq>::Create(sname, 2);
+    fetch_req_out_.at(0).bind(&icache_flush_buf_->In);
 
   #ifdef VX_CFG_VM_ENABLE
     // Per-core L1 TLB stages: hits translate in place, misses park in
@@ -292,9 +306,9 @@ public:
                               VX_CFG_DTLB_SIZE, local_core * 2 + 0, false,
                               false, true, false, true);
 
-    // Per-core icache MMU, one port per frontend slice. Fetch reads/writes its
-    // upstream channels directly; the downstream side is bound to the Core's
-    // icache ports below.
+    // Per-core icache MMU, one port per frontend slice. Fetch's ports are bound
+    // to its upstream side; the downstream side is the Core's icache ports
+    // below.
     snprintf(sname, 100, "%s-icache_mmu", name.c_str());
     icache_mmu_ = Mmu::Create(sname, ICACHE_NUM_REQS,
                               VX_CFG_ITLB_SIZE, local_core * 2 + 1, true,
@@ -304,24 +318,31 @@ public:
     for (uint32_t p = 0; p < VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS; ++p) {
       dc_req_out.at(p)->bind(&dcache_mmu_->ReqIn.at(p));
       dcache_mmu_->RspOut.at(p).bind(dc_rsp_in.at(p));
-      dcache_mmu_->ReqOut.at(p).bind(&simobject_->dcache_req_out.at(p));
-      simobject_->dcache_rsp_in.at(p).bind(&dcache_mmu_->RspIn.at(p));
+      simobject_->dcache_req_out.at(p) = &dcache_mmu_->ReqOut.at(p);
+      simobject_->dcache_rsp_in.at(p) = &dcache_mmu_->RspIn.at(p);
     }
 
     // icache MMU downstream side -> core's icache ports. Upstream side is
-    // consumed directly by fetch() in on_tick.
+    // bound to fetch's ports.
     for (uint32_t f = 0; f < ICACHE_NUM_REQS; ++f) {
-      icache_mmu_->ReqOut.at(f).bind(&simobject_->icache_req_out.at(f));
-      simobject_->icache_rsp_in.at(f).bind(&icache_mmu_->RspIn.at(f));
+      if (f != 0) {
+        fetch_req_out_.at(f).bind(&icache_mmu_->ReqIn.at(f));
+      }
+      icache_mmu_->RspOut.at(f).bind(&fetch_rsp_in_.at(f));
+      simobject_->icache_req_out.at(f) = &icache_mmu_->ReqOut.at(f);
+      simobject_->icache_rsp_in.at(f) = &icache_mmu_->RspIn.at(f);
     }
     icache_flush_buf_->Out.bind(&icache_mmu_->ReqIn.at(0));
   #else
     // No-VM: direct passthrough.
     for (uint32_t p = 0; p < VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS; ++p) {
-      dc_req_out.at(p)->bind(&simobject_->dcache_req_out.at(p));
-      simobject_->dcache_rsp_in.at(p).bind(dc_rsp_in.at(p));
+      simobject_->dcache_req_out.at(p) = dc_req_out.at(p);
+      simobject_->dcache_rsp_in.at(p) = dc_rsp_in.at(p);
     }
-    icache_flush_buf_->Out.bind(&simobject_->icache_req_out.at(0));
+    for (uint32_t f = 0; f < ICACHE_NUM_REQS; ++f) {
+      simobject_->icache_req_out.at(f) = (f == 0) ? &icache_flush_buf_->Out : &fetch_req_out_.at(f);
+      simobject_->icache_rsp_in.at(f) = &fetch_rsp_in_.at(f);
+    }
   #endif
 
     // initialize execute units. A full-bandwidth ALU or FPU takes its op
@@ -350,12 +371,11 @@ public:
     snprintf(sname, 100, "%s-tcu", name.c_str());
     tcu_unit_ = SimPlatform::instance().create_object<TcuUnit>(sname, simobject_);
     func_units_.at((int)FUType::TCU) = tcu_unit_;
+  #ifdef VX_CFG_TCU_WGMMA_ENABLE
     // Created after the TCU so it ticks after it: a fill the TCU starts sends
     // its first read in the same cycle, seen by the LMEM the next.
     snprintf(sname, 100, "%s-tcu-tbuf", name.c_str());
     tcu_unit_->set_tbuf(TcuTbuf::Create(sname));
-
-  #ifdef VX_CFG_TCU_WGMMA_ENABLE
     // Bind the TCU tile-buffer subsystem (TcuTbuf) to the LMEM DMA port,
     // as the client after the DXA.
     {
@@ -393,17 +413,25 @@ public:
     #ifdef VX_CFG_EXT_TCU_ENABLE
       dispatchers_.at((int)FUType::TCU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_TCU_BLOCKS, VX_CFG_NUM_TCU_LANES, 1);
     #endif
+      for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
+        release_ports_.emplace_back(std::make_unique<SimPortIn<instr_trace_t*>>(simobject_, VX_CFG_ISSUE_WIDTH));
+        dispatchers_.at(fu)->ReleaseOut.bind(release_ports_.back().get());
+        dispatch_out_.emplace_back(std::make_unique<SimPortOutArray<instr_trace_t*>>(simobject_, VX_CFG_ISSUE_WIDTH));
+        for (uint32_t iw = 0; iw < VX_CFG_ISSUE_WIDTH; ++iw) {
+          dispatch_out_.back()->at(iw).bind(&dispatchers_.at(fu)->Inputs.at(iw));
+        }
+      }
       if (!AluUnit::kGather) {
         create_alu();
         auto& dispatch = dispatchers_.at((int)FUType::ALU);
         dispatch->set_release_on_accept();
-        std::static_pointer_cast<AluUnit>(func_units_.at((int)FUType::ALU))->ReleaseOut.bind(&dispatch->ReleaseOut);
+        std::static_pointer_cast<AluUnit>(func_units_.at((int)FUType::ALU))->ReleaseOut.bind(release_ports_.at((int)FUType::ALU).get());
       }
       if (!FpuUnit::kGather) {
         create_fpu();
         auto& dispatch = dispatchers_.at((int)FUType::FPU);
         dispatch->set_release_on_accept();
-        std::static_pointer_cast<FpuUnit>(func_units_.at((int)FUType::FPU))->ReleaseOut.bind(&dispatch->ReleaseOut);
+        std::static_pointer_cast<FpuUnit>(func_units_.at((int)FUType::FPU))->ReleaseOut.bind(release_ports_.at((int)FUType::FPU).get());
       }
       std::static_pointer_cast<AluUnit>(func_units_.at((int)FUType::ALU))->branch_ctl_out.bind(&simobject_->branch_ctl_in);
       for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
@@ -428,7 +456,7 @@ public:
         // two and takes a third slot so that it still retires one result per
         // cycle.
         uint32_t capacity = commit_single_hop(fu) ? 2 : 3;
-        queues.emplace_back(std::make_unique<SimChannel<instr_trace_t*>>(simobject_, capacity));
+        queues.emplace_back(std::make_unique<SimPortIn<instr_trace_t*>>(simobject_, capacity));
         if (fu == (uint32_t)FUType::LSU) {
           // the LSU's gather buffer registers its ready, as its result path's
           // buffers do
@@ -440,7 +468,7 @@ public:
     // one TCU block per issue slot, as VX_tcu_unit requires
     static_assert(VX_CFG_NUM_TCU_BLOCKS == VX_CFG_ISSUE_WIDTH, "one TCU block per issue slot");
     for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
-      tcu_stall_out_.emplace_back(std::make_unique<SimChannel<uint64_t>>(simobject_));
+      tcu_stall_out_.emplace_back(std::make_unique<SimPortOut<uint64_t>>(simobject_));
       tcu_stall_out_.back()->bind(&tcu_unit_->result_stall_in.at(b));
     }
   #endif
@@ -567,7 +595,7 @@ public:
       }
       any_cand = true;
 
-      fetch_latch->push(trace);
+      fetch_latch->push(trace, 1);
       DT(3, simobject_->name() << "-pipeline schedule: " << *trace);
       this->pending_add(trace->wid);
       ++ibuf_inflight_.at(trace->wid);
@@ -602,17 +630,8 @@ public:
     auto& decompressor   = decompressors_.at(f);
   #endif
 
-  #ifdef VX_CFG_VM_ENABLE
-    // With VM, fetch reads/writes the icache MMU's upstream channels.
-    // The MMU translates and forwards to simobject_->icache_req_out
-    // downstream (driven by SimChannel binding in the constructor).
-    auto& icache_rsp = icache_mmu_->RspOut.at(f);
-    auto& icache_port = icache_mmu_->ReqIn.at(f);
-  #else
-    auto& icache_rsp = simobject_->icache_rsp_in.at(f);
-    auto& icache_port = simobject_->icache_req_out.at(f);
-  #endif
-    auto& icache_req = (f == 0) ? icache_flush_buf_->In : icache_port;
+    auto& icache_rsp = fetch_rsp_in_.at(f);
+    auto& icache_req = fetch_req_out_.at(f);
 
     // handle icache response — extract instruction word from the TLM line payload
     if (!icache_rsp.empty()){
@@ -629,14 +648,14 @@ public:
       // Decompressor classifies the rsp: emit-ready (sets trace->code) or
       // queues a refetch internally for cross-word 32-bit completion.
       bool emit = decompressor->on_icache_rsp(trace, *mem_rsp.data);
-      bool progressed = !emit || (ibuf_room && decode_latch.try_push(trace));
+      bool progressed = !emit || (ibuf_room && try_stage(decode_latch, trace, 1));
       if (emit && progressed) {
         decompressor->on_emit(trace);
       }
     #else
       bool emit = true;
       bool progressed = false;
-      if (ibuf_room && decode_latch.try_push(trace)) {
+      if (ibuf_room && try_stage(decode_latch, trace, 1)) {
         uint32_t offset = trace->PC & (VX_CFG_MEM_BLOCK_SIZE - 1);
         std::memcpy(&trace->code, mem_rsp.data->data() + offset, sizeof(uint32_t));
         progressed = true;
@@ -723,7 +742,7 @@ public:
   }
 
   // One frontend slice's decoder: it feeds the issue slice of each decoded warp.
-  void decode_slice(TFifo<instr_trace_t*>& decode_latch) {
+  void decode_slice(SimPortIn<instr_trace_t*>& decode_latch) {
     if (decode_latch.empty()) {
       return;
     }
@@ -781,7 +800,7 @@ public:
 
     // insert to ibuffer
     trace->ibuf_time = SimPlatform::instance().cycles();
-    ibuffer->push(trace);
+    ibuffer->push(trace, 1);
 
     decode_latch.pop();
   }
@@ -789,13 +808,13 @@ public:
   void issue() {
     // dispatch operands
     for (uint32_t iw = 0; iw < VX_CFG_ISSUE_WIDTH; ++iw) {
-      auto& operand = operands_.at(iw);
-      if (operand->Output.empty())
+      auto& operand = operand_ports_.at(iw);
+      if (operand->empty())
         continue;
-      auto trace = operand->Output.peek();
+      auto trace = operand->peek();
       // The collector's output register adds a cycle before the slot queue.
-      if (dispatchers_.at((int)trace->fu_type)->Inputs.at(iw).try_send(trace, 2)) {
-        operand->Output.pop();
+      if (dispatch_out_.at((int)trace->fu_type)->at(iw).try_send(trace, 2)) {
+        operand->pop();
       } else {
         switch (trace->fu_type) {
         case FUType::ALU: ++perf_stats_.alu_stalls; break;
@@ -853,8 +872,9 @@ public:
         this->check_issue_timeout(iw, wid, trace, uop_trace);
 
         if (scoreboard_->in_use(uop_trace)) {
-          auto uses = scoreboard_->get_uses(uop_trace);
-          if (!uop_trace->log_once(true)) {
+          if (!uop_trace->log_once(true) && 4 <= VX_DBG_DEBUG_LEVEL) {
+            // The dependents are listed for the trace once per stall.
+            auto uses = scoreboard_->get_uses(uop_trace);
             DTH(4, "*** scoreboard-stall: dependents={");
             for (uint32_t j = 0, n = uses.size(); j < n; ++j) {
               auto& use = uses.at(j);
@@ -906,7 +926,7 @@ public:
       }
 
       // The arbiter advances only on an issue that fires.
-      if (ready_set.any() && !operands_.at(iw)->Input.full()) {
+      if (ready_set.any() && !operand_out_.at(iw)->full()) {
         // select one instruction from ready set
         auto w = ibuffer_arbs_.at(iw).select(ready_set);
         uint32_t wid = w * VX_CFG_ISSUE_WIDTH + iw;
@@ -918,7 +938,7 @@ public:
         auto uop_trace = seq->get(trace);
 
         // to operand stage
-        if (operands_.at(iw)->Input.try_send(uop_trace)) {
+        if (operand_out_.at(iw)->try_send(uop_trace)) {
           ibuffer_arbs_.at(iw).commit(w);
           // capture register operands at issue (Operands owns regfile)
           operands_.at(iw)->fetch_operands(uop_trace);
@@ -1025,7 +1045,7 @@ public:
 
   void return_dispatch_credits() {
     for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
-      auto& release = dispatchers_.at(fu)->ReleaseOut;
+      auto& release = *release_ports_.at(fu);
       while (!release.empty()) {
         uint32_t iw = release.peek()->wid % VX_CFG_ISSUE_WIDTH;
         assert(fu_credits_.at(iw).at(fu) > 0);
@@ -1082,7 +1102,7 @@ public:
         // FPU's output register and the TCU's result landing queue are in
         // their channels, leaving each its lane gather.
         uint32_t commit_delay = commit_single_hop(fu) ? 1 : 2;
-        if (arb_in.try_send(trace, commit_delay)) {
+        if (try_stage(arb_in, trace, commit_delay)) {
           // Release the warp as soon as its stalling instruction's result leaves
           // the functional unit — the branch target / fence / warp-control is
           // resolved at that point. The release lands in stalled_warps so the
@@ -1114,7 +1134,7 @@ public:
     };
     for (uint32_t iw = 0; iw < VX_CFG_ISSUE_WIDTH; ++iw) {
       auto& holds = gather_holds_.at(iw);
-      SimChannel<instr_trace_t*>* granted = nullptr;
+      SimPortIn<instr_trace_t*>* granted = nullptr;
       FUType granted_fu = FUType::ALU;
       for (auto fu : kCommitPrio) {
         // Without a lane-gather stage the FPU response port, one block per
@@ -1392,11 +1412,11 @@ public:
     return stats;
   }
 
-  SimChannel<TlbReq>& tlb_miss_out(uint32_t which) {
+  SimPortOut<TlbReq>& tlb_miss_out(uint32_t which) {
     return (which == 0) ? dcache_mmu_->TlbMissOut : icache_mmu_->TlbMissOut;
   }
 
-  SimChannel<TlbRsp>& tlb_fill_in(uint32_t which) {
+  SimPortIn<TlbRsp>& tlb_fill_in(uint32_t which) {
     return (which == 0) ? dcache_mmu_->TlbFillIn : icache_mmu_->TlbFillIn;
   }
 
@@ -1417,19 +1437,29 @@ private:
   uint32_t    mpm_class_;
   Scheduler::Ptr scheduler_;
 
-  std::vector<TFifo<instr_trace_t*>::Ptr> ibuffers_;
+  std::vector<std::unique_ptr<SimPortIn<instr_trace_t*>>> ibuffers_;
   Scoreboard::Ptr scoreboard_;
   std::vector<Operands::Ptr> operands_;
+  // Ops leaving the operand collectors.
+  std::vector<std::unique_ptr<SimPortIn<instr_trace_t*>>> operand_ports_;
+  std::vector<std::unique_ptr<SimPortOut<instr_trace_t*>>> operand_out_;
   std::vector<Dispatcher::Ptr> dispatchers_;
+  // Ops leaving a dispatcher's slot queue, returning their issue credits.
+  std::vector<std::unique_ptr<SimPortIn<instr_trace_t*>>> release_ports_;
+  // Per FU: ops toward its dispatcher's slot queues.
+  std::vector<std::unique_ptr<SimPortOutArray<instr_trace_t*>>> dispatch_out_;
   std::vector<std::shared_ptr<FuncUnitBase>> func_units_;
   LocalMem::Ptr local_mem_;
   std::vector<LocalMemSwitch::Ptr> lmem_switch_;
   std::vector<MemCoalescer::Ptr> mem_coalescers_;
   std::vector<TxBuffer<MemReq>::Ptr> dcache_flush_bufs_;
   TxBuffer<MemReq>::Ptr icache_flush_buf_;
+  // Fetch's icache requests and responses, one port per frontend slice.
+  SimPortOutArray<MemReq> fetch_req_out_{simobject_, ICACHE_NUM_REQS};
+  SimPortInArray<MemRsp> fetch_rsp_in_{simobject_, ICACHE_NUM_REQS, 2};
 
-  std::vector<std::unique_ptr<TFifo<instr_trace_t*>>> fetch_latch_;
-  std::vector<std::unique_ptr<TFifo<instr_trace_t*>>> decode_latch_;
+  std::vector<std::unique_ptr<SimPortIn<instr_trace_t*>>> fetch_latch_;
+  std::vector<std::unique_ptr<SimPortIn<instr_trace_t*>>> decode_latch_;
 
   std::vector<HashTable<instr_trace_t*>> pending_icache_;
   // Scheduled, not yet committed: a macro until its last micro-op issues, then
@@ -1443,11 +1473,11 @@ private:
 
   // [iw][fu] commit staging: FU outputs land here one registered stage
   // before retirement; commit() grants among them fixed-priority.
-  std::vector<std::vector<std::unique_ptr<SimChannel<instr_trace_t*>>>> commit_queues_;
+  std::vector<std::vector<std::unique_ptr<SimPortIn<instr_trace_t*>>>> commit_queues_;
 
 #ifdef VX_CFG_EXT_TCU_ENABLE
   // [block] the TCU lane-gather buffer's ready, to the block's admission
-  std::vector<std::unique_ptr<SimChannel<uint64_t>>> tcu_stall_out_;
+  std::vector<std::unique_ptr<SimPortOut<uint64_t>>> tcu_stall_out_;
 #endif
 
   // A lane gather's hold: the SIMD slice of an instruction whose passes wait
@@ -1518,10 +1548,10 @@ Core::Core(const SimContext& ctx,
            Socket* socket
            )
   : SimObject(ctx, name)
-  , icache_req_out(ICACHE_NUM_REQS, this)
-  , icache_rsp_in(ICACHE_NUM_REQS, this)
-  , dcache_req_out(VX_CFG_DCACHE_NUM_REQS, this)
-  , dcache_rsp_in(VX_CFG_DCACHE_NUM_REQS, this)
+  , icache_req_out(ICACHE_NUM_REQS)
+  , icache_rsp_in(ICACHE_NUM_REQS)
+  , dcache_req_out(VX_CFG_DCACHE_NUM_REQS)
+  , dcache_rsp_in(VX_CFG_DCACHE_NUM_REQS)
   , branch_ctl_in(this, VX_CFG_NUM_WARPS)
   , warp_ctl_in(this, VX_CFG_NUM_WARPS)
   , bar_unlock_in(this, VX_CFG_NUM_WARPS)
@@ -1531,13 +1561,19 @@ Core::Core(const SimContext& ctx,
   , fwd_arm_in(this)
   , fwd_done_out(this)
 #endif
+#ifdef VX_CFG_EXT_DXA_ENABLE
+  , dxa_bar_release_in(this)
+#endif
   , core_id_(core_id)
   , socket_(socket)
-  , impl_(new Impl(ctx, this))
+  , impl_(new Impl(this))
 {
   gbar_resume_in.bind(this, &Core::on_gbar_resume);
 #ifdef VX_CFG_EXT_RASTER_ENABLE
   fwd_arm_in.bind(this, &Core::on_fwd_arm);
+#endif
+#ifdef VX_CFG_EXT_DXA_ENABLE
+  dxa_bar_release_in.bind(this, &Core::on_dxa_bar_release);
 #endif
 }
 
@@ -1592,6 +1628,13 @@ void Core::on_gbar_resume(const GbarResume& msg) {
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 void Core::on_fwd_arm(const FwdArm& msg) {
   impl_->scheduler()->fwd_arm(msg.frag_entry, msg.frag_param);
+}
+#endif
+
+#ifdef VX_CFG_EXT_DXA_ENABLE
+// The raw id carries the CTA in its low byte and the barrier above it.
+void Core::on_dxa_bar_release(const uint32_t& raw_bar_id) {
+  this->barrier_event_release(bar_decode_id(raw_bar_id, VX_CFG_NUM_BARRIERS));
 }
 #endif
 
@@ -1671,11 +1714,11 @@ Core::MmuPerfStats Core::mmu_perf_stats() const {
   return impl_->mmu_perf_stats();
 }
 
-SimChannel<TlbReq>& Core::tlb_miss_out(uint32_t which) {
+SimPortOut<TlbReq>& Core::tlb_miss_out(uint32_t which) {
   return impl_->tlb_miss_out(which);
 }
 
-SimChannel<TlbRsp>& Core::tlb_fill_in(uint32_t which) {
+SimPortIn<TlbRsp>& Core::tlb_fill_in(uint32_t which) {
   return impl_->tlb_fill_in(which);
 }
 

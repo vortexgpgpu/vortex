@@ -569,7 +569,9 @@ public:
     } else {
       this->arbitrate(s0_ready, a_write, b_busy);
     }
+  }
 
+  bool busy() const {
     bool idle = (stall_cycles_ == 0) && !dma_slot_ && !a_sel_.valid && !b_sel_.valid;
     for (auto& e : engines_) {
       idle = idle && e.s0.empty() && !e.s1_valid && e.rsp_queue.empty();
@@ -577,9 +579,7 @@ public:
     for (auto& r : rsp_regs_) {
       idle = idle && !r.valid;
     }
-    if (idle && !this->dma_pending()) {
-      simobject_->tick_sleep();
-    }
+    return !idle || this->dma_pending();
   }
 
   const PerfStats& perf_stats() const {
@@ -591,10 +591,10 @@ public:
 
 LocalMem::LocalMem(const SimContext& ctx, const char* name, const Config& config)
   : SimObject<LocalMem>(ctx, name)
-  , ReqIn(config.num_blocks, this)
-  , RspOut(config.num_blocks, this)
-  , DmaInputs(config.dma_clients * DMA_PORTS, this)
-  , DmaOutputs(config.dma_clients * DMA_PORTS, this)
+  , ReqIn(this, config.num_blocks, 2)
+  , RspOut(this, config.num_blocks)
+  , DmaInputs(this, config.dma_clients * DMA_PORTS, 2)
+  , DmaOutputs(this, config.dma_clients * DMA_PORTS)
   , impl_(new Impl(this, config))
 {}
 
@@ -608,6 +608,10 @@ void LocalMem::on_reset() {
 
 void LocalMem::on_tick() {
   impl_->tick();
+}
+
+bool LocalMem::busy() const {
+  return impl_->busy();
 }
 
 const LocalMem::PerfStats& LocalMem::perf_stats() const {

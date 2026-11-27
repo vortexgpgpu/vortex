@@ -16,8 +16,8 @@ using namespace vortex;
 
 L2Tlb::L2Tlb(const SimContext& ctx, const char* name, uint32_t num_clients)
   : SimObject(ctx, name)
-  , ReqIn(num_clients, this)
-  , RspOut(num_clients, this)
+  , ReqIn(this, num_clients, 2)
+  , RspOut(this, num_clients)
   , PtwReqOut(this)
   , PtwRspIn(this)
   , num_clients_(num_clients)

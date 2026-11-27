@@ -83,9 +83,7 @@ import VX_tcu_pkg::*;
 
     // TCU
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
-    output wire             tcu_exec_valid,
-    output wire             tcu_exec_ready,
-    output tcu_execute_t    tcu_exec_data,
+    VX_execute_if.tap       tcu_exec_if,
     input wire [TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tcu_tbuf_rs1_data,
     input wire [TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tcu_tbuf_rs2_data,
     input wire              tcu_tbuf_ready,
@@ -166,9 +164,7 @@ import VX_tcu_pkg::*;
         .sched_unlock_if      (sched_unlock_if),
     `endif
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
-        .tcu_exec_valid       (tcu_exec_valid),
-        .tcu_exec_ready       (tcu_exec_ready),
-        .tcu_exec_data        (tcu_exec_data),
+        .tcu_exec_if          (tcu_exec_if),
         .tcu_tbuf_rs1_data    (tcu_tbuf_rs1_data),
         .tcu_tbuf_rs2_data    (tcu_tbuf_rs2_data),
         .tcu_tbuf_ready       (tcu_tbuf_ready),

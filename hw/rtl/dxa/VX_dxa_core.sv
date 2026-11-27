@@ -141,7 +141,7 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // ================================================================
     // Workers
     // ================================================================
-    localparam GMEM_ARB_SEL_BITS = `ARB_SEL_BITS(`VX_CFG_NUM_DXA_CORES, GMEM_OUT_PORTS);
+    localparam GMEM_ARB_SEL_BITS = arb_sel_bits(`VX_CFG_NUM_DXA_CORES, GMEM_OUT_PORTS);
     localparam WORKER_GMEM_TAG_WIDTH = SOCKET_MEM_TAG_WIDTH - GMEM_ARB_SEL_BITS;
 
     VX_mem_bus_if #(

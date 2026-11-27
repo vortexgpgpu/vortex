@@ -70,9 +70,7 @@ import VX_tcu_pkg::*;
 `endif
 
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
-    output wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_exec_valid,
-    output wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_exec_ready,
-    output tcu_execute_t    tcu_exec_data [`VX_CFG_NUM_TCU_BLOCKS],
+    VX_execute_if.tap       tcu_exec_if [`VX_CFG_NUM_TCU_BLOCKS],
     input wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tcu_tbuf_rs1_data,
     input wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tcu_tbuf_rs2_data,
     input wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_tbuf_ready,
@@ -157,9 +155,7 @@ import VX_tcu_pkg::*;
         .clk              (clk),
         .reset            (reset),
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
-        .exec_valid       (tcu_exec_valid),
-        .exec_ready       (tcu_exec_ready),
-        .exec_data        (tcu_exec_data),
+        .exec_if          (tcu_exec_if),
         .tbuf_rs1_data    (tcu_tbuf_rs1_data),
         .tbuf_rs2_data    (tcu_tbuf_rs2_data),
         .tbuf_ready       (tcu_tbuf_ready),

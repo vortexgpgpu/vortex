@@ -106,7 +106,9 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
             assign core_bus_nc_switch_if[1 * NUM_REQS + i].rsp_data  = core_bus_out_if[i].rsp_data;
             assign core_bus_out_if[i].rsp_ready = core_bus_nc_switch_if[1 * NUM_REQS + i].rsp_ready;
         end else begin : g_no_cache
-            `INIT_VX_MEM_BUS_IF (core_bus_out_if[i])
+            VX_mem_bus_idle_master core_bus_out_idle (
+                .bus_if (core_bus_out_if[i])
+            );
         end
     end
     VX_mem_bus_if #(
@@ -208,18 +210,28 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
         assign mem_bus_out_nc_if[i].rsp_ready = core_bus_nc_arb_if[i].rsp_ready;
     end
     for (genvar i = NC_PORTS; i < MEM_PORTS; ++i) begin : g_mem_bus_out_nc_idle
-        `INIT_VX_MEM_BUS_IF (mem_bus_out_nc_if[i])
+        VX_mem_bus_idle_master mem_bus_out_nc_idle (
+            .bus_if (mem_bus_out_nc_if[i])
+        );
     end
     VX_mem_bus_if #(
         .DATA_SIZE (LINE_SIZE),
         .TAG_WIDTH (MEM_TAG_OUT_WIDTH)
     ) mem_bus_out_src_if[(CACHE_ENABLE ? 2 : 1) * MEM_PORTS]();
     for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_out_src
-        `ASSIGN_VX_MEM_BUS_IF_EX(mem_bus_out_src_if[0 * MEM_PORTS + i], mem_bus_out_nc_if[i], MEM_TAG_OUT_WIDTH, MEM_TAG_NC2_WIDTH, UUID_WIDTH);
+        VX_mem_bus_connect mem_bus_out_src_0_mem_ports_i_connect (
+            .bus_in_if  (mem_bus_out_nc_if[i]),
+            .bus_out_if (mem_bus_out_src_if[0 * MEM_PORTS + i])
+        );
         if (CACHE_ENABLE) begin : g_cache
-            `ASSIGN_VX_MEM_BUS_IF_EX(mem_bus_out_src_if[1 * MEM_PORTS + i], mem_bus_in_if[i], MEM_TAG_OUT_WIDTH, MEM_TAG_IN_WIDTH, UUID_WIDTH);
+            VX_mem_bus_connect mem_bus_out_src_1_mem_ports_i_connect (
+                .bus_in_if  (mem_bus_in_if[i]),
+                .bus_out_if (mem_bus_out_src_if[1 * MEM_PORTS + i])
+            );
         end else begin : g_no_cache
-            `UNUSED_VX_MEM_BUS_IF(mem_bus_in_if[i])
+            VX_mem_bus_idle_slave mem_bus_in_idle (
+                .bus_if (mem_bus_in_if[i])
+            );
         end
     end
     VX_mem_bus_arb #(

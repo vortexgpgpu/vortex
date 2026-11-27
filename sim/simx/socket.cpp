@@ -16,7 +16,6 @@
 #include "core.h"
 #include "cluster.h"
 #include "constants.h"
-#include "delay_buffer.h"
 #include "types.h"
 #ifdef SIMX_SOCKET_UNIT_MMU
 #include "mem/mmu.h"
@@ -156,8 +155,8 @@ public:
 
     // tex_core ↔ tcache (per-port).
     for (uint32_t i = 0; i < kTcacheNumReqs; ++i) {
-      tex_core_->tcache_req_out.at(i).bind(&tcache->core_req_in.at(i));
-      tcache->core_rsp_out.at(i).bind(&tex_core_->tcache_rsp_in.at(i));
+      tex_core_->tcache_req_out.at(i).bind(tcache->core_req_in.at(i));
+      tcache->core_rsp_out.at(i)->bind(&tex_core_->tcache_rsp_in.at(i));
     }
 #endif
 
@@ -200,8 +199,8 @@ public:
     // RtuCore ↔ rtcache (per memory port).
     uint32_t kRtuMemPorts = rtu_core_->dcache_req_out.size();
     for (uint32_t i = 0; i < kRtuMemPorts; ++i) {
-      rtu_core_->dcache_req_out.at(i).bind(&rtcache->core_req_in.at(i));
-      rtcache->core_rsp_out.at(i).bind(&rtu_core_->dcache_rsp_in.at(i));
+      rtu_core_->dcache_req_out.at(i).bind(rtcache->core_req_in.at(i));
+      rtcache->core_rsp_out.at(i)->bind(&rtu_core_->dcache_rsp_in.at(i));
     }
 #endif
 
@@ -231,8 +230,8 @@ public:
     // the crossing is never combinational regardless of the arbiter chain
     // behind it.
     auto bind_mem_port = [&](uint32_t port,
-                             SimChannel<MemReq>& req_src,
-                             SimChannel<MemRsp>& rsp_dst) {
+                             SimPortOut<MemReq>& req_src,
+                             SimPortIn<MemRsp>& rsp_dst) {
       char bname[100];
       snprintf(bname, 100, "%s-breq%d", name.c_str(), port);
       auto breq = MemReqSlice::Create(bname, 1);
@@ -243,8 +242,8 @@ public:
         brsp = MemRspSlice::Create(bname, 1);
       }
       req_src.bind(&breq->In);
-      breq->Out.bind(&simobject_->mem_req_out.at(port));
-      simobject_->mem_rsp_in.at(port).bind(&brsp->In);
+      simobject_->mem_req_out.at(port) = &breq->Out;
+      simobject_->mem_rsp_in.at(port) = &brsp->In;
       brsp->Out.bind(&rsp_dst);
     };
 
@@ -258,14 +257,14 @@ public:
         + VX_CFG_EXT_TEX_ENABLED + VX_CFG_EXT_RTU_ENABLED + VX_CFG_EXT_DXA_ENABLED;
     snprintf(sname, 100, "%s-mem_arb0", name.c_str());
     auto sock_arb = MemArbiter::Create(sname, ArbiterType::Priority, kSocketArbIns, 1);
-    icaches_->mem_req_out.at(0).bind(&sock_arb->ReqIn.at(0));
-    sock_arb->RspOut.at(0).bind(&icaches_->mem_rsp_in.at(0));
-    dcaches_->mem_req_out.at(0).bind(&sock_arb->ReqIn.at(1));
-    sock_arb->RspOut.at(1).bind(&dcaches_->mem_rsp_in.at(0));
+    icaches_->mem_req_out.at(0)->bind(&sock_arb->ReqIn.at(0));
+    sock_arb->RspOut.at(0).bind(icaches_->mem_rsp_in.at(0));
+    dcaches_->mem_req_out.at(0)->bind(&sock_arb->ReqIn.at(1));
+    sock_arb->RspOut.at(1).bind(dcaches_->mem_rsp_in.at(0));
     // A unit port reaches the arbiter through the unit MMU under VM.
     auto bind_unit_port = [&](uint32_t arb_idx, uint32_t ummu_idx,
-                              SimChannel<MemReq>& req_src,
-                              SimChannel<MemRsp>& rsp_dst) {
+                              SimPortOut<MemReq>& req_src,
+                              SimPortIn<MemRsp>& rsp_dst) {
     #ifdef SIMX_SOCKET_UNIT_MMU
       req_src.bind(&unit_mmu_->ReqIn.at(ummu_idx));
       unit_mmu_->RspOut.at(ummu_idx).bind(&rsp_dst);
@@ -279,21 +278,21 @@ public:
     };
   #ifdef VX_CFG_EXT_TEX_ENABLE
     constexpr uint32_t kTexArbIdx = 2;
-    bind_unit_port(kTexArbIdx, UMMU_TCACHE_IDX, tcache_->mem_req_out.at(0), tcache_->mem_rsp_in.at(0));
+    bind_unit_port(kTexArbIdx, UMMU_TCACHE_IDX, *tcache_->mem_req_out.at(0), *tcache_->mem_rsp_in.at(0));
   #endif
   #ifdef VX_CFG_EXT_RTU_ENABLE
     constexpr uint32_t kRtuArbIdx = 2 + VX_CFG_EXT_TEX_ENABLED;
-    bind_unit_port(kRtuArbIdx, UMMU_RTCACHE_IDX, rtcache_->mem_req_out.at(0), rtcache_->mem_rsp_in.at(0));
+    bind_unit_port(kRtuArbIdx, UMMU_RTCACHE_IDX, *rtcache_->mem_req_out.at(0), *rtcache_->mem_rsp_in.at(0));
   #endif
   #ifdef VX_CFG_EXT_DXA_ENABLE
     constexpr uint32_t kDxaArbIdx = 2 + VX_CFG_EXT_TEX_ENABLED + VX_CFG_EXT_RTU_ENABLED;
-    bind_unit_port(kDxaArbIdx, UMMU_DXA_IDX, dxa_core_->gmem_req_out.at(0), dxa_core_->gmem_rsp_in.at(0));
+    bind_unit_port(kDxaArbIdx, UMMU_DXA_IDX, *dxa_core_->gmem_req_out.at(0), *dxa_core_->gmem_rsp_in.at(0));
   #endif
     bind_mem_port(0, sock_arb->ReqOut.at(0), sock_arb->RspIn.at(0));
 
     // Remaining ports: extra dcache banks straight through.
     for (uint32_t i = 1; i < VX_CFG_L1_MEM_PORTS; ++i) {
-      bind_mem_port(i, dcaches_->mem_req_out.at(i), dcaches_->mem_rsp_in.at(i));
+      bind_mem_port(i, *dcaches_->mem_req_out.at(i), *dcaches_->mem_rsp_in.at(i));
     }
 #else
     // connect l1 caches to outgoing memory interfaces
@@ -303,20 +302,20 @@ public:
       auto l1_arb = MemArbiter::Create(sname, ArbiterType::Priority, 2 * overlap, overlap, 1, 1);
 
       if (i < overlap) {
-        icaches_->mem_req_out.at(i).bind(&l1_arb->ReqIn.at(i));
-        l1_arb->RspOut.at(i).bind(&icaches_->mem_rsp_in.at(i));
+        icaches_->mem_req_out.at(i)->bind(&l1_arb->ReqIn.at(i));
+        l1_arb->RspOut.at(i).bind(icaches_->mem_rsp_in.at(i));
 
-        dcaches_->mem_req_out.at(i).bind(&l1_arb->ReqIn.at(overlap + i));
-        l1_arb->RspOut.at(overlap + i).bind(&dcaches_->mem_rsp_in.at(i));
+        dcaches_->mem_req_out.at(i)->bind(&l1_arb->ReqIn.at(overlap + i));
+        l1_arb->RspOut.at(overlap + i).bind(dcaches_->mem_rsp_in.at(i));
 
         bind_mem_port(i, l1_arb->ReqOut.at(i), l1_arb->RspIn.at(i));
       } else {
         if (VX_CFG_L1_MEM_PORTS > VX_CFG_ICACHE_MEM_PORTS) {
           // if more dcache ports
-          bind_mem_port(i, dcaches_->mem_req_out.at(i), dcaches_->mem_rsp_in.at(i));
+          bind_mem_port(i, *dcaches_->mem_req_out.at(i), *dcaches_->mem_rsp_in.at(i));
         } else {
           // if more icache ports
-          bind_mem_port(i, icaches_->mem_req_out.at(i), icaches_->mem_rsp_in.at(i));
+          bind_mem_port(i, *icaches_->mem_req_out.at(i), *icaches_->mem_rsp_in.at(i));
         }
       }
     }
@@ -332,8 +331,8 @@ public:
     // A core's dcache port reaches the dcache across the link to it,
     // VX_CFG_L1_LINK_LATENCY cycles each way.
     auto bind_l1_link = [&](uint32_t core, uint32_t port,
-                            SimChannel<MemReq>& req_src, SimChannel<MemReq>& req_dst,
-                            SimChannel<MemRsp>& rsp_src, SimChannel<MemRsp>& rsp_dst) {
+                            SimPortOut<MemReq>& req_src, SimPortIn<MemReq>& req_dst,
+                            SimPortOut<MemRsp>& rsp_src, SimPortIn<MemRsp>& rsp_dst) {
       if constexpr (VX_CFG_L1_LINK_LATENCY != 0) {
         snprintf(sname, 100, "%s-l1link%d-req%d", name.c_str(), core, port);
         auto req_link = DelayBuffer<MemReq>::Create(sname, VX_CFG_L1_LINK_LATENCY);
@@ -353,13 +352,13 @@ public:
     // connect cores to caches
     for (uint32_t i = 0; i < cores_per_socket; ++i) {
       for (uint32_t j = 0; j < ICACHE_NUM_REQS; ++j) {
-        cores_.at(i)->icache_req_out.at(j).bind(&icaches_->core_req_in.at(i).at(j));
-        icaches_->core_rsp_out.at(i).at(j).bind(&cores_.at(i)->icache_rsp_in.at(j));
+        cores_.at(i)->icache_req_out.at(j)->bind(icaches_->core_req_in.at(i).at(j));
+        icaches_->core_rsp_out.at(i).at(j)->bind(cores_.at(i)->icache_rsp_in.at(j));
       }
 
       for (uint32_t j = 0; j < VX_CFG_DCACHE_NUM_REQS; ++j) {
-        bind_l1_link(i, j, cores_.at(i)->dcache_req_out.at(j), dcaches_->core_req_in.at(i).at(j),
-                     dcaches_->core_rsp_out.at(i).at(j), cores_.at(i)->dcache_rsp_in.at(j));
+        bind_l1_link(i, j, *cores_.at(i)->dcache_req_out.at(j), *dcaches_->core_req_in.at(i).at(j),
+                     *dcaches_->core_rsp_out.at(i).at(j), *cores_.at(i)->dcache_rsp_in.at(j));
       }
     }
 
@@ -405,7 +404,7 @@ public:
     }
 
     // DxaCore::lmem_req_out[c] → core's LocalMem DMA port (first client).
-    // A tx_callback on the channel fires barrier_event_release for each
+    // DxaCore::bar_release_out[c] fires barrier_event_release for each
     // DXA-write packet carrying notify_done at the cycle LMEM receives it.
     static_assert(DxaCore::LMEM_PORTS_PER_CORE == LocalMem::DMA_PORTS,
                   "a DXA row write spans the LMEM DMA ports");
@@ -413,16 +412,9 @@ public:
       Core* core = cores_.at(c).get();
       for (uint32_t p = 0; p < DxaCore::LMEM_PORTS_PER_CORE; ++p) {
         auto& ch = dxa_core_->lmem_req_out.at(c * DxaCore::LMEM_PORTS_PER_CORE + p);
-        ch.bind(&core->local_mem()->DmaInputs.at(p));
-        ch.tx_callback([core](const MemReq& req, uint64_t /*cycles*/) {
-          if (req.is_write() && req.flags.dxa_notify_done) {
-            // notify_bar_id arrives in raw (encoded) form: low byte = cta_no,
-            // bits[30:8] = bar_no. Decode to flat barrier index before release.
-            uint32_t decoded = bar_decode_id(req.flags.dxa_notify_bar_id, VX_CFG_NUM_BARRIERS);
-            core->barrier_event_release(decoded);
-          }
-        });
+        ch.bind(&core->local_mem()->DmaInputs.at(p), DxaCore::LMEM_WRITE_DELAY);
       }
+      dxa_core_->bar_release_out.at(c).bind(&core->dxa_bar_release_in);
     }
 #endif
   }
@@ -525,8 +517,8 @@ public:
 #endif
 
 #ifdef SIMX_SOCKET_UNIT_MMU
-  SimChannel<TlbReq>& tlb_miss_out() { return unit_mmu_->TlbMissOut; }
-  SimChannel<TlbRsp>& tlb_fill_in() { return unit_mmu_->TlbFillIn; }
+  SimPortOut<TlbReq>& tlb_miss_out() { return unit_mmu_->TlbMissOut; }
+  SimPortIn<TlbRsp>& tlb_fill_in() { return unit_mmu_->TlbFillIn; }
   // The unit caches are virtually tagged: a satp commit flushes the unit
   // TLB and invalidates them.
   void set_satp(uint64_t satp) {
@@ -572,8 +564,8 @@ Socket::Socket(const SimContext& ctx,
                 Cluster* cluster,
                 uint32_t unit_tlb_client)
   : SimObject(ctx, name)
-  , mem_req_out(VX_CFG_L1_MEM_PORTS, this)
-  , mem_rsp_in(VX_CFG_L1_MEM_PORTS, this)
+  , mem_req_out(VX_CFG_L1_MEM_PORTS)
+  , mem_rsp_in(VX_CFG_L1_MEM_PORTS)
   , socket_id_(socket_id)
   , cluster_(cluster)
   , unit_tlb_client_(unit_tlb_client)
@@ -651,11 +643,11 @@ RtuCore::Ptr& Socket::rtu_core() {
 #endif
 
 #ifdef SIMX_SOCKET_UNIT_MMU
-SimChannel<TlbReq>& Socket::tlb_miss_out() {
+SimPortOut<TlbReq>& Socket::tlb_miss_out() {
   return impl_->tlb_miss_out();
 }
 
-SimChannel<TlbRsp>& Socket::tlb_fill_in() {
+SimPortIn<TlbRsp>& Socket::tlb_fill_in() {
   return impl_->tlb_fill_in();
 }
 

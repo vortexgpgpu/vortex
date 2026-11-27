@@ -28,6 +28,9 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     VX_warp_shared_if.master warp_shared_if,
     VX_result_if.master     result_if
 );
+
+    typedef result_if.header_t header_t;
+
     `UNUSED_SPARAM (INSTANCE_ID)
     `STATIC_ASSERT(`VX_CFG_NUM_THREADS <= `VX_CFG_XLEN, ("a thread mask must fit a register: NUM_THREADS=%0d", `VX_CFG_NUM_THREADS))
     localparam PID_BITS   = `CLOG2(`VX_CFG_NUM_THREADS / NUM_LANES);
@@ -325,7 +328,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire bar_phase_r;
 
     VX_elastic_buffer #(
-        .DATAW ($bits(sfu_header_t) + DV_STACK_SIZEW + 1 + 1),
+        .DATAW ($bits(header_t) + DV_STACK_SIZEW + 1 + 1),
         .SIZE  (2)
     ) rsp_buf (
         .clk       (clk),

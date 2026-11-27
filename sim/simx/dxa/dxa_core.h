@@ -51,14 +51,18 @@ public:
 
   // Per-core DxaReq inputs (size = VX_CFG_SOCKET_SIZE). The socket binds
   // each core's DxaUnit::req_out here.
-  std::vector<SimChannel<DxaReq>>  dxa_req_in;
+  SimPortInArray<DxaReq>  dxa_req_in;
 
   // GMEM ports to L2 (size = kDxaMemPorts). Internally fed by gmem_arb_
   // from VX_CFG_NUM_DXA_CORES worker outputs.
-  std::vector<SimChannel<MemReq>>  gmem_req_out;
-  std::vector<SimChannel<MemRsp>>  gmem_rsp_in;
+  std::vector<SimPortOut<MemReq>*>  gmem_req_out;
+  std::vector<SimPortIn<MemRsp>*>   gmem_rsp_in;
   MemArbiter::Ptr                  gmem_arb_;
   std::vector<MemReqSlice::Ptr>    gmem_out_regs_;
+
+  // Each worker's GMEM requests into gmem_arb_, and its responses back.
+  SimPortOutArray<MemReq>  worker_req_out;
+  SimPortInArray<MemRsp>   worker_rsp_in;
 
   // LMEM row width the RTL drains per cycle: one DXA write beat covers the
   // full banked row (DXA_LMEM_WORD_SIZE = LMEM_NUM_BANKS * XLEN/8). The
@@ -74,7 +78,12 @@ public:
   // Per-core LMEM write ports (size = VX_CFG_SOCKET_SIZE *
   // LMEM_PORTS_PER_CORE, core-major). The socket binds each core's
   // LocalMem::DmaInputs[p] here. Write-only — no rsp.
-  std::vector<SimChannel<MemReq>>  lmem_req_out;
+  SimPortOutArray<MemReq>  lmem_req_out;
+  static constexpr uint32_t LMEM_WRITE_DELAY = 1;
+
+  // Per-core barrier release (size = VX_CFG_SOCKET_SIZE): the raw barrier id
+  // of a transfer's notify_done write, delivered as LMEM receives the write.
+  std::vector<SimEventLink<uint32_t>> bar_release_out;
 
   DxaCore(const SimContext& ctx, const char* name, Socket* socket);
   virtual ~DxaCore();

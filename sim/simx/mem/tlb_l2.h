@@ -40,12 +40,12 @@ public:
   };
 
   // Client side (one pair per L1 TLB instance, indexed by client_id).
-  std::vector<SimChannel<TlbReq>> ReqIn;
-  std::vector<SimChannel<TlbRsp>> RspOut;
+  SimPortInArray<TlbReq> ReqIn;
+  SimPortOutArray<TlbRsp> RspOut;
 
   // Walker side.
-  SimChannel<TlbReq> PtwReqOut;
-  SimChannel<TlbRsp> PtwRspIn;
+  SimPortOut<TlbReq> PtwReqOut;
+  SimPortIn<TlbRsp> PtwRspIn;
 
   L2Tlb(const SimContext& ctx, const char* name, uint32_t num_clients);
   ~L2Tlb();

@@ -37,13 +37,15 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     input wire clk,
     input wire reset,
 
-    // SFU PE-style request/response interfaces (sfu_execute_t / sfu_result_t)
     VX_execute_if.slave     execute_if,
     VX_result_if.master     result_if,
 
     // Cluster-side texture bus (master)
     VX_tex_bus_if.master    tex_bus_if
 );
+
+    typedef result_if.data_t result_t;
+
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam REQ_QUEUE_BITS = `LOG2UP(`VX_CFG_TEX_REQ_QUEUE_SIZE);
     localparam PID_W       = `LOG2UP(`VX_CFG_NUM_THREADS / NUM_LANES);
@@ -140,7 +142,7 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     wire [NUM_LANES-1:0][31:0] rsp_texels = tex_bus_if.rsp_data.texels;
 
     // Reassemble the result header from echo + uuid.
-    sfu_result_t rsp_data_in;
+    result_t rsp_data_in;
     assign rsp_data_in.header.uuid     = rsp_uuid;
     assign rsp_data_in.header.wid      = out_echo.wid;
     assign rsp_data_in.header.tmask    = out_echo.tmask;
@@ -161,7 +163,7 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     assign tex_bus_if.rsp_ready = rsp_buf_rdy;
 
     VX_elastic_buffer #(
-        .DATAW ($bits(sfu_result_t)),
+        .DATAW ($bits(result_t)),
         .SIZE  (2)
     ) rsp_buf (
         .clk       (clk),

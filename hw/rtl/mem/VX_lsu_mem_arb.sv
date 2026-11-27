@@ -20,7 +20,7 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
     parameter DATA_SIZE      = 1,
     parameter TAG_WIDTH      = 1,
 `ifdef VX_CFG_EXT_DXA_ENABLE
-    parameter OUT_TAG_WIDTH  = TAG_WIDTH + `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS),
+    parameter OUT_TAG_WIDTH  = TAG_WIDTH + arb_sel_bits(NUM_INPUTS, NUM_OUTPUTS),
 `endif
     parameter TAG_SEL_IDX    = 0,
     parameter REQ_OUT_BUF    = 0,
@@ -36,7 +36,7 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
     VX_lsu_mem_if.master    bus_out_if [NUM_OUTPUTS]
 );
     localparam DATA_WIDTH   = (8 * DATA_SIZE);
-    localparam LOG_NUM_REQS = `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS);
+    localparam LOG_NUM_REQS = arb_sel_bits(NUM_INPUTS, NUM_OUTPUTS);
     localparam SEL_COUNT    = `MIN(NUM_INPUTS, NUM_OUTPUTS);
     localparam SEL_W        = `UP(`CLOG2(`CDIV(`MAX(NUM_INPUTS, NUM_OUTPUTS), SEL_COUNT)));
     localparam REQ_DATAW    = 1 + NUM_LANES * (1 + ADDR_WIDTH + DATA_WIDTH + DATA_SIZE + `UP(USER_WIDTH)) + TAG_WIDTH;

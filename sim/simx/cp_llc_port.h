@@ -32,8 +32,8 @@ class CpLlcPort : public SimObject<CpLlcPort> {
 public:
   using Ptr = std::shared_ptr<CpLlcPort>;
 
-  SimChannel<MemReq> MemReqOut;
-  SimChannel<MemRsp> MemRspIn;
+  SimPortOut<MemReq> MemReqOut;
+  SimPortIn<MemRsp> MemRspIn;
 
   // one 4 KB DMA burst of reads in flight
   static constexpr uint32_t kReadSlots = 4096 / CP_MEM_DATA_SIZE;
@@ -86,6 +86,11 @@ public:
   }
 
 protected:
+  // A fence, a queued request, or a read still to return.
+  bool busy() const {
+    return fencing_ || !queue_.empty() || reads_ != 0;
+  }
+
   void on_reset() {
     queue_.clear();
     free_slots_.clear();
@@ -128,9 +133,6 @@ protected:
       return;
     }
     if (queue_.empty()) {
-      if (reads_ == 0 && MemRspIn.empty()) {
-        this->tick_sleep();
-      }
       return;
     }
     auto& entry = queue_.front();

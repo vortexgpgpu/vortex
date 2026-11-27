@@ -141,9 +141,8 @@ public:
   };
 
   // ── Constructor ──────────────────────────────────────────────────────
-  explicit Impl(DxaCore* simobject, MemArbiter* gmem_arb)
+  explicit Impl(DxaCore* simobject)
     : simobject_(simobject)
-    , gmem_arb_(gmem_arb)
     , workers_(VX_CFG_NUM_DXA_CORES)
     , cycle_(0)
   {
@@ -234,7 +233,7 @@ public:
       if (w.state == WState::RUNNING) {
         tick_worker_smem_wr(w);
       }
-      capture_line(w, gmem_arb_->RspOut.at(worker_id));
+      capture_line(w, simobject_->worker_rsp_in.at(worker_id));
       if (w.state == WState::RUNNING) {
         tick_worker_gmem_req(w);
       }
@@ -561,7 +560,7 @@ private:
   // line being written, one captured behind it, and the transfer's last line
   // while others are outstanding. A response it cannot take stays on the
   // memory response path and holds the responses queued behind it.
-  void capture_line(Worker& w, SimChannel<MemRsp>& ch) {
+  void capture_line(Worker& w, SimPortIn<MemRsp>& ch) {
     bool pend_busy  = false;
     bool defer_busy = false;
     uint32_t oob_slot = UINT32_MAX;
@@ -653,7 +652,7 @@ private:
     mreq.hart_id   = w.req.core->id();
     mreq.uuid  = w.req.uuid;
 
-    auto& ch = gmem_arb_->ReqIn.at(w.worker_id);
+    auto& ch = simobject_->worker_req_out.at(w.worker_id);
     if (!ch.try_send(mreq)) return; // arb backpressure
 
     w.inflight[slot].allocated   = true;
@@ -836,6 +835,10 @@ private:
       }
 
       lmem_ch.send(req);
+      if (req.flags.dxa_notify_done) {
+        simobject_->bar_release_out.at(socket_local_cid).send(req.flags.dxa_notify_bar_id,
+                                                              DxaCore::LMEM_WRITE_DELAY);
+      }
       ++w.writes_emitted;
       // Count write transactions, not port requests: one per banked-row beat.
       // A beat spans LMEM_PORTS_PER_CORE ports of the same row, so only its
@@ -906,7 +909,6 @@ private:
 
   // ── Members ──────────────────────────────────────────────────────────
   DxaCore*    simobject_;
-  MemArbiter* gmem_arb_;
   std::array<Descriptor, VX_DCR_DXA_DESC_COUNT> descriptors_;
   std::deque<DxaReq>     queue_;
   std::vector<Worker>    workers_;
@@ -921,10 +923,13 @@ private:
 
 DxaCore::DxaCore(const SimContext& ctx, const char* name, Socket* socket)
   : SimObject<DxaCore>(ctx, name)
-  , dxa_req_in(kCoresPerSocket, this)
-  , gmem_req_out(kDxaMemPorts, this)
-  , gmem_rsp_in(kDxaMemPorts, this)
-  , lmem_req_out(kCoresPerSocket * LMEM_PORTS_PER_CORE, this)
+  , dxa_req_in(this, kCoresPerSocket, 2)
+  , gmem_req_out(kDxaMemPorts)
+  , gmem_rsp_in(kDxaMemPorts)
+  , worker_req_out(this, VX_CFG_NUM_DXA_CORES)
+  , worker_rsp_in(this, VX_CFG_NUM_DXA_CORES, 2)
+  , lmem_req_out(this, kCoresPerSocket * LMEM_PORTS_PER_CORE)
+  , bar_release_out(kCoresPerSocket, this)
 {
   __unused(socket);
 
@@ -941,15 +946,19 @@ DxaCore::DxaCore(const SimContext& ctx, const char* name, Socket* socket)
     snprintf(sname, 100, "%s-gmem-out%d", name, i);
     auto out_reg = MemReqSlice::Create(sname, 1);
     gmem_arb_->ReqOut.at(i).bind(&out_reg->In);
-    out_reg->Out.bind(&gmem_req_out.at(i));
+    gmem_req_out.at(i) = &out_reg->Out;
     gmem_out_regs_.push_back(out_reg);
   #else
-    gmem_arb_->ReqOut.at(i).bind(&gmem_req_out.at(i));
+    gmem_req_out.at(i) = &gmem_arb_->ReqOut.at(i);
   #endif
-    gmem_rsp_in.at(i).bind(&gmem_arb_->RspIn.at(i));
+    gmem_rsp_in.at(i) = &gmem_arb_->RspIn.at(i);
+  }
+  for (uint32_t w = 0; w < VX_CFG_NUM_DXA_CORES; ++w) {
+    worker_req_out.at(w).bind(&gmem_arb_->ReqIn.at(w));
+    gmem_arb_->RspOut.at(w).bind(&worker_rsp_in.at(w));
   }
 
-  impl_ = new Impl(this, gmem_arb_.get());
+  impl_ = new Impl(this);
 }
 
 DxaCore::~DxaCore() {

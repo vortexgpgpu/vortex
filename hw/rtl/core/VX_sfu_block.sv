@@ -85,11 +85,11 @@ module VX_sfu_block import VX_gpu_pkg::*; #(
 `endif
 
     VX_execute_if #(
-        .data_t (sfu_execute_t)
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
     ) pe_execute_if[PE_COUNT]();
 
     VX_result_if#(
-        .data_t (sfu_result_t)
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
     ) pe_result_if[PE_COUNT]();
 
     reg [PE_SEL_BITS-1:0] pe_select;
@@ -132,7 +132,6 @@ module VX_sfu_block import VX_gpu_pkg::*; #(
 
     VX_pe_switch #(
         .PE_COUNT   (PE_COUNT),
-        .NUM_LANES  (NUM_LANES),
         .ARBITER    ("R"),
         .REQ_OUT_BUF(0),
         .RSP_OUT_BUF(3)

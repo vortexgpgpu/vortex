@@ -85,8 +85,8 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     output wire             req_empty
 );
     `STATIC_ASSERT(NUM_BANKS == (1 << `CLOG2(NUM_BANKS)), ("invalid parameter"))
-    localparam CACHE_MEM_TAG_WIDTH = `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, MEM_PORTS, UUID_WIDTH);
-    localparam BYPASS_TAG_WIDTH = `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, MEM_PORTS, SECTOR_SIZE, WORD_SIZE, TAG_WIDTH);
+    localparam CACHE_MEM_TAG_WIDTH = cache_mem_tag_width(MSHR_SIZE, NUM_BANKS, MEM_PORTS, UUID_WIDTH);
+    localparam BYPASS_TAG_WIDTH = cache_bypass_tag_width(NUM_REQS, MEM_PORTS, SECTOR_SIZE, WORD_SIZE, TAG_WIDTH);
     localparam NC_TAG_WIDTH = `MAX(CACHE_MEM_TAG_WIDTH, BYPASS_TAG_WIDTH) + 1;
     localparam MEM_TAG_WIDTH = PASSTHRU ? BYPASS_TAG_WIDTH : (NC_ENABLE ? NC_TAG_WIDTH : CACHE_MEM_TAG_WIDTH);
     localparam BYPASS_ENABLE = (NC_ENABLE || PASSTHRU);
@@ -128,17 +128,31 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     end else begin : g_no_bypass
         assign req_empty = 1'b1;
         for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_cache_if
-            `ASSIGN_VX_MEM_BUS_IF (core_bus_cache_if[i], core_bus_if[i]);
+            VX_mem_bus_connect core_bus_cache_connect (
+                .bus_in_if  (core_bus_if[i]),
+                .bus_out_if (core_bus_cache_if[i])
+            );
         end
         for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_tmp_if
-            `ASSIGN_VX_MEM_BUS_IF (mem_bus_tmp_if[i], mem_bus_cache_if[i]);
+            VX_mem_bus_connect mem_bus_tmp_connect (
+                .bus_in_if  (mem_bus_cache_if[i]),
+                .bus_out_if (mem_bus_tmp_if[i])
+            );
         end
     end
     for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_if
         if (WRITE_ENABLE) begin : g_we
-            `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[i], mem_bus_tmp_if[i]);
+            VX_mem_bus_connect mem_bus_connect (
+                .bus_in_if  (mem_bus_tmp_if[i]),
+                .bus_out_if (mem_bus_if[i])
+            );
         end else begin : g_ro
-            `ASSIGN_VX_MEM_BUS_RO_IF (mem_bus_if[i], mem_bus_tmp_if[i]);
+            VX_mem_bus_connect #(
+                .READ_ONLY (1)
+            ) mem_bus_connect (
+                .bus_in_if  (mem_bus_tmp_if[i]),
+                .bus_out_if (mem_bus_if[i])
+            );
         end
     end
     if (PASSTHRU == 0) begin : g_cache
@@ -188,10 +202,14 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
         );
     end else begin : g_passthru
         for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_cache_if
-            `UNUSED_VX_MEM_BUS_IF (core_bus_cache_if[i])
+            VX_mem_bus_idle_slave core_bus_cache_idle (
+                .bus_if (core_bus_cache_if[i])
+            );
         end
         for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_cache_if
-            `INIT_VX_MEM_BUS_IF (mem_bus_cache_if[i])
+            VX_mem_bus_idle_master mem_bus_cache_idle (
+                .bus_if (mem_bus_cache_if[i])
+            );
         end
     `ifdef PERF_ENABLE
         wire [NUM_REQS-1:0]  perf_core_reads_per_req;

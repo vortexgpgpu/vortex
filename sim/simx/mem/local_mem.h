@@ -54,12 +54,12 @@ public:
     }
   };
 
-  std::vector<SimChannel<LsuReq>> ReqIn;
-  std::vector<SimChannel<LsuRsp>> RspOut;
+  SimPortInArray<LsuReq> ReqIn;
+  SimPortOutArray<LsuRsp> RspOut;
 
   // DMA port: client c uses channels [c * DMA_PORTS, (c + 1) * DMA_PORTS).
-  std::vector<SimChannel<MemReq>> DmaInputs;
-  std::vector<SimChannel<MemRsp>> DmaOutputs;
+  SimPortInArray<MemReq> DmaInputs;
+  SimPortOutArray<MemRsp> DmaOutputs;
 
   LocalMem(const SimContext& ctx, const char* name, const Config& config);
   virtual ~LocalMem();
@@ -70,6 +70,7 @@ protected:
 
   void on_reset();
   void on_tick();
+  bool busy() const;
 
   class Impl;
   Impl* impl_;

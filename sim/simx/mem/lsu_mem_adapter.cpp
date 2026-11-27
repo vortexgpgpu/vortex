@@ -24,8 +24,8 @@ LsuMemAdapter::LsuMemAdapter(
 ) : SimObject<LsuMemAdapter>(ctx, name)
   , ReqIn(this)
   , RspOut(this)
-  , ReqOut(num_inputs, this)
-  , RspIn(num_inputs, SimChannel<MemRsp>(this, kRspInSize))
+  , ReqOut(this, num_inputs)
+  , RspIn(this, num_inputs, kRspInSize)
   , delay_(delay)
   , rsp_delay_(rsp_delay)
   , pending_mask_(num_inputs)
@@ -37,7 +37,7 @@ LsuMemAdapter::LsuMemAdapter(
   }
   if (num_inputs == 1) {
     // bypass mode
-    ReqIn.bind(&ReqOut.at(0), [](const LsuReq& req) {
+    ReqIn.bypass_to(ReqOut.at(0), [](const LsuReq& req) {
       MemReq mr(req.op,
                 req.addrs.at(0),
                 req.data.at(0),
@@ -54,7 +54,7 @@ LsuMemAdapter::LsuMemAdapter(
       mr.flags.local = (t == AddrType::Shared);
       return mr;
     });
-    RspIn.at(0).bind(&RspOut, [](const MemRsp& rsp) {
+    RspIn.at(0).bypass_to(RspOut, [](const MemRsp& rsp) {
       LsuRsp lsuRsp(1);
       lsuRsp.mask.set(0);
       lsuRsp.tag = rsp.tag;
@@ -74,7 +74,6 @@ void LsuMemAdapter::on_tick() {
   uint32_t input_size = ReqOut.size();
   // bypass mode: both directions are forwarded at bind time.
   if (input_size == 1) {
-    this->tick_sleep();
     return;
   }
 
@@ -159,15 +158,5 @@ void LsuMemAdapter::on_tick() {
     if (pending_mask_.none()) {
       ReqIn.pop();
     }
-  }
-
-  // sleep when nothing is queued or in flight toward us; a partial request
-  // round (pending_mask_) implies a non-empty ReqIn, so it cannot be lost.
-  bool idle = (ReqIn.size() == 0);
-  for (uint32_t i = 0; idle && i < input_size; ++i) {
-    idle = (RspIn.at(i).size() == 0);
-  }
-  if (idle) {
-    this->tick_sleep();
   }
 }

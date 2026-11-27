@@ -328,7 +328,10 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
 
     for (genvar i = 0; i < OCACHE_NUM_REQS; ++i) begin : g_cache_bus_if
         if (i < MEM_CHANNELS) begin : g_active
-            `ASSIGN_VX_MEM_BUS_IF (cache_bus_if[i], sched_bus_if[i]);
+            VX_mem_bus_connect cache_bus_connect (
+                .bus_in_if  (sched_bus_if[i]),
+                .bus_out_if (cache_bus_if[i])
+            );
         end else begin : g_tieoff
             assign cache_bus_if[i].req_valid = 1'b0;
             assign cache_bus_if[i].req_data  = '0;

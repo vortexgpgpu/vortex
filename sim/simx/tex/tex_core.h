@@ -42,12 +42,12 @@ public:
   };
 
   // Inputs from the per-socket TexBus arbiter; size = VX_CFG_NUM_TEX_CORES.
-  std::vector<SimChannel<TexReq>>  tex_req_in;
-  std::vector<SimChannel<TexRsp>>  tex_rsp_out;
+  SimPortInArray<TexReq>  tex_req_in;
+  SimPortOutArray<TexRsp>  tex_rsp_out;
 
   // Memory ports to the tcache. Size = TCACHE_NUM_REQS.
-  std::vector<SimChannel<MemReq>>  tcache_req_out;
-  std::vector<SimChannel<MemRsp>>  tcache_rsp_in;
+  SimPortOutArray<MemReq>  tcache_req_out;
+  SimPortInArray<MemRsp>  tcache_rsp_in;
 
   TexCore(const SimContext& ctx, const char* name, Socket* socket);
   virtual ~TexCore();

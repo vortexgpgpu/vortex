@@ -38,8 +38,8 @@ static constexpr uint32_t kBusMergeDelay = (VX_CFG_NUM_SFU_BLOCKS > 1) ? 1 : 0;
 static constexpr bool kWctlBuffered = (VX_CFG_NUM_SFU_BLOCKS > 1);
 
 SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
-	: FuncUnit<VX_CFG_NUM_SFU_BLOCKS>(ctx, name, core, 6)
-	, warp_ctl_out(this, VX_CFG_NUM_WARPS)
+	: FuncUnit<SfuUnit, VX_CFG_NUM_SFU_BLOCKS>(ctx, name, core, core, 2, 6)
+	, warp_ctl_out(this)
 #ifdef VX_CFG_EXT_DXA_ENABLE
 	, dxa_req_out(this)
 #endif
@@ -591,6 +591,12 @@ void SfuUnit::on_tick() {
 			res_rr_[r] = (winner[r] + 1) % VX_CFG_NUM_SFU_BLOCKS;
 		}
 	}
+}
+
+// The fragment distributor pulls raster work on its own, so a raster build
+// runs every cycle.
+bool SfuUnit::busy() const {
+	return VX_CFG_EXT_RASTER_ENABLED != 0;
 }
 
 void SfuUnit::on_reset() {
