@@ -172,43 +172,17 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     `STATIC_ASSERT(LANE_BITS <= 6, ("invalid parameter: NUM_LANES=%0d exceeds the 6-bit SHFL operand stride", NUM_LANES))
     if (NUM_LANES > 1) begin : g_shfl
         for (genvar i = 0; i < NUM_LANES; ++i) begin : g_i
-            wire [LANE_BITS-1:0] bval = alu_in2[i][0 +: LANE_BITS];
-            wire [LANE_BITS-1:0] cval = alu_in2[i][6 +: LANE_BITS];
-            wire [LANE_BITS-1:0] mask = alu_in2[i][12 +: LANE_BITS];
-            wire [LANE_BITS-1:0] minLane = (LANE_BITS'(i) & mask);
-            wire [LANE_BITS-1:0] maxLane = minLane | (cval & ~(mask));
-
-            wire [LANE_BITS:0]   lane_up   = LANE_BITS'(i) - bval;
-            wire [LANE_BITS:0]   lane_down = LANE_BITS'(i) + bval;
-            wire [LANE_BITS-1:0] lane_bfly = LANE_BITS'(i) ^ bval;
-            wire [LANE_BITS-1:0] lane_idx  = minLane | (bval & ~mask);
-
-            // The source lane is read before its bound check resolves, which
-            // only picks between that read and the lane's own value.
-            reg [LANE_BITS-1:0] lane;
-            reg in_bounds;
-            always @(*) begin
-                case (alu_op[1:0])
-                    INST_SHFL_UP: begin
-                        lane      = lane_up[LANE_BITS-1:0];
-                        in_bounds = ($signed(lane_up) >= $signed({1'b0, minLane}));
-                    end
-                    INST_SHFL_DOWN: begin
-                        lane      = lane_down[LANE_BITS-1:0];
-                        in_bounds = (lane_down <= {1'b0, maxLane});
-                    end
-                    INST_SHFL_BFLY: begin
-                        lane      = lane_bfly;
-                        in_bounds = (lane_bfly <= maxLane);
-                    end
-                    default: begin // INST_SHFL_IDX
-                        lane      = lane_idx;
-                        in_bounds = (lane_idx <= maxLane);
-                    end
-                endcase
-            end
-            wire take_lane = in_bounds && execute_if.data.header.tmask[lane];
-            assign shfl_result[i] = take_lane ? alu_in1[lane] : alu_in1[i];
+            VX_alu_shfl_lane #(
+                .NUM_LANES (NUM_LANES)
+            ) shfl_lane (
+                .lane_id   (LANE_BITS'(i)),
+                .op        (alu_op[1:0]),
+                .sel       (alu_in2[i]),
+                .tmask     (execute_if.data.header.tmask),
+                .data      (alu_in1),
+                .self_data (alu_in1[i]),
+                .result    (shfl_result[i])
+            );
         end
     end else begin : g_shfl_0
         assign shfl_result[0] = alu_in1[0];
