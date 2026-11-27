@@ -23,8 +23,7 @@ LocalMemSwitch::LocalMemSwitch(
   // The split is combinational: a request handed over is routed into the
   // output buffers in the same cycle, and ReqIn holds nothing across cycles.
   , ReqIn(this, 1)
-  // the response arbiter's one-entry output buffer
-  , RspOut(this, 1)
+  , RspOut(this)
   , ReqOutLmem(this)
   , RspInLmem(this)
   , ReqOutDC(this)
@@ -120,10 +119,5 @@ void LocalMemSwitch::on_tick() {
       DT(4, this->name() << " lmem-req: " << out_lmem_req);
     }
     ReqIn.pop();
-  }
-
-  // sleep when nothing is queued or in flight toward us (no cross-tick state).
-  if (ReqIn.size() == 0 && RspInLmem.size() == 0 && RspInDC.size() == 0) {
-    this->tick_sleep();
   }
 }

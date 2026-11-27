@@ -69,8 +69,9 @@ public:
 #endif
   };
 
-  std::vector<SimChannel<MemReq>> mem_req_out;
-  std::vector<SimChannel<MemRsp>> mem_rsp_in;
+  // The L2's memory ports.
+  std::vector<SimPortOut<MemReq>*> mem_req_out;
+  std::vector<SimPortIn<MemRsp>*>  mem_rsp_in;
 
   // Global-barrier event links: every core's arrive end fans into
   // gbar_arrive_in; resume links fan back out, one per cluster core.
@@ -106,12 +107,12 @@ public:
   void set_mmu_satp(uint64_t value);
   // The cluster L2 TLB's walker link, exported for the processor to bind
   // to the device-level walker (through the PtwMux).
-  SimChannel<TlbReq>& ptw_req_out();
-  SimChannel<TlbRsp>& ptw_rsp_in();
+  SimPortOut<TlbReq>& ptw_req_out();
+  SimPortIn<TlbRsp>& ptw_rsp_in();
   // The walker's PTE-fetch client slot on this cluster's L2, valid only
   // under PTW_ON_L2 (the L2 is the LLC).
-  SimChannel<MemReq>& ptw_mem_req_in();
-  SimChannel<MemRsp>& ptw_mem_rsp_out();
+  SimPortIn<MemReq>& ptw_mem_req_in();
+  SimPortOut<MemRsp>& ptw_mem_rsp_out();
 #endif
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
@@ -145,8 +146,8 @@ public:
   void l2_flush_begin(uint32_t fence_op);
   // The command processor DMA's client slot on this cluster's L2, valid only
   // under CP_ON_L2 (the L2 is the LLC).
-  SimChannel<MemReq>& cp_mem_req_in();
-  SimChannel<MemRsp>& cp_mem_rsp_out();
+  SimPortIn<MemReq>& cp_mem_req_in();
+  SimPortOut<MemRsp>& cp_mem_rsp_out();
   bool l2_flush_done() const;
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE

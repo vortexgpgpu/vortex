@@ -675,9 +675,9 @@ private:
 
 OmCore::OmCore(const SimContext& ctx, const char* name, Cluster* cluster)
   : SimObject<OmCore>(ctx, name)
-  , om_req_in(kCoresPerCluster, this)
-  , ocache_req_out(kOcacheNumReqs, this)
-  , ocache_rsp_in(kOcacheNumReqs, this)
+  , om_req_in(this, kCoresPerCluster, 2)
+  , ocache_req_out(this, kOcacheNumReqs)
+  , ocache_rsp_in(this, kOcacheNumReqs, 2)
 {
   __unused(cluster);
   impl_ = new Impl(this);

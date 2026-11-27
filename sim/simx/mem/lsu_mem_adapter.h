@@ -21,11 +21,11 @@ class LsuMemAdapter : public SimObject<LsuMemAdapter> {
 public:
   using Ptr = std::shared_ptr<LsuMemAdapter>;
 
-  SimChannel<LsuReq> ReqIn;
-  SimChannel<LsuRsp> RspOut;
+  SimPortIn<LsuReq> ReqIn;
+  SimPortOut<LsuRsp> RspOut;
 
-  std::vector<SimChannel<MemReq>> ReqOut;
-  std::vector<SimChannel<MemRsp>> RspIn;
+  SimPortOutArray<MemReq> ReqOut;
+  SimPortInArray<MemRsp> RspIn;
 
   // Past the bank, the cache holds up to three responses per port in its two
   // output stages (one, then two entries), and each channel stands for both
@@ -51,6 +51,7 @@ public:
 protected:
   void on_reset();
   void on_tick();
+  bool busy() const { return false; }  // no work beyond its inputs
 
 private:
   uint32_t delay_;

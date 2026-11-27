@@ -81,10 +81,11 @@ public:
 		}
 	};
 
-	std::vector<SimChannel<MemReq>> core_req_in;
-	std::vector<SimChannel<MemRsp>> core_rsp_out;
-	std::vector<SimChannel<MemReq>> mem_req_out;
-	std::vector<SimChannel<MemRsp>> mem_rsp_in;
+	// The ports of the units inside that carry each interface.
+	std::vector<SimPortIn<MemReq>*> core_req_in;
+	std::vector<SimPortOut<MemRsp>*> core_rsp_out;
+	std::vector<SimPortOut<MemReq>*> mem_req_out;
+	std::vector<SimPortIn<MemRsp>*> mem_rsp_in;
 
 	Cache(const SimContext& ctx, const char* name, const Config& config);
 	~Cache();
@@ -106,6 +107,7 @@ public:
 protected:
 	void on_reset();
 	void on_tick();
+	bool busy() const;
 
 private:
 	class Impl;

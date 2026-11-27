@@ -20,10 +20,10 @@ Dispatcher::Dispatcher(const SimContext& ctx, const char* name, Core* core, uint
   : SimObject<Dispatcher>(ctx, name)
   // One dispatch queue per issue slot. The extra entry holds the op still in
   // the collector's output register, which the channel counts as occupancy.
-  , Inputs(VX_CFG_ISSUE_WIDTH, SimChannel<instr_trace_t*>(this, queue_size + 1))
+  , Inputs(this, VX_CFG_ISSUE_WIDTH, queue_size + 1)
   // Bound to the unit's per-block inputs.
-  , Outputs(block_size, this)
-  , ReleaseOut(this, VX_CFG_ISSUE_WIDTH)
+  , Outputs(this, block_size)
+  , ReleaseOut(this)
   , core_(core)
   , block_size_(block_size)
   , num_lanes_(num_lanes)
@@ -192,3 +192,18 @@ void Dispatcher::on_tick() {
     }
   }
 };
+
+// An op held in a block's iterator, or a block mid-split.
+bool Dispatcher::busy() const {
+  for (auto held : held_input_) {
+    if (held >= 0) {
+      return true;
+    }
+  }
+  for (auto bp : block_pids_) {
+    if (bp != 0) {
+      return true;
+    }
+  }
+  return false;
+}

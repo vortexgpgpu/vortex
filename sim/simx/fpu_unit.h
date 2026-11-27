@@ -18,7 +18,7 @@
 
 namespace vortex {
 
-class FpuUnit : public FuncUnit<VX_CFG_NUM_FPU_BLOCKS> {
+class FpuUnit : public FuncUnit<FpuUnit, VX_CFG_NUM_FPU_BLOCKS> {
 public:
   FpuUnit(const SimContext& ctx, const char* name, Core*);
 
@@ -29,11 +29,11 @@ public:
 
   // Full bandwidth: the dispatch queue feeds the unit directly, so an op
   // returns its issue credit as the unit accepts it.
-  SimChannel<instr_trace_t*> ReleaseOut;
+  SimPortOut<instr_trace_t*> ReleaseOut;
 
-protected:
-  void on_reset() override;
-  void on_tick() override;
+  void on_reset();
+  void on_tick();
+  bool busy() const;
 
 private:
   // Per-unit functional execution. Called only from this unit's tick().

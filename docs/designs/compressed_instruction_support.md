@@ -58,7 +58,7 @@ path reuses `op_args.br`.
 
 [`sim/simx/decompressor.{cpp,h}`](../../sim/simx/decompressor.cpp) provides
 both a stateless `rvc_decompress(word) → {instr32, size, illegal}` and a
-`Decompressor` **SimObject** (per-warp halfword buffer + refetch queue).
+`Decompressor` unit (per-warp halfword buffer + refetch queue).
 `Core::fetch()` always issues a 4-byte-aligned icache request; the
 `Decompressor`'s `on_icache_rsp` runs the same FSM and drains its refetch
 queue ahead of fresh fetches ([`core.cpp:347-414`](../../sim/simx/core.cpp#L347)).

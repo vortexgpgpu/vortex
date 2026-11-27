@@ -138,9 +138,9 @@ slower (1 element/beat) but is amortized over many WGMMA micro-ops.
 
 [`sim/simx/dxa/dxa_unit.{h,cpp}`](../../sim/simx/dxa/dxa_unit.cpp) is a
 plain `DxaUnit` helper owned by `SfuUnit`; it lane-decodes a `DxaType`
-trace into a `DxaReq` channel with no functional read/write.
+trace into `DxaReq`s on its output port with no functional read/write.
 [`dxa_core.{h,cpp}`](../../sim/simx/dxa/dxa_core.cpp) is the `DxaCore`
-SimObject: NoC-only (GMEM via `MemReq`/`MemRsp`, LMEM via real `MemReq`
+unit: NoC-only (GMEM via `MemReq`/`MemRsp`, LMEM via real `MemReq`
 with `mem_block_t` payload and `flags.dxa_notify_done`/`dxa_notify_bar_id`),
 with K-major and serial multicast replay modeled. The SimX worker is a
 **flat two-step** engine over a pre-enumerated `work_list`

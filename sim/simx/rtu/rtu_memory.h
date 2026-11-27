@@ -32,7 +32,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "types.h"            // MemReq, MemRsp, SimChannel
+#include "types.h"            // MemReq, MemRsp, SimPortOutArray, SimPortInArray
 
 namespace vortex { namespace rtu {
 
@@ -42,8 +42,8 @@ struct PerfStats;
 class MemoryEngine {
 public:
   MemoryEngine(std::vector<Context>& contexts,
-               std::vector<SimChannel<MemReq>>& dcache_req,
-               std::vector<SimChannel<MemRsp>>& dcache_rsp,
+               SimPortOutArray<MemReq>& dcache_req,
+               SimPortInArray<MemRsp>& dcache_rsp,
                PerfStats& perf)
     : contexts_(contexts), dcache_req_(dcache_req), dcache_rsp_(dcache_rsp),
       perf_(perf) {}
@@ -67,8 +67,8 @@ private:
   };
 
   std::vector<Context>& contexts_;
-  std::vector<SimChannel<MemReq>>& dcache_req_;
-  std::vector<SimChannel<MemRsp>>& dcache_rsp_;
+  SimPortOutArray<MemReq>& dcache_req_;
+  SimPortInArray<MemRsp>& dcache_rsp_;
   PerfStats& perf_;
 
   std::vector<Mshr>  mshr_;

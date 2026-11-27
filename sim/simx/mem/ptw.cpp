@@ -246,8 +246,8 @@ void Ptw::on_tick() {
 
 PtwMux::PtwMux(const SimContext& ctx, const char* name, uint32_t num_inputs)
   : SimObject(ctx, name)
-  , ReqIn(num_inputs, this)
-  , RspOut(num_inputs, this)
+  , ReqIn(this, num_inputs, 2)
+  , RspOut(this, num_inputs)
   , ReqOut(this)
   , RspIn(this)
   , num_inputs_(num_inputs)

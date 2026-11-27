@@ -1,11 +1,11 @@
 ---
 name: simx-review
-description: Review checklist for Vortex SimX changes under sim/simx and sim/common. Use together with code-review whenever a diff touches the cycle model, the functional emulator, the SimObject framework or a model of an RTL unit.
+description: Review checklist for Vortex SimX changes under sim/simx and sim/common. Use together with code-review whenever a diff touches the cycle model, the functional emulator, the SimX unit/port framework or a model of an RTL unit.
 ---
 
 # Reviewing SimX
 
-Load `docs/coding_guidelines_cpp.md`, `docs/designs/simobject.md`,
+Load `docs/coding_guidelines_cpp.md`, `docs/simobject.md`,
 `docs/designs/simx_simulator_architecture.md` and AGENTS.md §4–§6 first.
 
 ## The model's role
@@ -21,8 +21,8 @@ Load `docs/coding_guidelines_cpp.md`, `docs/designs/simobject.md`,
 
 ## Structure
 
-- **Cardinal rule**: modules talk only through their bound `SimChannel`/
-  `SimEventLink` ports. No reaching across the hierarchy
+- **Cardinal rule**: units talk only through their bound `In`/`Out` ports
+  and `SimEventLink`s. No reaching across the hierarchy
   (`core_->processor()->...`, a leaf unit grabbing global memory).
 - No threading vocabulary in model code (atomics, mutexes, threads, deferred
   calls); `ci/check_simx_mt_boundary.sh` enforces it, and the model must stay

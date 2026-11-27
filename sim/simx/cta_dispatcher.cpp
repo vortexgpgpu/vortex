@@ -23,8 +23,8 @@ using namespace vortex;
 
 CtaDispatcher::CtaDispatcher(const SimContext& ctx, const char* name, Core* core)
   : SimObject<CtaDispatcher>(ctx, name)
-  , bus_in(this, 1)
-  , credit_out(this)
+  , bus_in(core, 1)
+  , credit_out(core)
   , core_(core)
   , num_threads_(VX_CFG_NUM_THREADS)
   , num_warps_(VX_CFG_NUM_WARPS)

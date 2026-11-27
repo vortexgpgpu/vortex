@@ -13,7 +13,6 @@
 
 #include "cluster.h"
 #include <algorithm>
-#include "delay_buffer.h"
 #include "socket.h"
 #include "core.h"
 #include "local_mem.h"
@@ -118,15 +117,15 @@ public:
 
     // connect l2cache memory interface
     for (uint32_t i = 0; i < VX_CFG_L2_MEM_PORTS; ++i) {
-      l2cache_->mem_req_out.at(i).bind(&simobject_->mem_req_out.at(i));
-      simobject_->mem_rsp_in.at(i).bind(&l2cache_->mem_rsp_in.at(i));
+      simobject_->mem_req_out.at(i) = l2cache_->mem_req_out.at(i);
+      simobject_->mem_rsp_in.at(i) = l2cache_->mem_rsp_in.at(i);
     }
 
     // A socket memory port reaches its L2 port across the link to the L2,
     // VX_CFG_L2_LINK_LATENCY cycles each way.
     auto bind_l2_link = [&](uint32_t port,
-                            SimChannel<MemReq>& req_src, SimChannel<MemReq>& req_dst,
-                            SimChannel<MemRsp>& rsp_src, SimChannel<MemRsp>& rsp_dst) {
+                            SimPortOut<MemReq>& req_src, SimPortIn<MemReq>& req_dst,
+                            SimPortOut<MemRsp>& rsp_src, SimPortIn<MemRsp>& rsp_dst) {
       if constexpr (VX_CFG_L2_LINK_LATENCY != 0) {
         snprintf(sname, 100, "%s-l2link-req%d", name.c_str(), port);
         auto req_link = DelayBuffer<MemReq>::Create(sname, VX_CFG_L2_LINK_LATENCY);
@@ -160,15 +159,15 @@ public:
     for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
       for (uint32_t j = 0; j < VX_CFG_L1_MEM_PORTS; ++j) {
         uint32_t port = i * VX_CFG_L1_MEM_PORTS + j;
-        bind_l2_link(port, sockets_.at(i)->mem_req_out.at(j), l2arb->ReqIn.at(kL2Rows * port + 0),
-                     l2arb->RspOut.at(kL2Rows * port + 0), sockets_.at(i)->mem_rsp_in.at(j));
+        bind_l2_link(port, *sockets_.at(i)->mem_req_out.at(j), l2arb->ReqIn.at(kL2Rows * port + 0),
+                     l2arb->RspOut.at(kL2Rows * port + 0), *sockets_.at(i)->mem_rsp_in.at(j));
       }
     }
     // A gfx cache's memory port reaches the L2 arbiter through the cluster
     // unit MMU under VM.
     auto bind_gfx_port = [&](uint32_t arb_idx, uint32_t cmmu_idx,
-                             SimChannel<MemReq>& req_src,
-                             SimChannel<MemRsp>& rsp_dst) {
+                             SimPortOut<MemReq>& req_src,
+                             SimPortIn<MemRsp>& rsp_dst) {
     #ifdef SIMX_CLUSTER_UNIT_MMU
       req_src.bind(&gfx_mmu_->ReqIn.at(cmmu_idx));
       gfx_mmu_->RspOut.at(cmmu_idx).bind(&rsp_dst);
@@ -182,16 +181,16 @@ public:
     };
     // L2 arb outputs → l2cache (after all rows are bound).
     for (uint32_t i = 0; i < VX_CFG_L2_DEMAND_REQS; ++i) {
-      l2arb->ReqOut.at(i).bind(&l2cache_->core_req_in.at(i));
-      l2cache_->core_rsp_out.at(i).bind(&l2arb->RspIn.at(i));
+      l2arb->ReqOut.at(i).bind(l2cache_->core_req_in.at(i));
+      l2cache_->core_rsp_out.at(i)->bind(&l2arb->RspIn.at(i));
     }
 #else
     // No cluster-resident gfx caches: direct sockets → L2.
     for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
       for (uint32_t j = 0; j < VX_CFG_L1_MEM_PORTS; ++j) {
         uint32_t port = i * VX_CFG_L1_MEM_PORTS + j;
-        bind_l2_link(port, sockets_.at(i)->mem_req_out.at(j), l2cache_->core_req_in.at(port),
-                     l2cache_->core_rsp_out.at(port), sockets_.at(i)->mem_rsp_in.at(j));
+        bind_l2_link(port, *sockets_.at(i)->mem_req_out.at(j), *l2cache_->core_req_in.at(port),
+                     *l2cache_->core_rsp_out.at(port), *sockets_.at(i)->mem_rsp_in.at(j));
       }
     }
 #endif // cluster-resident gfx caches
@@ -281,14 +280,14 @@ public:
 
     // om_core ↔ ocache (per-port).
     for (uint32_t i = 0; i < kOcacheNumReqs; ++i) {
-      om_core_->ocache_req_out.at(i).bind(&ocache->core_req_in.at(i));
-      ocache->core_rsp_out.at(i).bind(&om_core_->ocache_rsp_in.at(i));
+      om_core_->ocache_req_out.at(i).bind(ocache->core_req_in.at(i));
+      ocache->core_rsp_out.at(i)->bind(&om_core_->ocache_rsp_in.at(i));
     }
 
     // ocache memory side → l2arb.
     constexpr uint32_t kOmRow = 1;
     for (uint32_t i = 0; i < kOcacheMemPorts; ++i) {
-      bind_gfx_port(kL2Rows * i + kOmRow, CMMU_OCACHE_IDX, ocache->mem_req_out.at(i), ocache->mem_rsp_in.at(i));
+      bind_gfx_port(kL2Rows * i + kOmRow, CMMU_OCACHE_IDX, *ocache->mem_req_out.at(i), *ocache->mem_rsp_in.at(i));
     }
 
     // Per-core SFU.om_req_out (OmUnit decodes onto it) → OmCore::om_req_in[cid],
@@ -344,14 +343,14 @@ public:
 
     // raster_core ↔ rcache (per-port).
     for (uint32_t i = 0; i < kRcacheNumReqs; ++i) {
-      raster_core_->rcache_req_out.at(i).bind(&rcache->core_req_in.at(i));
-      rcache->core_rsp_out.at(i).bind(&raster_core_->rcache_rsp_in.at(i));
+      raster_core_->rcache_req_out.at(i).bind(rcache->core_req_in.at(i));
+      rcache->core_rsp_out.at(i)->bind(&raster_core_->rcache_rsp_in.at(i));
     }
 
     // rcache memory side → l2arb.
     constexpr uint32_t kRasterRow = 1 + VX_CFG_EXT_OM_ENABLED;
     for (uint32_t i = 0; i < kRcacheMemPorts; ++i) {
-      bind_gfx_port(kL2Rows * i + kRasterRow, CMMU_RCACHE_IDX, rcache->mem_req_out.at(i), rcache->mem_rsp_in.at(i));
+      bind_gfx_port(kL2Rows * i + kRasterRow, CMMU_RCACHE_IDX, *rcache->mem_req_out.at(i), *rcache->mem_rsp_in.at(i));
     }
 
     // Cluster-level RasterBus arbiter: NUM_CORES_PER_CLUSTER inputs (one per
@@ -542,20 +541,20 @@ public:
   #endif
   }
 
-  SimChannel<TlbReq>& ptw_req_out() {
+  SimPortOut<TlbReq>& ptw_req_out() {
     return l2tlb_->PtwReqOut;
   }
 
-  SimChannel<TlbRsp>& ptw_rsp_in() {
+  SimPortIn<TlbRsp>& ptw_rsp_in() {
     return l2tlb_->PtwRspIn;
   }
 
-  SimChannel<MemReq>& ptw_mem_req_in() {
-    return l2cache_->core_req_in.at(VX_CFG_L2_PTW_IDX);
+  SimPortIn<MemReq>& ptw_mem_req_in() {
+    return *l2cache_->core_req_in.at(VX_CFG_L2_PTW_IDX);
   }
 
-  SimChannel<MemRsp>& ptw_mem_rsp_out() {
-    return l2cache_->core_rsp_out.at(VX_CFG_L2_PTW_IDX);
+  SimPortOut<MemRsp>& ptw_mem_rsp_out() {
+    return *l2cache_->core_rsp_out.at(VX_CFG_L2_PTW_IDX);
   }
 #endif
 
@@ -683,12 +682,12 @@ public:
     l2cache_->flush_begin(fence_op);
   }
 
-  SimChannel<MemReq>& cp_mem_req_in() {
-    return l2cache_->core_req_in.at(L2_CP_IDX);
+  SimPortIn<MemReq>& cp_mem_req_in() {
+    return *l2cache_->core_req_in.at(L2_CP_IDX);
   }
 
-  SimChannel<MemRsp>& cp_mem_rsp_out() {
-    return l2cache_->core_rsp_out.at(L2_CP_IDX);
+  SimPortOut<MemRsp>& cp_mem_rsp_out() {
+    return *l2cache_->core_rsp_out.at(L2_CP_IDX);
   }
 
   bool l2_flush_done() const {
@@ -741,8 +740,8 @@ Cluster::Cluster(const SimContext& ctx,
                  uint32_t cluster_id,
                  ProcessorImpl* processor)
   : SimObject(ctx, name)
-  , mem_req_out(VX_CFG_L2_MEM_PORTS, this)
-  , mem_rsp_in(VX_CFG_L2_MEM_PORTS, this)
+  , mem_req_out(VX_CFG_L2_MEM_PORTS)
+  , mem_rsp_in(VX_CFG_L2_MEM_PORTS)
   , gbar_arrive_in(this)
   , gbar_resume_out(NUM_SOCKETS * VX_CFG_SOCKET_SIZE, this)
   , gbar_fwd_out(this)
@@ -788,19 +787,19 @@ void Cluster::set_mmu_satp(uint64_t value) {
   impl_->set_mmu_satp(value);
 }
 
-SimChannel<TlbReq>& Cluster::ptw_req_out() {
+SimPortOut<TlbReq>& Cluster::ptw_req_out() {
   return impl_->ptw_req_out();
 }
 
-SimChannel<TlbRsp>& Cluster::ptw_rsp_in() {
+SimPortIn<TlbRsp>& Cluster::ptw_rsp_in() {
   return impl_->ptw_rsp_in();
 }
 
-SimChannel<MemReq>& Cluster::ptw_mem_req_in() {
+SimPortIn<MemReq>& Cluster::ptw_mem_req_in() {
   return impl_->ptw_mem_req_in();
 }
 
-SimChannel<MemRsp>& Cluster::ptw_mem_rsp_out() {
+SimPortOut<MemRsp>& Cluster::ptw_mem_rsp_out() {
   return impl_->ptw_mem_rsp_out();
 }
 #endif
@@ -857,11 +856,11 @@ void Cluster::l2_flush_begin(uint32_t fence_op) {
   impl_->l2_flush_begin(fence_op);
 }
 
-SimChannel<MemReq>& Cluster::cp_mem_req_in() {
+SimPortIn<MemReq>& Cluster::cp_mem_req_in() {
   return impl_->cp_mem_req_in();
 }
 
-SimChannel<MemRsp>& Cluster::cp_mem_rsp_out() {
+SimPortOut<MemRsp>& Cluster::cp_mem_rsp_out() {
   return impl_->cp_mem_rsp_out();
 }
 

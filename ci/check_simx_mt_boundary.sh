@@ -2,7 +2,7 @@
 # CI guard for the SimX threading-boundary rule.
 #
 # Model code under sim/simx/ communicates exclusively through framework
-# primitives (SimChannel, SimEventLink, RegSlice) and never carries
+# primitives (In/Out ports, SimEventLink, RegSlice) and never carries
 # threading vocabulary of its own: no deferred-call plumbing, no domain
 # introspection, no atomics, threads, or locks. The framework (sim/common/)
 # is the only place that vocabulary may appear, which is what keeps every
@@ -10,8 +10,6 @@
 #
 # Allowlist: sim/simx/dtm/ hosts the debug-transport TCP server, which is
 # host-side tooling with its own service thread — not a timed component.
-# sim/simx/regslice.h is a framework element (the registered boundary
-# stage), not model code.
 
 set -euo pipefail
 
@@ -24,8 +22,7 @@ scan() {
     local hits
     hits=$(grep -rnE "$pattern" "$ROOT/sim/simx" \
              --include='*.cpp' --include='*.h' \
-             2>/dev/null | grep -v "^$ROOT/sim/simx/dtm/" \
-                         | grep -v "^$ROOT/sim/simx/regslice.h:" || true)
+             2>/dev/null | grep -v "^$ROOT/sim/simx/dtm/" || true)
     if [ -n "$hits" ]; then
         echo "ERROR: $label" >&2
         echo >&2
@@ -35,7 +32,7 @@ scan() {
     fi
 }
 
-scan "sim/simx uses deferred-call plumbing (use SimChannel/SimEventLink):" \
+scan "sim/simx uses deferred-call plumbing (use ports/SimEventLink):" \
     '\bcross_call\b|\bcross_pending\b'
 
 scan "sim/simx reads execution-domain internals:" \

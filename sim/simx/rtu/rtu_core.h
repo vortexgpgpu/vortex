@@ -40,12 +40,12 @@ public:
   using PerfStats = ::vortex::rtu::PerfStats;
 
   // Inputs from per-socket RtuBus arbiter (cluster collapses sockets → 1).
-  std::vector<SimChannel<RtuReq>>  rtu_req_in;
-  std::vector<SimChannel<RtuRsp>>  rtu_rsp_out;
+  SimPortInArray<RtuReq>  rtu_req_in;
+  SimPortOutArray<RtuRsp>  rtu_rsp_out;
 
   // Memory ports to the cluster dcache cluster. Size = NUM_RTU_BLOCKS.
-  std::vector<SimChannel<MemReq>>  dcache_req_out;
-  std::vector<SimChannel<MemRsp>>  dcache_rsp_in;
+  SimPortOutArray<MemReq>  dcache_req_out;
+  SimPortInArray<MemRsp>  dcache_rsp_in;
 
   RtuCore(const SimContext& ctx, const char* name, Socket* socket);
   virtual ~RtuCore();

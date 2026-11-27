@@ -17,13 +17,13 @@ namespace vortex {
 
 class MemCoalescer : public SimObject<MemCoalescer> {
 public:
-  SimChannel<LsuReq> ReqIn;
-  SimChannel<LsuRsp> RspOut;
+  SimPortIn<LsuReq> ReqIn;
+  SimPortOut<LsuRsp> RspOut;
 
   // Per-channel memory-side ports: the coalescer drives the cache ports
   // directly (the lane fan-out/fan-in boundary is combinational).
-  std::vector<SimChannel<MemReq>> ReqOut;
-  std::vector<SimChannel<MemRsp>> RspIn;
+  SimPortOutArray<MemReq> ReqOut;
+  SimPortInArray<MemRsp> RspIn;
 
   // Past the bank, the cache holds up to three responses per port in its two
   // output stages (one, then two entries), and each channel stands for both
@@ -55,6 +55,8 @@ public:
 protected:
   void on_reset();
   void on_tick();
+  // a built round still to drain
+  bool busy() const { return out_round_.valid; }
 
 private:
   void flush_out_round();

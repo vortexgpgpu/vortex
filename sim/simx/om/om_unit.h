@@ -71,7 +71,7 @@ private:
 // has no return value), nullptr on backpressure.
 class OmUnit {
 public:
-  OmUnit(Core* core, SimChannel<OmReq>& req_out)
+  OmUnit(Core* core, SimPortOut<OmReq>& req_out)
     : core_(core), req_out_(req_out) {}
 
   // Submit one vx_om4 sub-pixel request. mask_bits selects the lanes that cover
@@ -81,7 +81,7 @@ public:
 
 private:
   Core*               core_;
-  SimChannel<OmReq>&  req_out_;
+  SimPortOut<OmReq>&  req_out_;
 };
 
 } // namespace vortex
