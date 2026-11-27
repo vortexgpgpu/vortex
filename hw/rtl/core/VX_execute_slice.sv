@@ -73,9 +73,7 @@ import VX_tcu_pkg::*;
 
     // TCU
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
-    output wire             tcu_exec_valid,
-    output wire             tcu_exec_ready,
-    output tcu_execute_t    tcu_exec_data,
+    VX_execute_if.tap       tcu_exec_if,
     input wire [TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tcu_tbuf_rs1_data,
     input wire [TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tcu_tbuf_rs2_data,
     input wire              tcu_tbuf_ready,
@@ -96,11 +94,11 @@ import VX_tcu_pkg::*;
     // ALU
 
     VX_execute_if #(
-        .data_t (alu_execute_t)
+        .NUM_LANES (`VX_CFG_NUM_ALU_LANES)
     ) alu_execute_if[1]();
 
     VX_result_if #(
-        .data_t (alu_result_t)
+        .NUM_LANES (`VX_CFG_NUM_ALU_LANES)
     ) alu_result_if[1]();
 
     VX_lane_dispatch #(
@@ -145,11 +143,11 @@ import VX_tcu_pkg::*;
     // LSU
 
     VX_execute_if #(
-        .data_t (lsu_execute_t)
+        .NUM_LANES (`VX_CFG_NUM_LSU_LANES)
     ) lsu_execute_if[1]();
 
     VX_result_if #(
-        .data_t (lsu_result_t)
+        .NUM_LANES (`VX_CFG_NUM_LSU_LANES)
     ) lsu_result_if[1]();
 
     VX_lane_dispatch #(
@@ -212,11 +210,11 @@ import VX_tcu_pkg::*;
     // SFU
 
     VX_execute_if #(
-        .data_t (sfu_execute_t)
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
     ) sfu_execute_if[1]();
 
     VX_result_if #(
-        .data_t (sfu_result_t)
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
     ) sfu_result_if[1]();
 
     VX_lane_dispatch #(
@@ -288,11 +286,11 @@ import VX_tcu_pkg::*;
     VX_fpu_csr_if fpu_csr_if[1]();
 
     VX_execute_if #(
-        .data_t (fpu_execute_t)
+        .NUM_LANES (`VX_CFG_NUM_FPU_LANES)
     ) fpu_execute_if[1]();
 
     VX_result_if #(
-        .data_t (fpu_result_t)
+        .NUM_LANES (`VX_CFG_NUM_FPU_LANES)
     ) fpu_result_if[1]();
 
     VX_lane_dispatch #(
@@ -352,11 +350,11 @@ import VX_tcu_pkg::*;
 
 `ifdef VX_CFG_EXT_TCU_ENABLE
     VX_execute_if #(
-        .data_t (tcu_execute_t)
+        .NUM_LANES (`VX_CFG_NUM_TCU_LANES)
     ) tcu_execute_if[1]();
 
     VX_result_if #(
-        .data_t (tcu_result_t)
+        .NUM_LANES (`VX_CFG_NUM_TCU_LANES)
     ) tcu_result_if[1]();
 
     VX_lane_dispatch #(
@@ -380,9 +378,7 @@ import VX_tcu_pkg::*;
         .clk              (clk),
         .reset            (reset),
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
-        .exec_valid       (tcu_exec_valid),
-        .exec_ready       (tcu_exec_ready),
-        .exec_data        (tcu_exec_data),
+        .exec_if          (tcu_exec_if),
         .tbuf_rs1_data    (tcu_tbuf_rs1_data),
         .tbuf_rs2_data    (tcu_tbuf_rs2_data),
         .tbuf_ready       (tcu_tbuf_ready),

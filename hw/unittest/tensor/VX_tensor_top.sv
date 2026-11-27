@@ -172,8 +172,9 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
     `endif
 
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
-        wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_exec_valid, tcu_exec_ready;
-        tcu_execute_t                     tcu_exec_data [`VX_CFG_NUM_TCU_BLOCKS];
+        VX_execute_if #(
+            .NUM_LANES (`VX_CFG_NUM_TCU_LANES)
+        ) tcu_exec_if [`VX_CFG_NUM_TCU_BLOCKS] ();
         wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tcu_tbuf_rs1_data;
         wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tcu_tbuf_rs2_data;
         wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_tbuf_ready;
@@ -186,9 +187,7 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
             .clk              (clk),
             .reset            (reset),
         `ifdef VX_CFG_TCU_WGMMA_ENABLE
-            .exec_valid       (tcu_exec_valid),
-            .exec_ready       (tcu_exec_ready),
-            .exec_data        (tcu_exec_data),
+            .exec_if          (tcu_exec_if),
             .tbuf_rs1_data    (tcu_tbuf_rs1_data),
             .tbuf_rs2_data    (tcu_tbuf_rs2_data),
             .tbuf_ready       (tcu_tbuf_ready),
@@ -206,9 +205,7 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
             .BLOCK_SIZE  (`VX_CFG_NUM_TCU_BLOCKS)
         ) tcu_shared (
         `ifdef VX_CFG_TCU_WGMMA_ENABLE
-            .exec_valid       (tcu_exec_valid),
-            .exec_ready       (tcu_exec_ready),
-            .exec_data        (tcu_exec_data),
+            .exec_if          (tcu_exec_if),
             .tbuf_rs1_data    (tcu_tbuf_rs1_data),
             .tbuf_rs2_data    (tcu_tbuf_rs2_data),
             .tbuf_ready_eff   (tcu_tbuf_ready),
@@ -308,7 +305,10 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
         );
 
         for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin : g_dcache_passthru
-            `ASSIGN_VX_MEM_BUS_IF (all_dc_core_if[c * DCACHE_NUM_REQS + i], dcache_bus_if[i]);
+            VX_mem_bus_connect all_dc_core_c_dcache_num_reqs_i_connect (
+                .bus_in_if  (dcache_bus_if[i]),
+                .bus_out_if (all_dc_core_if[c * DCACHE_NUM_REQS + i])
+            );
         end
     end
 
@@ -454,8 +454,14 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
             `UNUSED_VAR (socket_arb_in_if[ICACHE_MEM_ARB_IDX].rsp_valid)
             `UNUSED_VAR (socket_arb_in_if[ICACHE_MEM_ARB_IDX].rsp_data)
 
-            `ASSIGN_VX_MEM_BUS_IF_EX (socket_arb_in_if[DCACHE_MEM_ARB_IDX], dcache_mem_bus_if[0], SOCKET_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
-            `ASSIGN_VX_MEM_BUS_IF (socket_arb_in_if[DXA_MEM_ARB_IDX], dxa_gmem_bus_if[0]);
+            VX_mem_bus_connect socket_arb_in_dcache_mem_arb_idx_connect (
+                .bus_in_if  (dcache_mem_bus_if[0]),
+                .bus_out_if (socket_arb_in_if[DCACHE_MEM_ARB_IDX])
+            );
+            VX_mem_bus_connect socket_arb_in_dxa_mem_arb_idx_connect (
+                .bus_in_if  (dxa_gmem_bus_if[0]),
+                .bus_out_if (socket_arb_in_if[DXA_MEM_ARB_IDX])
+            );
 
             VX_mem_bus_arb #(
                 .NUM_INPUTS (SOCKET_MEM_ARB_REQS),
@@ -473,9 +479,15 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
                 .bus_out_if (socket_arb_out_if)
             );
 
-            `ASSIGN_VX_MEM_BUS_IF (socket_mem_bus_if[0], socket_arb_out_if[0]);
+            VX_mem_bus_connect socket_mem_bus_0_connect (
+                .bus_in_if  (socket_arb_out_if[0]),
+                .bus_out_if (socket_mem_bus_if[0])
+            );
         end else begin : g_i
-            `ASSIGN_VX_MEM_BUS_IF_EX (socket_mem_bus_if[i], dcache_mem_bus_if[i], SOCKET_MEM_ARB_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+            VX_mem_bus_connect socket_mem_bus_connect (
+                .bus_in_if  (dcache_mem_bus_if[i]),
+                .bus_out_if (socket_mem_bus_if[i])
+            );
         end
     end
 
@@ -488,7 +500,10 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
     ) l2_core_if [L2_NUM_REQS] ();
 
     for (genvar i = 0; i < L2_NUM_REQS; ++i) begin : g_l2_clients
-        `ASSIGN_VX_MEM_BUS_IF (l2_core_if[i], socket_mem_bus_if[i]);
+        VX_mem_bus_connect l2_core_connect (
+            .bus_in_if  (socket_mem_bus_if[i]),
+            .bus_out_if (l2_core_if[i])
+        );
     end
 
     VX_mem_bus_if #(

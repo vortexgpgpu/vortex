@@ -25,6 +25,9 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     VX_result_if.master     result_if,
     VX_dxa_req_bus_if.master dxa_req_bus_if
 );
+
+    typedef result_if.header_t header_t;
+
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (execute_if.data.rs3_data)
 
@@ -107,10 +110,10 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .data_out  (dxa_req_bus_if.req_data)
     );
 
-    sfu_header_t header_out;
+    header_t header_out;
 
     VX_elastic_buffer #(
-        .DATAW ($bits(sfu_header_t)),
+        .DATAW ($bits(header_t)),
         .SIZE  (2)
     ) rsp_buf (
         .clk       (clk),

@@ -102,10 +102,16 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         // DXA issues LMEM-relative word addresses directly (issuer_lmem_base + intra,
         // with multicast replay adding r×smem_stride per beat), so no per-slot
         // address translation is needed here.
-        `ASSIGN_VX_MEM_BUS_IF_EX (dma_arb_in_if[LMEM_DMA_DXA_IDX], dxa_lmem_bus_if, LMEM_DMA_IN_TAG_W, DXA_LMEM_OUT_TAG_W, UUID_WIDTH);
+        VX_mem_bus_connect dma_arb_in_lmem_dma_dxa_idx_connect (
+            .bus_in_if  (dxa_lmem_bus_if),
+            .bus_out_if (dma_arb_in_if[LMEM_DMA_DXA_IDX])
+        );
     `endif
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
-        `ASSIGN_VX_MEM_BUS_IF_EX (dma_arb_in_if[LMEM_DMA_TCU_IDX], tcu_lmem_if, LMEM_DMA_IN_TAG_W, TCU_LMEM_TAG_W, UUID_WIDTH);
+        VX_mem_bus_connect dma_arb_in_lmem_dma_tcu_idx_connect (
+            .bus_in_if  (tcu_lmem_if),
+            .bus_out_if (dma_arb_in_if[LMEM_DMA_TCU_IDX])
+        );
     `endif
 
         // Round-robin, so a DXA write stream cannot starve the TCU's operand reads.
@@ -124,7 +130,10 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             .bus_out_if  (dma_arb_out_if)
         );
 
-        `ASSIGN_VX_MEM_BUS_IF (lmem_dma_if, dma_arb_out_if[0]);
+        VX_mem_bus_connect lmem_dma_connect (
+            .bus_in_if  (dma_arb_out_if[0]),
+            .bus_out_if (lmem_dma_if)
+        );
 
     `ifdef VX_CFG_EXT_DXA_ENABLE
         wire [`VX_CFG_LMEM_NUM_BANKS-1:0] dxa_bank_wr_fire;

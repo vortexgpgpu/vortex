@@ -1,23 +1,26 @@
 `include "VX_define.vh"
 
-module VX_tfu_unit_top import VX_gpu_pkg::*; (
-    input  wire                            clk,
-    input  wire                            reset,
+module VX_tfu_unit_top import VX_gpu_pkg::*; #(
+    parameter EXEC_DATAW   = execute_data_bits(`VX_CFG_NUM_SFU_LANES),
+    parameter RESULT_DATAW = result_data_bits(`VX_CFG_NUM_SFU_LANES)
+) (
+    input  wire                    clk,
+    input  wire                    reset,
 
-    input  wire                            execute_valid,
-    output wire                            execute_ready,
-    input  wire [$bits(sfu_execute_t)-1:0] execute_data,
+    input  wire                    execute_valid,
+    output wire                    execute_ready,
+    input  wire [EXEC_DATAW-1:0]   execute_data,
 
-    output wire                            result_valid,
-    input  wire                            result_ready,
-    output wire [$bits(sfu_result_t)-1:0]  result_data
+    output wire                    result_valid,
+    input  wire                    result_ready,
+    output wire [RESULT_DATAW-1:0] result_data
 );
     VX_execute_if #(
-        .data_t (sfu_execute_t)
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
     ) execute_if();
 
     VX_result_if #(
-        .data_t (sfu_result_t)
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES)
     ) result_if();
 
     assign execute_if.valid = execute_valid;

@@ -275,8 +275,12 @@ module VX_graphics import VX_gpu_pkg::*
     );
 
     for (genvar i = 1; i < `VX_CFG_NUM_RASTER_CORES * RCACHE_NUM_REQS; ++i) begin : g_rcache_passthru
-        `ASSIGN_VX_MEM_BUS_IF_EX (rcache_flushable_bus_if[i], rcache_bus_if[i],
-                                  RCACHE_BUS_TAG_WIDTH, RCACHE_TAG_WIDTH, 0);
+        VX_mem_bus_connect #(
+            .UUID_TAG (0)
+        ) rcache_flushable_bus_connect (
+            .bus_in_if  (rcache_bus_if[i]),
+            .bus_out_if (rcache_flushable_bus_if[i])
+        );
     end
 
     VX_cache_cluster #(
@@ -315,8 +319,10 @@ module VX_graphics import VX_gpu_pkg::*
         .req_empty      (rcache_req_empty)
     );
 
-    `ASSIGN_VX_MEM_BUS_IF_EX (rcache_mem_bus_if, rcache_mem_bus_tmp_if[0],
-                              L2_TAG_WIDTH, RCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+    VX_mem_bus_connect rcache_mem_bus_connect (
+        .bus_in_if  (rcache_mem_bus_tmp_if[0]),
+        .bus_out_if (rcache_mem_bus_if)
+    );
 
 `endif // VX_CFG_EXT_RASTER_ENABLE
 
@@ -665,8 +671,12 @@ module VX_graphics import VX_gpu_pkg::*
             .cache_bus_if (ocache_om_flush_bus_if[i])
         );
 
-        `ASSIGN_VX_MEM_BUS_IF_EX (ocache_flushable_bus_if[i], ocache_om_flush_bus_if[i],
-                                  OCACHE_BUS_TAG_WIDTH, OCACHE_OM_FLUSH_TAG_WIDTH, 0);
+        VX_mem_bus_connect #(
+            .UUID_TAG (0)
+        ) ocache_flushable_bus_connect (
+            .bus_in_if  (ocache_om_flush_bus_if[i]),
+            .bus_out_if (ocache_flushable_bus_if[i])
+        );
     end
     assign ocache_flush_if.done = (& ocache_om_flush_done);
 
@@ -675,8 +685,12 @@ module VX_graphics import VX_gpu_pkg::*
     // presents OCACHE_EARLYZ_TAG_WIDTH; zero-extend to the shared bus tag width.
     for (genvar i = 0; i < `VX_CFG_NUM_RASTER_CORES * OCACHE_NUM_REQS; ++i) begin : g_earlyz_ocache_in
         localparam DST = `VX_CFG_NUM_OM_CORES * OCACHE_NUM_REQS + i;
-        `ASSIGN_VX_MEM_BUS_IF_EX (ocache_flushable_bus_if[DST], earlyz_ocache_bus_if[i],
-                                  OCACHE_BUS_TAG_WIDTH, OCACHE_EARLYZ_TAG_WIDTH, 0);
+        VX_mem_bus_connect #(
+            .UUID_TAG (0)
+        ) ocache_flushable_bus_dst_connect (
+            .bus_in_if  (earlyz_ocache_bus_if[i]),
+            .bus_out_if (ocache_flushable_bus_if[DST])
+        );
     end
 `endif
 
@@ -714,8 +728,10 @@ module VX_graphics import VX_gpu_pkg::*
         .req_empty      (ocache_req_empty)
     );
 
-    `ASSIGN_VX_MEM_BUS_IF_EX (ocache_mem_bus_if, ocache_mem_bus_tmp_if[0],
-                              L2_TAG_WIDTH, OCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+    VX_mem_bus_connect ocache_mem_bus_connect (
+        .bus_in_if  (ocache_mem_bus_tmp_if[0]),
+        .bus_out_if (ocache_mem_bus_if)
+    );
 
 `endif // VX_CFG_EXT_OM_ENABLE
 

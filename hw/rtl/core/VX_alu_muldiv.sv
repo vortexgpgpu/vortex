@@ -26,10 +26,13 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
     // Outputs
     VX_result_if.master result_if
 );
+
+    typedef result_if.header_t header_t;
+
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (execute_if.data.rs3_data)
 
-    localparam TAG_WIDTH = $bits(alu_header_t);
+    localparam TAG_WIDTH = $bits(header_t);
 
     wire [INST_M_BITS-1:0] muldiv_op = INST_M_BITS'(execute_if.data.op_type);
 
@@ -42,7 +45,7 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
 `endif
 
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] mul_result_out;
-    alu_header_t mul_hdr_out;
+    header_t mul_hdr_out;
 
     wire mul_valid_in = execute_if.valid && is_mulx_op;
     wire mul_ready_in;
@@ -214,7 +217,7 @@ module VX_alu_muldiv import VX_gpu_pkg::*; #(
     ///////////////////////////////////////////////////////////////////////////
 
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] div_result_out;
-    alu_header_t div_hdr_out;
+    header_t div_hdr_out;
 
     wire is_rem_op = inst_m_is_rem(muldiv_op);
 

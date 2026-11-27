@@ -608,7 +608,10 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     for (genvar i = 0; i < L2_NUM_REQS; ++i) begin : g_l2_clients
         if (i < L2_SOCKET_REQS) begin : g_socket
             // socket L1 mem port (dcache), widened to the L2 client tag width
-            `ASSIGN_VX_MEM_BUS_IF_EX (l2_core_if[i], all_dc_mem_if[i], L2_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+            VX_mem_bus_connect l2_core_connect (
+                .bus_in_if  (all_dc_mem_if[i]),
+                .bus_out_if (l2_core_if[i])
+            );
         end else begin : g_tie
             // graphics client slots (unused in this DUT)
             assign l2_core_if[i].req_valid = 1'b0;

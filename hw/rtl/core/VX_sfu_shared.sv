@@ -100,7 +100,7 @@ module VX_sfu_shared import VX_gpu_pkg::*; #(
 `endif
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
-    localparam RTU_SEL_W = `UP(`ARB_SEL_BITS(NB, 1));
+    localparam RTU_SEL_W = `UP(arb_sel_bits(NB, 1));
 
     VX_rtu_bus_if #(
         .NUM_LANES (`VX_CFG_NUM_SFU_LANES),

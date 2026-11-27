@@ -21,7 +21,7 @@ module VX_tlb_bus_arb import VX_tlb_pkg::*; #(
     parameter ID_WIDTH_IN  = 4,
     parameter `STRING ARBITER = "R",
     parameter OUT_BUF      = 1,
-    parameter SEL_BITS     = `ARB_SEL_BITS(NUM_INPUTS, 1),
+    parameter SEL_BITS     = VX_gpu_pkg::arb_sel_bits(NUM_INPUTS, 1),
     parameter ID_WIDTH_OUT = ID_WIDTH_IN + SEL_BITS
 ) (
     input wire clk,

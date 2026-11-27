@@ -1,13 +1,24 @@
 {
   "tcu": {
+    "accepted": {
+      "against": "2221ee286312a48673d11f32257a664fcfb5a34c",
+      "regressions": [
+        {
+          "after": 16,
+          "before": null,
+          "kind": "new",
+          "name": "tcu_shared/wgmma/tbuf/bbuf/km_word_off_req_r.d"
+        }
+      ]
+    },
     "clock_mhz": 300,
     "config_hash": "05869d786de11e57",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_TCU_FP16_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DVX_CFG_TCU_INT8_ENABLE -DVX_CFG_TCU_INT4_ENABLE -DVX_CFG_TCU_TF32_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE",
     "dut": "tcu",
     "result": {
       "bram": 0.0,
-      "build_time_s": 15,
-      "deep_endpoints": 2294,
+      "build_time_s": 50,
+      "deep_endpoints": 2307,
       "deepest_paths": [
         "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[6]",
         "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[9]",
@@ -21,7 +32,7 @@
         "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[17]"
       ],
       "dsp": 513,
-      "endpoints": 41767,
+      "endpoints": 41865,
       "env": {
         "beacon": "beacon 4060e3af4",
         "circt": "CIRCT ab733d13d",
@@ -31,17 +42,17 @@
       "ff": 44482,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 117209,
+      "lut": 117210,
       "lutram": 2083,
       "max_levels": 25,
-      "pred_fmax_mhz": 277.7,
+      "pred_fmax_mhz": 277.6,
       "risk_endpoints": 17,
       "tied_bits": 0,
       "tied_ports": [],
       "units": {
         "tcu_shared/wgmma": 10,
-        "tcu_shared/wgmma/tbuf/bbuf": 10,
-        "tcu_shared/wgmma/tbuf/g_abufs_*_abuf": 10,
+        "tcu_shared/wgmma/tbuf/bbuf": 16,
+        "tcu_shared/wgmma/tbuf/g_abufs_*_abuf": 11,
         "tcu_unit/g_blocks_*_tcu_block/tcu_core": 10,
         "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/pipe_acc": 15,
         "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/pipe_aln/g_merged_pipe_merged": 9,
@@ -57,7 +68,7 @@
         "tcu_unit/lane_dispatch/g_blocks_*_buf_out/g_eb2_stream_buffer": 10
       },
       "uram": 0,
-      "watch_endpoints": 13629,
+      "watch_endpoints": 13718,
       "watch_levels": 8
     }
   },
@@ -68,7 +79,7 @@
     "dut": "tensor",
     "result": {
       "bram": 114.5,
-      "build_time_s": 40,
+      "build_time_s": 65,
       "deep_endpoints": 4761,
       "deepest_paths": [
         "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[14]",
@@ -93,7 +104,7 @@
       "ff": 161545,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 259889,
+      "lut": 259890,
       "lutram": 12675,
       "max_levels": 25,
       "pred_fmax_mhz": 253.4,

@@ -447,8 +447,6 @@ package VX_tcu_pkg;
     endtask
 `endif
 
-    `DECL_EXECUTE_T (tcu, `VX_CFG_NUM_TCU_LANES);
-
     // tcu_tbuf_req_t — per-block uop request packed for VX_tcu_tbuf.
     // `valid` is pre-gated to WGMMA and masked by `cta_conflict`.
     typedef struct packed {

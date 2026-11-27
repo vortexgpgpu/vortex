@@ -78,7 +78,7 @@ are the coordinates, the integer mip level, and the stage index.
   count.
 - Requests and responses pass through small registered elastic buffers (the
   socket bus is registered at both ends). Responses reassemble the
-  `sfu_result_t` from the tag store and retire straight to `result_if` — the
+  result payload from the tag store and retire straight to `result_if` — the
   texel goes to `rd`; there is no window op and no memory side effect.
 - Because completion is tag-matched, the unit tolerates out-of-order
   responses, and the scoreboard pipelines back-to-back `vx_tex` ops from the

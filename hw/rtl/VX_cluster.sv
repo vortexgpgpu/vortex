@@ -293,13 +293,19 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     ) gfx_l2_out_bus_if [L2_SOCKET_REQS]();
 
     for (genvar i = 0; i < L2_SOCKET_REQS; ++i) begin : g_socket_l2
-        `ASSIGN_VX_MEM_BUS_IF (l2_link_bus_if[i], gfx_l2_out_bus_if[i]);
+        VX_mem_bus_connect l2_link_bus_connect (
+            .bus_in_if  (gfx_l2_out_bus_if[i]),
+            .bus_out_if (l2_link_bus_if[i])
+        );
     end
 `else
     // Sockets connect straight to their L2 input ports (TEX/RTU/DXA traffic
     // already merged at each socket's L2-facing arb).
     for (genvar i = 0; i < L2_SOCKET_REQS; ++i) begin : g_socket_l2
-        `ASSIGN_VX_MEM_BUS_IF (l2_link_bus_if[i], socket_mem_bus_if[i]);
+        VX_mem_bus_connect l2_link_bus_connect (
+            .bus_in_if  (socket_mem_bus_if[i]),
+            .bus_out_if (l2_link_bus_if[i])
+        );
     end
 `endif
 
@@ -319,20 +325,31 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
                 .empty      (l2_link_empty[i])
             );
         end else begin : g_wire
-            `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[i], l2_link_bus_if[i]);
+            VX_mem_bus_connect per_socket_mem_bus_connect (
+                .bus_in_if  (l2_link_bus_if[i]),
+                .bus_out_if (per_socket_mem_bus_if[i])
+            );
             assign l2_link_empty[i] = 1'b1;
         end
     end
     wire l2_link_busy = ~(& l2_link_empty);
 
     for (genvar i = 0; i < L2_MEM_PORTS; ++i) begin : g_l2_mem_out
-        `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[i], l2_mem_bus_if[i]);
+        VX_mem_bus_connect mem_bus_connect (
+            .bus_in_if  (l2_mem_bus_if[i]),
+            .bus_out_if (mem_bus_if[i])
+        );
     end
 
     if (CP_ON_L2 != 0) begin : g_cp_l2_client
-        `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[L2_CP_IDX], cp_mem_if);
+        VX_mem_bus_connect per_socket_mem_bus_l2_cp_idx_connect (
+            .bus_in_if  (cp_mem_if),
+            .bus_out_if (per_socket_mem_bus_if[L2_CP_IDX])
+        );
     end else begin : g_no_cp_l2_client
-        `UNUSED_VX_MEM_BUS_IF (cp_mem_if)
+        VX_mem_bus_idle_slave cp_mem_idle (
+            .bus_if (cp_mem_if)
+        );
     end
 
     ///////////////////////////////////////////////////////////////////////////
@@ -399,9 +416,14 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     assign dev_ptw_if.rsp_ready = l2_ptw_if.rsp_ready;
 
     if (PTW_ON_L2 != 0) begin : g_ptw_l2_client
-        `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[L2_PTW_IDX], dev_ptw_mem_if);
+        VX_mem_bus_connect per_socket_mem_bus_l2_ptw_idx_connect (
+            .bus_in_if  (dev_ptw_mem_if),
+            .bus_out_if (per_socket_mem_bus_if[L2_PTW_IDX])
+        );
     end else begin : g_no_ptw_l2_client
-        `UNUSED_VX_MEM_BUS_IF (dev_ptw_mem_if)
+        VX_mem_bus_idle_slave dev_ptw_mem_idle (
+            .bus_if (dev_ptw_mem_if)
+        );
     end
 
     // Flush root fans to the cluster L2; each socket self-times its own L1
@@ -535,12 +557,24 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     ) gfx_phys_bus_if[CMMU_NUM_REQS]();
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-    `ASSIGN_VX_MEM_BUS_IF (gfx_mem_bus_if[CMMU_RCACHE_IDX], rcache_l2_bus_if);
-    `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[L2_GFX_RASTER_IDX], gfx_phys_bus_if[CMMU_RCACHE_IDX]);
+    VX_mem_bus_connect gfx_mem_bus_cmmu_rcache_idx_connect (
+        .bus_in_if  (rcache_l2_bus_if),
+        .bus_out_if (gfx_mem_bus_if[CMMU_RCACHE_IDX])
+    );
+    VX_mem_bus_connect per_socket_mem_bus_l2_gfx_raster_idx_connect (
+        .bus_in_if  (gfx_phys_bus_if[CMMU_RCACHE_IDX]),
+        .bus_out_if (per_socket_mem_bus_if[L2_GFX_RASTER_IDX])
+    );
 `endif
 `ifdef VX_CFG_EXT_OM_ENABLE
-    `ASSIGN_VX_MEM_BUS_IF (gfx_mem_bus_if[CMMU_OCACHE_IDX], ocache_l2_bus_if);
-    `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[L2_GFX_OM_IDX], gfx_phys_bus_if[CMMU_OCACHE_IDX]);
+    VX_mem_bus_connect gfx_mem_bus_cmmu_ocache_idx_connect (
+        .bus_in_if  (ocache_l2_bus_if),
+        .bus_out_if (gfx_mem_bus_if[CMMU_OCACHE_IDX])
+    );
+    VX_mem_bus_connect per_socket_mem_bus_l2_gfx_om_idx_connect (
+        .bus_in_if  (gfx_phys_bus_if[CMMU_OCACHE_IDX]),
+        .bus_out_if (per_socket_mem_bus_if[L2_GFX_OM_IDX])
+    );
 `endif
 
     // Its miss bus enters the cluster TLB arbiter after the sockets' buses,
@@ -601,11 +635,17 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     );
 `else
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-    `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[L2_GFX_RASTER_IDX], rcache_l2_bus_if);
+    VX_mem_bus_connect per_socket_mem_bus_l2_gfx_raster_idx_connect (
+        .bus_in_if  (rcache_l2_bus_if),
+        .bus_out_if (per_socket_mem_bus_if[L2_GFX_RASTER_IDX])
+    );
 `endif
 
 `ifdef VX_CFG_EXT_OM_ENABLE
-    `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[L2_GFX_OM_IDX], ocache_l2_bus_if);
+    VX_mem_bus_connect per_socket_mem_bus_l2_gfx_om_idx_connect (
+        .bus_in_if  (ocache_l2_bus_if),
+        .bus_out_if (per_socket_mem_bus_if[L2_GFX_OM_IDX])
+    );
 `endif
 `endif // CLUSTER_UNIT_MMU_ENABLE
 

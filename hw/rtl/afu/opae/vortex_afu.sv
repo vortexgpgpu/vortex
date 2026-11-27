@@ -576,7 +576,10 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .mem_rsp_ready  (cp_membus_rsp_ready)
     );
 
-    `ASSIGN_VX_MEM_BUS_IF(cp_vx_mem_arb_in_if[0], vx_mem_bus_if[0]);
+    VX_mem_bus_connect cp_vx_mem_arb_in_0_connect (
+        .bus_in_if  (vx_mem_bus_if[0]),
+        .bus_out_if (cp_vx_mem_arb_in_if[0])
+    );
 
     assign cp_vx_mem_arb_in_if[1].req_valid       = cp_membus_req_valid;
     assign cp_vx_mem_arb_in_if[1].req_data.rw     = cp_membus_req_rw;
