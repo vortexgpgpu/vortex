@@ -42,7 +42,7 @@ RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv$(XLEN)-gnu-toolchain
 # and a path derived from VORTEX_HOME would make the dependency's location a
 # function of which tree is being built.
 FIRESIM_PATH ?= $(TOOLDIR)/firesim
-# vortexgpgpu/firesim commit this tree is built and tested against (VERSION).
+# orcaslab/firesim commit this tree is built and tested against (VERSION).
 FIRESIM_REV := @FIRESIM_REV@
 # A Foldsim installation (ci/foldsim_install.sh): the compiler that builds a
 # FAME-5 simulator of Vortex (hw/syn/foldsim), and the FPGA shell the simulator

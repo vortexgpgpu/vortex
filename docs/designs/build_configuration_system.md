@@ -298,6 +298,9 @@ Two guards enforce the boundary:
 | [`ci/check_config_boundary.sh`](../../ci/check_config_boundary.sh) | no file under `sw/` or `tests/` includes `VX_config.h` |
 | [`ci/check_sw_sim_boundary.sh`](../../ci/check_sw_sim_boundary.sh) | `sw/{kernel,runtime}` and `sim/`, `hw/` do not reference each other; shared code lives in `sw/common/` |
 
+CI runs both on every event, in `ci.yml`'s `boundaries` job;
+`ci/regression.sh` runs them too.
+
 ---
 
 ## 8. Naming rules

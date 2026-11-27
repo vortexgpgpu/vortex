@@ -67,11 +67,11 @@ path_rules:
 
   - id: ci-enforcement
     class: R2
-    paths: [".github/**", "ci/testcase.py", "ci/conftest.py", "ci/test_runner.py", "ci/*_gate.py", "ci/synth_*.py", "ci/beacon.py", "ci/perf_baseline.py", "ci/toolchain_*", "ci/*_install.sh.in", "ci/check_*.sh", "ci/regression.sh.in", "ci/blackbox.sh", "ci/change_impact.py", "docs/review/change-impact.yaml"]
+    paths: [".github/**", "ci/testcase.py", "ci/conftest.py", "ci/test_runner.py", "ci/*_gate.py", "ci/synth_*.py", "ci/perf_baseline.py", "ci/toolchain_*", "ci/*_install.sh.in", "ci/check_*.sh", "ci/regression.sh.in", "ci/blackbox.sh", "ci/change_impact.py", "docs/review/change-impact.yaml"]
 
   - id: golden-data
     class: R2
-    paths: ["ci/baselines/**", "tests/**/*_ref*.png", "tests/**/*_ref*.ppm", "hw/scripts/beacon_calibration_*.json"]
+    paths: ["ci/baselines/**", "tests/**/*_ref*.png", "tests/**/*_ref*.ppm"]
 
 # Contract detectors. Each names an implementation in ci/change_impact.py
 # (`kind`) and the files it inspects. A finding raises the change to `class`.
@@ -163,13 +163,13 @@ detectors:
   - id: golden-values
     kind: golden_values
     class: R3
-    paths: ["ci/baselines/**", "tests/**/*_ref*.png", "tests/**/*_ref*.ppm", "hw/scripts/beacon_calibration_*.json"]
+    paths: ["ci/baselines/**", "tests/**/*_ref*.png", "tests/**/*_ref*.ppm"]
     why: "Every value in golden data is a bar a gate holds the design to; changing or removing one moves the bar, and a re-record absorbs whatever regression the recorded tree carries. New entries are not a finding."
 
   - id: gate-thresholds
     kind: gate_thresholds
     class: R3
-    paths: ["ci/perf_baseline.py", "ci/*_gate.py", "ci/synth_*.py", "ci/testcase.py", "ci/conftest.py", "ci/test_runner.py", "ci/beacon.py"]
+    paths: ["ci/perf_baseline.py", "ci/*_gate.py", "ci/synth_*.py", "ci/testcase.py", "ci/conftest.py", "ci/test_runner.py"]
     why: "A gate's tolerance, threshold or margin decides how far a measurement may move before CI fails; widening one hides every regression under the new bound."
 
 # Evidence checks. They never raise above R2.

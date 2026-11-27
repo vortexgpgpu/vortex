@@ -269,19 +269,16 @@ timing: $(SYN_SRC_DEPS) $(SYN_LIB_DEPS) | $(BUILD_DIR)
 	@$(SRC_DIR)/synth_summary.py --reports $(BUILD_DIR)/reports \
 	  --top $(TOP_LEVEL_ENTITY) --clock-mhz $(CLOCK_FREQ)
 
-# Beacon (foldsim-estimate-timing, foldsim-estimate-area, target=$(PDK)): the
-# gate stages of every register-to-register path and the cells, flip-flops and
-# SRAM macros of the design, with the same sources and SRAM black boxes as
-# synthesis, in seconds and without Yosys; report.txt converts the deepest
-# path to a period with the library's delays. docs/designs/beacon.md.
+# Beacon (orcaslab/beacon, $(BEACON), target=$(PDK)): the gate stages of every
+# register-to-register path and the cells, flip-flops and SRAM macros of the
+# design, with the same sources and SRAM black boxes as synthesis, in seconds
+# and without Yosys; report.txt converts the deepest path to a period with the
+# library's delays. https://github.com/orcaslab/beacon (docs/beacon.md).
 beacon: $(BUILD_DIR)/sources.txt
 	mkdir -p $(BUILD_DIR)/beacon
 	$(SCRIPT_DIR)/circt_elaborate.sh -t$(TOP_LEVEL_ENTITY) -I$(BUILD_DIR)/src -b'$(BB_MODULES)' \
 		-o$(BUILD_DIR)/beacon/netlist.mlir
-	$(FOLDSIM_OPT) $(BUILD_DIR)/beacon/netlist.mlir --pass-pipeline='builtin.module(foldsim-beacon-map{target=$(PDK)})' \
-		--emit-bytecode -o $(BUILD_DIR)/beacon/mapped.mlirbc
-	$(FOLDSIM_OPT) $(BUILD_DIR)/beacon/mapped.mlirbc -o /dev/null --pass-pipeline='builtin.module(foldsim-estimate-timing{top=$(TOP_LEVEL_ENTITY) target=$(PDK) output=$(BUILD_DIR)/beacon/endpoints.csv instances=$(BUILD_DIR)/beacon/instances.csv report=$(BUILD_DIR)/beacon/report.txt})'
-	$(FOLDSIM_OPT) $(BUILD_DIR)/beacon/netlist.mlir -o /dev/null --pass-pipeline='builtin.module(foldsim-beacon-map{target=$(PDK) area},foldsim-estimate-area{top=$(TOP_LEVEL_ENTITY) target=$(PDK) output=$(BUILD_DIR)/beacon/area.csv memories=$(BUILD_DIR)/beacon/area_memories.csv report=$(BUILD_DIR)/beacon/area.txt})'
+	$(BEACON) run --no-paths $(BUILD_DIR)/beacon/netlist.mlir $(BUILD_DIR)/beacon top=$(TOP_LEVEL_ENTITY) target=$(PDK)
 	@grep "^deepest path" $(BUILD_DIR)/beacon/report.txt
 	@head -1 $(BUILD_DIR)/beacon/area.txt
 

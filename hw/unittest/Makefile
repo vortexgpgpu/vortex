@@ -132,6 +132,15 @@ define tcu_tfr_suite
 	$(call tcu_int_pair,TFR,INT4,19,20)
 	$(call tcu_int_all)
 endef
+# HardFloat bf8: two cases whose only inexact step is rounding one pair sum
+# a0*b0 + a1*b1 to fp32, checked bit for bit. Random cases cannot use --ulp=0
+# here, as the reference adds the products in a different order.
+TCU_BHF := $(TCU_BASE) -DVX_CFG_TCU_TYPE_BHF -DVX_CFG_TCU_FP8_ENABLE -DVX_CFG_TCU_TF32_ENABLE
+define tcu_bhf_bf8
+	$(MAKE) -C tcu_fedp clean
+	$(MAKE) -C tcu_fedp NUM_REGS=2 CONFIGS="$(TCU_BHF)"
+	$(foreach t,94094 95270,$(MAKE) -C tcu_fedp run NUM_REGS=2 CONFIGS="$(TCU_BHF)" OPTS="--fmt=5 --ulp=0 --test=$(t)" &&) true
+endef
 run-tcu:
 	# native TFR — LUT/Wallace multipliers (USE_DSP=0)
 	$(call tcu_tfr_suite)
@@ -144,6 +153,8 @@ run-tcu:
 	# DPI reference — integer
 	$(call tcu_int_pair,DPI,INT8,17,18)
 	$(call tcu_int_pair,DPI,INT4,19,20)
+	# HardFloat (BHF) — bf8 pair-sum rounding
+	$(call tcu_bhf_bf8)
 
 # VX_tcu_unit end to end (dispatch, uops, operand routing, commit), bit for bit
 # (--ulp=0) against the reference of each datapath: the native TFR one against

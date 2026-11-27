@@ -200,6 +200,7 @@ const char *kernel_file = "kernel.vxbin";
 uint32_t xm = 32;
 uint32_t xn = 32;
 uint32_t xk = 32;
+bool tiny_block = false;
 
 vx_device_h device = nullptr;
 vx_queue_h queue = nullptr;
@@ -218,16 +219,18 @@ kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
   std::cout << "Vortex SGEMM TCU MX Test." << std::endl;
-  std::cout << "Usage: [-m M] [-n N] [-k K] [-h]" << std::endl;
+  std::cout << "Usage: [-m M] [-n N] [-k K] [-u] [-h]" << std::endl;
+  std::cout << "  -u: scale the first K block of A and B by 2^-70 (its products underflow fp32)" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "m:n:k:h")) != -1) {
+  while ((c = getopt(argc, argv, "m:n:k:uh")) != -1) {
     switch (c) {
     case 'm': xm = atoi(optarg); break;
     case 'n': xn = atoi(optarg); break;
     case 'k': xk = atoi(optarg); break;
+    case 'u': tiny_block = true; break;
     case 'h':
       show_usage();
       exit(0);
@@ -331,6 +334,16 @@ int main(int argc, char *argv[]) {
   }
   for (auto &v : h_B_dense) {
     v = (static_cast<float>(std::rand()) / RAND_MAX) * 2.0f - 1.0f;
+  }
+  if (tiny_block) {
+    for (uint32_t k = 0; k < vt::ITYPE::ele_block; ++k) {
+      for (uint32_t m = 0; m < M; ++m) {
+        h_A_dense[m * K_logical + k] *= 0x1p-70f;
+      }
+      for (uint32_t n = 0; n < N; ++n) {
+        h_B_dense[k * N + n] *= 0x1p-70f;
+      }
+    }
   }
 
   std::vector<itype_t> h_A(sizeA);

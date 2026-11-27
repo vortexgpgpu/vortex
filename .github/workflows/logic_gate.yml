@@ -4,7 +4,7 @@
 #
 # logic_gate — logic-level regression gate on hosted runners.
 # Runs Beacon over the DUT catalog (ci/testcases/logic_gate.yaml), through
-# foldsim-estimate-timing, and asserts the depth of every RTL unit against the
+# Beacon (orcaslab/beacon), and asserts the depth of every RTL unit against the
 # golden results in ci/baselines/synthesis/beacon/, so an RTL change that makes
 # a unit deeper is named on the change that does it, not the next night.
 #
@@ -64,13 +64,14 @@ jobs:
         with:
           prepare: true
 
-      # foldsim is not in the base toolchain. Its prebuilt is a small fetch.
-      - name: Install foldsim
+      # Beacon (orcaslab/beacon) is not in the base toolchain. Its prebuilt is a
+      # small fetch.
+      - name: Install Beacon
         run: |
           set -euo pipefail
-          mkdir -p tc_foldsim && cd tc_foldsim
+          mkdir -p tc_beacon && cd tc_beacon
           ../configure --tooldir=$TOOLDIR
-          ci/toolchain_install.sh --foldsim
+          ci/toolchain_install.sh --beacon
 
       # The command is the one the catalog declares (the `gate` or `gate_asic`
       # case of ci/testcases/logic_gate.yaml), so what CI runs and what the
@@ -142,12 +143,12 @@ jobs:
         with:
           prepare: true
 
-      - name: Install foldsim
+      - name: Install Beacon
         run: |
           set -euo pipefail
-          mkdir -p tc_foldsim && cd tc_foldsim
+          mkdir -p tc_beacon && cd tc_beacon
           ../configure --tooldir=$TOOLDIR
-          ci/toolchain_install.sh --foldsim
+          ci/toolchain_install.sh --beacon
 
       # The catalog's `gpu` case; a dispatch's builds narrow it.
       - name: Gate

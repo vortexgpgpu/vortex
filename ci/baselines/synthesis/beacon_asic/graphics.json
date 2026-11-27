@@ -1,27 +1,16 @@
 {
   "gfx": {
-    "accepted": {
-      "against": "26d2bc4b5409a35a111e8316ac3a87d07b15fc80",
-      "regressions": [
-        {
-          "after": 1063,
-          "before": 1065,
-          "kind": "ties",
-          "name": "tied_bits"
-        }
-      ]
-    },
     "clock_mhz": 1000,
-    "config_hash": "f49712b842f2f234",
+    "config_hash": "aff09047c20f09b1",
     "configs": "-DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4",
     "dut": "gfx",
     "result": {
-      "build_time_s": 100,
-      "cells": 1875217,
+      "build_time_s": 50,
+      "cells": 1873902,
       "endpoints": 239287,
       "env": {
-        "circt": "CIRCT 892a65a01",
-        "foldsim": "foldsim d8350bc0f",
+        "beacon": "beacon 4060e3af4",
+        "circt": "CIRCT ab733d13d",
         "pdk": "asap7",
         "xlen": 32
       },
@@ -74,16 +63,16 @@
   },
   "om": {
     "clock_mhz": 1000,
-    "config_hash": "3ff478591f29ccf9",
+    "config_hash": "56efe256f808ab56",
     "configs": "",
     "dut": "om",
     "result": {
-      "build_time_s": 15,
-      "cells": 35595,
+      "build_time_s": 5,
+      "cells": 34359,
       "endpoints": 5135,
       "env": {
-        "circt": "CIRCT 892a65a01",
-        "foldsim": "foldsim d8350bc0f",
+        "beacon": "beacon 4060e3af4",
+        "circt": "CIRCT ab733d13d",
         "pdk": "asap7",
         "xlen": 32
       },
@@ -111,16 +100,16 @@
   },
   "raster": {
     "clock_mhz": 1000,
-    "config_hash": "f0a4c760f765a429",
+    "config_hash": "d65ce7c4ebc0f3a7",
     "configs": "",
     "dut": "raster",
     "result": {
-      "build_time_s": 15,
+      "build_time_s": 5,
       "cells": 76084,
       "endpoints": 12792,
       "env": {
-        "circt": "CIRCT 892a65a01",
-        "foldsim": "foldsim d8350bc0f",
+        "beacon": "beacon 4060e3af4",
+        "circt": "CIRCT ab733d13d",
         "pdk": "asap7",
         "xlen": 32
       },
@@ -148,16 +137,16 @@
   },
   "rtu": {
     "clock_mhz": 1000,
-    "config_hash": "473d8b33a18f36fd",
+    "config_hash": "0ce89fd2678526a5",
     "configs": "",
     "dut": "rtu",
     "result": {
-      "build_time_s": 130,
-      "cells": 1060729,
+      "build_time_s": 25,
+      "cells": 1060717,
       "endpoints": 105631,
       "env": {
-        "circt": "CIRCT 892a65a01",
-        "foldsim": "foldsim d8350bc0f",
+        "beacon": "beacon 4060e3af4",
+        "circt": "CIRCT ab733d13d",
         "pdk": "asap7",
         "xlen": 32
       },
@@ -174,16 +163,16 @@
   },
   "tex": {
     "clock_mhz": 1000,
-    "config_hash": "4d47fbece8804eb8",
+    "config_hash": "867fe84e0a432aa5",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "tex",
     "result": {
-      "build_time_s": 45,
+      "build_time_s": 15,
       "cells": 376164,
       "endpoints": 49445,
       "env": {
-        "circt": "CIRCT 892a65a01",
-        "foldsim": "foldsim d8350bc0f",
+        "beacon": "beacon 4060e3af4",
+        "circt": "CIRCT ab733d13d",
         "pdk": "asap7",
         "xlen": 32
       },

@@ -302,7 +302,7 @@ proc run_report {} {
   report_timing -unique_pins -nworst 100 -delay_type max -sort_by group -file timing.rpt
 
   # Every end point's slack at the 300 MHz period: what Beacon's learned
-  # calibration trains on (ci/beacon.py calibrate, docs/designs/beacon.md 7.1).
+  # calibration trains on (`beacon calibrate`, Beacon's docs/beacon.md 7.1).
   if {[catch {
     source ${tool_dir}/xilinx_ep_dump.tcl
     write_ep_table ep.csv 3.333 1.0

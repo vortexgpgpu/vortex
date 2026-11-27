@@ -20,7 +20,7 @@ Alveo U55C (Vitis/XRT) and the Alveo V80 (AVED/VRT).
 | [12](#12-known-limitations) | Known limitations |
 
 FireSim itself is an external dependency: the
-[`vortexgpgpu/firesim`](https://github.com/vortexgpgpu/firesim) fork, consumed
+[`orcaslab/firesim`](https://github.com/orcaslab/firesim) fork, consumed
 through `$(FIRESIM_PATH)` (default `$(TOOLDIR)/firesim`) and pinned by
 `FIRESIM_REV` in `VERSION` — see [§10](#10-relationship-to-upstream-firesim).
 For running kernels on hardware generally, see
@@ -549,8 +549,8 @@ Threaded images, and the same tinygpu on the Foldsim flow, are in
 
 ## 10. Relationship to upstream FireSim
 
-The FireSim checkout is a clone of the `vortexgpgpu/firesim` fork (branch
-`vortex_3.x`, based on upstream 1.21.0), consumed through `FIRESIM_PATH` and
+The FireSim checkout is a clone of the `orcaslab/firesim` fork (branch
+`main`, based on upstream 1.21.0), consumed through `FIRESIM_PATH` and
 pinned by `FIRESIM_REV` in `VERSION`. `make stage` refuses a checkout that
 does not contain the pinned commit; being ahead of it is normal while
 developing the fork. The fork's changes are platform plumbing and bug fixes

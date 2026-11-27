@@ -4,7 +4,7 @@
 #
 # Sibling of fpga_gate (fpga_gate.yaml) and asic_gate (asic_gate.yaml): same
 # discipline -- golden baseline, results only ever re-recorded by a human --
-# over foldsim-estimate-timing instead of a synthesis tool. It counts logic
+# over Beacon (orcaslab/beacon) instead of a synthesis tool. It counts logic
 # levels as Vivado counts them on DEVICE's family (LUTs, CARRY8s, DSP cells,
 # distributed-RAM reads) on the CIRCT netlist the Xilinx flow elaborates, so
 # it gates depth, not Fmax: wires are not in it.
@@ -15,7 +15,7 @@
 #     fails, and so does a new unit at or above the fix threshold (12).
 #   - No tolerance. Beacon is deterministic, so any change in depth is a
 #     real one; a shallower unit reads IMPROVED, to be locked in by a re-record.
-#   - The tool versions (CIRCT, foldsim) are part of config_hash: a new model
+#   - The tool versions (CIRCT, Beacon) are part of config_hash: a new model
 #     reads STALE, not as a regression.
 #
 # ---------------------------------------------------------------------------
@@ -36,7 +36,7 @@
 # depth and area, and both are asserted on every change to the RTL. Its cases
 # are on the rtlsim driver at tier smoke, so ci.yml plans its cell exactly when
 # it plans perf_gate's rtlsim cells (every pull request, every push that
-# touches the RTL or the config). The cell installs foldsim (`needs`).
+# touches the RTL or the config). The cell installs Beacon (`needs`).
 #
 # Two cases, one cell: `gate` measures the builds below on the FPGA flow, and
 # `gate_asic` measures asic_gate.yaml's builds on the ASIC flow
@@ -71,7 +71,7 @@ tests:
   tier: smoke
   driver: rtlsim
   needs:
-  - foldsim
+  - beacon
   stream: true
   run: ci/logic_gate.py -j 2 --report logic_gate.json
 
@@ -82,7 +82,7 @@ tests:
   tier: smoke
   driver: rtlsim
   needs:
-  - foldsim
+  - beacon
   stream: true
   run: ci/logic_gate.py --tool beacon_asic -j 2 --report logic_gate_asic.json
 

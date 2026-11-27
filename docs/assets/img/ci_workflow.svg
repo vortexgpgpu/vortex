@@ -114,7 +114,8 @@
   <text x="1252" y="474" class="ts">one XML per cell, uploaded</text>
   <text x="1252" y="490" class="ts">even when the cell fails</text>
   <text x="1252" y="514" class="ts">complete: the single required</text>
-  <text x="1252" y="530" class="ts">check</text>
+  <text x="1252" y="530" class="ts">check; also needs boundaries,</text>
+  <text x="1252" y="546" class="ts">the layering guards, every event</text>
   <path d="M 490 495 L 540 495" class="flow"/>
   <path d="M 780 495 L 840 495" class="flow"/>
   <path d="M 1190 505 L 1240 495" class="flow"/>

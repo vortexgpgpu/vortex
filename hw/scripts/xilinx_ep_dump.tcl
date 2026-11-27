@@ -1,5 +1,5 @@
 # The end point table of a routed design: one row per setup end point under
-# the horizon, `slack,levels,logic,net,start,end`, the format ci/beacon.py
+# the horizon, `slack,levels,logic,net,start,end`, the format Beacon (`beacon validate`)
 # validate and calibrate read. The DUT flow writes one per build (ep.csv);
 # standalone, it reads a checkpoint:
 #
