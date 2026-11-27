@@ -153,6 +153,16 @@ tests:
   app: sgemm_tcu
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_TCU_FP8_ENABLE -DITYPE=bf8 -DOTYPE=fp32
   args: -z
+# fp16 subnormals in A row 0 (-u): the DSP datapath widens fp16 to fp32 ahead
+# of its multipliers and must keep a subnormal's exponent.
+- id: sgemm_tcu-dsp-fp16-subnormal
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DSP -DITYPE=fp16 -DOTYPE=fp32
+  args: -u
 - id: sgemm2_tcu-2
   via: blackbox
   drivers:
