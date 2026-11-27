@@ -94,7 +94,6 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         wire [3:0][23:0] term_mag_shifted;
         wire [3:0][EXP_TERM_W_MXFP4-1:0] term_exp_biased;
         wire [3:0] term_valid;
-        wire [3:0] term_on;
         wire [3:0] term_sign;
         wire [3:0][1:0] a_man, b_man;
         wire [3:0][3:0] f4_man_prod;
@@ -103,7 +102,6 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             localparam OFF = (i % 2) * 16 + j * 4;
 
             wire lane_valid = vld_mask[i * 4 + j];
-            assign term_on[j] = lane_valid;
             wire [3:0] raw_a = a_row[K_WORD][OFF +: 4];
             wire [3:0] raw_b = b_col[K_WORD][OFF +: 4];
 
@@ -258,8 +256,9 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
                                    + EXP_W'(sf_a) + EXP_W'(sf_b) - EXP_W'(254);
 
         // The sign field is only consumed for infinity lanes downstream.
-        // An E8M0 scale of 0xFF is NaN, and so is every element it scales.
-        assign exceptions_mxfp4[i].is_nan = ((sf_a == 8'hFF) || (sf_b == 8'hFF)) && (|term_on);
+        // An E8M0 scale of 0xFF is NaN, and so is every element it scales,
+        // masked lanes included.
+        assign exceptions_mxfp4[i].is_nan = (sf_a == 8'hFF) || (sf_b == 8'hFF);
         assign exceptions_mxfp4[i].is_inf = 1'b0;
         assign exceptions_mxfp4[i].sign   = 1'b0;
     end
@@ -314,7 +313,6 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         wire [3:0][23:0] term_mag_shifted;
         wire [3:0][5:0]  term_exp_biased;
         wire [3:0]       term_valid;
-        wire [3:0]       term_on;
         wire [3:0]       term_sign;
         wire [3:0][1:0]  a_man, b_man;
         wire [3:0][3:0]  f4_man_prod;
@@ -324,7 +322,6 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             localparam OFF = (i % 2) * 16 + j * 4;
 
             wire lane_valid = vld_mask[i * 4 + j];
-            assign term_on[j] = lane_valid;
             wire [3:0] raw_a = a_row[K_WORD][OFF +: 4];
             wire [3:0] raw_b = b_col[K_WORD][OFF +: 4];
 
@@ -520,7 +517,7 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         assign result_exp_nvfp4[i] = EXP_W'(max_exp_biased) + EXP_W'(EXP_BASE_BIASED);
 
         // The sign field is only consumed for infinity lanes downstream.
-        assign exceptions_nvfp4[i].is_nan = sf_nan && (|term_on);
+        assign exceptions_nvfp4[i].is_nan = sf_nan;
         assign exceptions_nvfp4[i].is_inf = 1'b0;
         assign exceptions_nvfp4[i].sign   = 1'b0;
     end
