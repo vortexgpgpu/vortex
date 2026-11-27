@@ -91,48 +91,24 @@ Operands::Operands(const SimContext &ctx, const char* name, Core* core)
     , Input(this)
     , Output(this)
     , core_(core)
-    , opc_units_(VX_CFG_NUM_OPCS) {
+    , opc_units_(VX_CFG_NUM_OPCS)
+    , merge_in_(this, VX_CFG_NUM_OPCS, 2)
+    , merge_arb_(ArbiterType::RoundRobin, VX_CFG_NUM_OPCS) {
   static_assert(VX_CFG_NUM_OPCS <= PER_ISSUE_WARPS, "invalid VX_CFG_NUM_OPCS value");
-  char sname[100];
 
   // Per-OPC warp slot count: each OPC owns the warps where
   //   (wid % VX_CFG_ISSUE_WIDTH == lane) && ((wid/IW) % VX_CFG_NUM_OPCS == opc_idx)
   // Slot count = ceil(VX_CFG_NUM_WARPS / (VX_CFG_ISSUE_WIDTH * VX_CFG_NUM_OPCS)).
   uint32_t num_warps   = VX_CFG_NUM_WARPS;
-  uint32_t num_threads = VX_CFG_NUM_THREADS;
   uint32_t per_opc_warps = (num_warps + (VX_CFG_ISSUE_WIDTH * VX_CFG_NUM_OPCS) - 1) / (VX_CFG_ISSUE_WIDTH * VX_CFG_NUM_OPCS);
 
   for (uint32_t i = 0; i < VX_CFG_NUM_OPCS; i++) {
-    snprintf(sname, 100, "%s-opc%d", name, i);
-    opc_units_.at(i) = SimPlatform::instance().create_object<OpcUnit>(sname, per_opc_warps, num_threads);
+    opc_units_.at(i) = std::make_unique<OpcUnit>(per_opc_warps);
   }
 
-  if (VX_CFG_NUM_OPCS >= 2) {
-    // the collectors' round-robin merge registers its output
-    snprintf(sname, 100, "%s-rsp_arb", name);
-    rsp_arb_ = TraceArbiter::Create(sname, ArbiterType::RoundRobin, VX_CFG_NUM_OPCS, 1, 1);
-    for (uint32_t i = 0; i < VX_CFG_NUM_OPCS; ++i) {
-      opc_units_.at(i)->Output.bind(&rsp_arb_->Inputs.at(i));
-    }
-    rsp_arb_->Outputs.at(0).bind(&this->Output);
-    // The scoreboard's output skid buffer feeds the collectors through a
-    // demux: its head waits for its own collector, the entries behind it too.
-    // The head leaves the buffer at its last operand read, when its collector
-    // pops it, and the next head is offered from the following cycle.
-    Input.set_registered_ready(true);
-    Input.tx_callback([this](instr_trace_t* const& trace, uint64_t) {
-      if (!head_offered_ && this->Input.empty()) {
-        this->offer_head(trace, 0);
-      }
-    });
-    for (uint32_t i = 0; i < VX_CFG_NUM_OPCS; ++i) {
-      opc_units_.at(i)->Input.pop_callback([this]() { this->on_head_consumed(); });
-    }
-  } else {
-    // pass-thru
-    this->Input.bind(&opc_units_.at(0)->Input);
-    opc_units_.at(0)->Output.bind(&this->Output);
-  }
+  // The scoreboard's output skid buffer: two entries, the one being collected
+  // among them, with a registered ready.
+  Input.set_registered_ready(true);
 }
 
 Operands::~Operands() {
@@ -140,24 +116,59 @@ Operands::~Operands() {
 }
 
 void Operands::on_reset() {
-  head_offered_ = false;
+  for (auto& opc : opc_units_) {
+    opc->on_reset();
+  }
+  merge_arb_.reset();
+  head_ready_ = 0;
 }
 
 void Operands::on_tick() {
-  this->tick_sleep(); // the demux runs on Input's delivery and pop events
-}
-
-void Operands::offer_head(instr_trace_t* trace, uint64_t delay) {
-  opc_units_.at(wid_to_opc_idx(trace->wid))->Input.send(trace, delay);
-  head_offered_ = true;
-}
-
-void Operands::on_head_consumed() {
-  this->Input.pop();
-  head_offered_ = false;
-  if (!this->Input.empty()) {
-    this->offer_head(this->Input.peek(), 1);
+  auto cur_cycle = SimPlatform::instance().cycles();
+  for (uint32_t i = 0; i < VX_CFG_NUM_OPCS; ++i) {
+    auto& opc = *opc_units_[i];
+    // forward held uop once its collection phase has elapsed
+    if (opc.cur_trace_ != nullptr && cur_cycle >= opc.release_cycle_) {
+      if (VX_CFG_NUM_OPCS == 1) {
+        if (!Output.try_send(opc.cur_trace_, 1))
+          continue;
+      } else {
+        if (merge_in_[i].full())
+          continue;
+        merge_in_[i].push(opc.cur_trace_, 1);
+      }
+      DT(3, this->name() << "-pipeline operands: " << *opc.cur_trace_);
+      opc.cur_trace_ = nullptr;
+    }
+    // accept next uop into the holding slot; it stays in the input buffer
+    // until its last operand read
+    if (opc.cur_trace_ == nullptr && !Input.empty() && cur_cycle >= head_ready_
+     && wid_to_opc_idx(Input.peek()->wid) == i) {
+      opc.accept(Input.peek(), cur_cycle);
+    }
+    if (opc.cur_trace_ != nullptr && !opc.consumed_ && cur_cycle >= opc.consume_cycle_) {
+      Input.pop();
+      opc.consumed_ = true;
+      head_ready_ = cur_cycle + 1;
+    }
   }
+  if (VX_CFG_NUM_OPCS > 1) {
+    uint64_t requests = merge_in_.ready_mask();
+    if (requests != 0 && !Output.full()) {
+      uint32_t g = merge_arb_.select(requests);
+      Output.send(merge_in_[g].pop(), 1);
+      merge_arb_.commit(g);
+    }
+  }
+}
+
+bool Operands::busy() const {
+  for (auto& opc : opc_units_) {
+    if (opc->cur_trace_ != nullptr) {
+      return true;
+    }
+  }
+  return false;
 }
 
 uint32_t Operands::total_stalls() const {

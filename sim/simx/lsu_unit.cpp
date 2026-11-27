@@ -155,13 +155,15 @@ Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 
 LsuUnit::LsuUnit(const SimContext& ctx, const char* name, Core* core)
 	// the result arbiter's buffer, two entries
-	: FuncUnit<VX_CFG_NUM_LSU_BLOCKS>(ctx, name, core, 2)
+	: FuncUnit<LsuUnit, VX_CFG_NUM_LSU_BLOCKS>(ctx, name, core, core, 2, 2)
 #ifdef TCU_META_ENABLE
-	, TcuReqIn(TCU_AGU_PORTS, this)
-	, TcuRspOut(TCU_AGU_PORTS, this)
+	, TcuReqIn(this, TCU_AGU_PORTS, 2)
+	, TcuRspOut(this, TCU_AGU_PORTS)
 #endif
-	, rsp_bufs_(VX_CFG_NUM_LSU_BLOCKS, SimChannel<instr_trace_t*>(this, 2))
-	, no_rsp_bufs_(VX_CFG_NUM_LSU_BLOCKS, SimChannel<instr_trace_t*>(this, 2))
+	, mem_req_out(this, VX_CFG_NUM_LSU_BLOCKS)
+	, mem_rsp_in(this, VX_CFG_NUM_LSU_BLOCKS, 1)
+	, rsp_bufs_(this, VX_CFG_NUM_LSU_BLOCKS, 2)
+	, no_rsp_bufs_(this, VX_CFG_NUM_LSU_BLOCKS, 2)
 	, pending_loads_(0)
 {
 	// the lane-dispatch skid buffer's ready is registered
@@ -172,7 +174,7 @@ LsuUnit::LsuUnit(const SimContext& ctx, const char* name, Core* core)
 	for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
 		rsp_bufs_.at(b).set_registered_ready(true);
 		no_rsp_bufs_.at(b).set_registered_ready(true);
-		Outputs.at(b).set_registered_ready(true);
+		this->output(b).set_registered_ready(true);
 	}
 }
 
@@ -197,8 +199,7 @@ LsuUnit::~LsuUnit()
 // a barrier.
 bool LsuUnit::drained() const {
 #ifdef TCU_META_ENABLE
-	// TcuRspOut forwards to the TCU's endpoint, so query via size() (empty()
-	// asserts on forwarding channels).
+	// TcuRspOut forwards to the TCU's endpoint, so query via size().
 	for (uint32_t p = 0; p < TCU_AGU_PORTS; ++p) {
 		if (!TcuReqIn.at(p).empty() || TcuRspOut.at(p).size() != 0) {
 			return false;
@@ -217,6 +218,24 @@ void LsuUnit::on_reset() {
 		state.reset();
 	}
 	pending_loads_ = 0;
+}
+
+// Work besides a packet in one of its ports: a trace queued, in flight or
+// awaiting a response, a fence engaged, or a load outstanding (a tick
+// accumulates their latency).
+bool LsuUnit::busy() const {
+	if (pending_loads_ != 0) {
+		return true;
+	}
+	for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
+		auto& state = states_.at(b);
+		if (!state.req_queue.empty() || !state.pending_reqs.empty() || state.staged_reads != 0
+		 || !state.meta_reqs.empty() || state.fence.locked() || state.fence_token
+		 || state.head_staged || state.remain_addrs != 0 || !state.rsp_tracks.empty()) {
+			return true;
+		}
+	}
+	return false;
 }
 
 void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
@@ -317,7 +336,7 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 // formatter (sign-extend, NaN-box) and the response demux that
 // matches each fragment back to its in-flight request entry.
 void LsuUnit::process_response_step(uint32_t b) {
-	auto& lsu_rsp_in = core_->lmem_switch(b)->RspOut;
+	auto& lsu_rsp_in = mem_rsp_in[b];
 	if (lsu_rsp_in.empty())
 		return;
 	auto& state = states_.at(b);
@@ -431,7 +450,7 @@ void LsuUnit::process_response_step(uint32_t b) {
 	if (is_final && entry.eop) {
 		trace->rsp_tracked = true;
 		trace->rsp_last = rsp_last;
-		output.send(trace, 1);
+		output.push(trace, 1);
 	} else {
 		// A non-final fragment still spends a commit-port slot: it drains
 		// as a writeback-less beat that carries no retirement, so a
@@ -443,7 +462,7 @@ void LsuUnit::process_response_step(uint32_t b) {
 		beat->eop = false;
 		beat->rsp_tracked = true;
 		beat->rsp_last = rsp_last;
-		output.send(beat, 1);
+		output.push(beat, 1);
 	}
 	pending_loads_ -= lsu_rsp.mask.count();
 	lsu_rsp_in.pop();
@@ -497,7 +516,7 @@ void LsuUnit::ingest_inputs(uint32_t b, bool queue_room, uint32_t reads_held) {
 			return;
 		}
 		auto copy = new (core_->trace_pool().allocate(1)) instr_trace_t(*trace);
-		no_rsp_bufs_.at(b).send(trace, 1);
+		no_rsp_bufs_.at(b).push(trace, 1);
 		trace = copy;
 	}
 	state.req_queue.push(trace);
@@ -541,7 +560,7 @@ void LsuUnit::send_fence_token(uint32_t b) {
 	lsu_req.cid  = trace->cid;
 	lsu_req.wid  = trace->wid;
 	lsu_req.uuid = trace->uuid;
-	core_->lmem_switch(b)->ReqIn.send(lsu_req, 0);
+	mem_req_out[b].send(lsu_req, 0);
 	DT(3, this->name() << " fence-token: " << lsu_req);
 	state.fence_token = false;
 }
@@ -605,7 +624,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 			entry.client_tag = lsu_req.tag;
 			uint32_t tag = state.pending_reqs.allocate(std::move(entry));
 			lsu_req.tag = tag;
-			core_->lmem_switch(b)->ReqIn.send(lsu_req, 0);
+			mem_req_out[b].send(lsu_req, 0);
 			DT(3, this->name() << " tcu-meta-req: " << lsu_req);
 			state.meta_reqs.pop_front();
 			state.req_queue.pop();
@@ -806,7 +825,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 		lsu_req.uuid = trace->uuid;
 
 		// send memory request
-		core_->lmem_switch(b)->ReqIn.send(lsu_req, 0);
+		mem_req_out[b].send(lsu_req, 0);
 		DT(3, this->name() << " mem-req: " << lsu_req);
 
 		// update stats
@@ -820,7 +839,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 
 	if (state.remain_addrs == 0) {
 		if (direct_commit) {
-			no_rsp_bufs_.at(b).send(trace, 1);
+			no_rsp_bufs_.at(b).push(trace, 1);
 		}
 		if (state.head_staged) {
 			// a read with no active lane never issues: return its reservation

@@ -72,17 +72,18 @@ public:
     uint64_t load_latency = 0;
   };
 
-  std::vector<SimChannel<MemReq>> icache_req_out;
-  std::vector<SimChannel<MemRsp>> icache_rsp_in;
+  // The ports of the units inside that face the icache and the dcache.
+  std::vector<SimPortOut<MemReq>*> icache_req_out;
+  std::vector<SimPortIn<MemRsp>*>  icache_rsp_in;
 
-  std::vector<SimChannel<MemReq>> dcache_req_out;
-  std::vector<SimChannel<MemRsp>> dcache_rsp_in;
+  std::vector<SimPortOut<MemReq>*> dcache_req_out;
+  std::vector<SimPortIn<MemRsp>*>  dcache_rsp_in;
 
   // Warp releases from resolved branches (ALU) and warp-control ops (SFU).
   // A warp has at most one release in flight, so NUM_WARPS bounds each.
-  SimChannel<uint32_t> branch_ctl_in;
-  SimChannel<WarpCtl>  warp_ctl_in;
-  SimChannel<uint32_t> bar_unlock_in;
+  SimPortIn<uint32_t> branch_ctl_in;
+  SimPortIn<WarpCtl>  warp_ctl_in;
+  SimPortIn<uint32_t> bar_unlock_in;
 
   // Global-barrier event links, wired core <-> cluster at elaboration.
   SimEventLink<GbarArrive> gbar_arrive_out;
@@ -92,6 +93,11 @@ public:
   // Fragment-work-distributor event links, wired core <-> raster core.
   SimEventLink<FwdArm>  fwd_arm_in;
   SimEventLink<FwdDone> fwd_done_out;
+#endif
+
+#ifdef VX_CFG_EXT_DXA_ENABLE
+  // DXA barrier release: the raw id of the barrier a transfer completes.
+  SimEventLink<uint32_t> dxa_bar_release_in;
 #endif
 
   Core(const SimContext& ctx,
@@ -148,8 +154,8 @@ public:
 
   // Miss/fill channel access for cluster-level TLB binding:
   // which 0 = dcache-side, 1 = icache-side.
-  SimChannel<TlbReq>& tlb_miss_out(uint32_t which);
-  SimChannel<TlbRsp>& tlb_fill_in(uint32_t which);
+  SimPortOut<TlbReq>& tlb_miss_out(uint32_t which);
+  SimPortIn<TlbRsp>& tlb_fill_in(uint32_t which);
 
   // Device-idle TLB invalidation (host-driven flush broadcast).
 #endif
@@ -198,11 +204,15 @@ public:
 protected:
   void on_reset();
   void on_tick();
+  // The pipeline stages poll the units around them: the core runs every cycle.
 
 private:
   void on_gbar_resume(const GbarResume& msg);
 #ifdef VX_CFG_EXT_RASTER_ENABLE
   void on_fwd_arm(const FwdArm& msg);
+#endif
+#ifdef VX_CFG_EXT_DXA_ENABLE
+  void on_dxa_bar_release(const uint32_t& raw_bar_id);
 #endif
 
   uint32_t core_id_;

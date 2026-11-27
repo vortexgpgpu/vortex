@@ -29,15 +29,22 @@ public:
 
 	struct PerfStats {
 		uint64_t bank_stalls = 0;
+		uint64_t reads = 0;
+		uint64_t writes = 0;
+		uint64_t latency = 0;  // pending reads summed over cycles
 
 		PerfStats& operator+=(const PerfStats& rhs) {
 			this->bank_stalls += rhs.bank_stalls;
+			this->reads += rhs.reads;
+			this->writes += rhs.writes;
+			this->latency += rhs.latency;
 			return *this;
 		}
 	};
 
-	std::vector<SimChannel<MemReq>> mem_req_in;
-	std::vector<SimChannel<MemRsp>> mem_rsp_out;
+	// The crossbar ports that carry the memory interface.
+	std::vector<SimPortIn<MemReq>*>  mem_req_in;
+	std::vector<SimPortOut<MemRsp>*> mem_rsp_out;
 
 	Memory(const SimContext& ctx, const char* name, const Config& config);
 	~Memory();
@@ -62,6 +69,7 @@ public:
 protected:
 	void on_reset();
 	void on_tick();
+	// The DRAM model advances every cycle.
 
 private:
 	class Impl;

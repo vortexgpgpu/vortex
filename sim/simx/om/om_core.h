@@ -46,11 +46,11 @@ public:
 
   // Per-core inbound OmReq channels (size = NUM_CORES_PER_CLUSTER).
   // Cluster binds each core's SfuUnit::om_req_out here.
-  std::vector<SimChannel<OmReq>>  om_req_in;
+  SimPortInArray<OmReq>  om_req_in;
 
   // Memory ports to the ocache. Size = OCACHE_NUM_REQS.
-  std::vector<SimChannel<MemReq>> ocache_req_out;
-  std::vector<SimChannel<MemRsp>> ocache_rsp_in;
+  SimPortOutArray<MemReq> ocache_req_out;
+  SimPortInArray<MemRsp> ocache_rsp_in;
 
   OmCore(const SimContext& ctx, const char* name, Cluster* cluster);
   virtual ~OmCore();

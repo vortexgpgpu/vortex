@@ -39,16 +39,16 @@ public:
   using Ptr = std::shared_ptr<Mmu>;
 
   // Upstream side (LSU/coalescer/fetch).
-  std::vector<SimChannel<MemReq>> ReqIn;
-  std::vector<SimChannel<MemRsp>> RspOut;
+  SimPortInArray<MemReq> ReqIn;
+  SimPortOutArray<MemRsp> RspOut;
 
   // Downstream side (cache cluster).
-  std::vector<SimChannel<MemReq>> ReqOut;
-  std::vector<SimChannel<MemRsp>> RspIn;
+  SimPortOutArray<MemReq> ReqOut;
+  SimPortInArray<MemRsp> RspIn;
 
   // Miss/fill link to the shared cluster TLB.
-  SimChannel<TlbReq> TlbMissOut;
-  SimChannel<TlbRsp> TlbFillIn;
+  SimPortOut<TlbReq> TlbMissOut;
+  SimPortIn<TlbRsp> TlbFillIn;
 
   Mmu(const SimContext& ctx,
       const char* name,

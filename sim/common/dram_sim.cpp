@@ -15,6 +15,7 @@
 #include "dram_bank_model.h"
 #include "util.h"
 #include <dram_timing.h>
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <VX_config.h>
@@ -24,6 +25,7 @@
 #include <queue>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 DISABLE_WARNING_PUSH
@@ -34,9 +36,41 @@ DISABLE_WARNING_MISSING_FIELD_INITIALIZERS
 #include <base/config.h>
 #include <frontend/frontend.h>
 #include <memory_system/memory_system.h>
+#include <dram_controller/plugin.h>
 DISABLE_WARNING_POP
 
 using namespace vortex;
+
+namespace Ramulator {
+
+// Tells the wrapper what the controller does not report: when a write leaves
+// its buffer (its final command issues). Ramulator calls back only for reads.
+class VortexDrainTracker : public IControllerPlugin, public Implementation {
+  RAMULATOR_REGISTER_IMPLEMENTATION(IControllerPlugin, VortexDrainTracker, "VortexDrainTracker",
+                                    "Counts the writes whose final command issued.")
+public:
+  uint64_t writes_retired = 0;
+
+  // Trackers by memory system, claimed by the wrapper once connected.
+  static std::unordered_map<const IMemorySystem*, VortexDrainTracker*>& registry() {
+    static std::unordered_map<const IMemorySystem*, VortexDrainTracker*> trackers;
+    return trackers;
+  }
+
+  void init() override {}
+
+  void setup(IFrontEnd* /*frontend*/, IMemorySystem* memory_system) override {
+    registry()[memory_system] = this;
+  }
+
+  void update(bool request_found, ReqBuffer::iterator& req_it) override {
+    if (request_found && req_it->type_id == Request::Type::Write && req_it->command == req_it->final_command) {
+      ++writes_retired;
+    }
+  }
+};
+
+}
 
 namespace {
 
@@ -120,13 +154,26 @@ private:
   // An independent controller and its device. It accepts one transaction per
   // DRAM cycle and returns its responses independently of the other channels;
   // write acknowledgements do not wait behind read data.
+  //
+  // A channel whose controller has been empty for longer than its longest
+  // timing constraint stops ticking until the next transaction: such a tick
+  // only advances the controller's clocks, and every constraint compares two
+  // of them, so pausing all of them together changes no decision.
   struct channel_t {
     Ramulator::IFrontEnd* frontend;
     Ramulator::IMemorySystem* memory_system;
+    Ramulator::VortexDrainTracker* tracker;
     std::queue<mem_tx_t> pending_txs;
     std::deque<mem_rsp_t> read_rsps;
     std::deque<mem_rsp_t> write_rsps;
     uint32_t inflight;
+    uint64_t accepted = 0;     // transactions the controller took
+    uint64_t reads_done = 0;   // reads it returned
+    uint64_t idle_cycles = 0;  // DRAM cycles since the controller emptied
+
+    bool controller_empty() const {
+      return accepted == reads_done + tracker->writes_retired;
+    }
   };
 
   static constexpr uint32_t tx_size_ = dram_timing::kBurstSize;
@@ -140,9 +187,21 @@ private:
   uint32_t column_bits_;     // bursts per row
   std::vector<channel_t> channels_;
   uint64_t cycle_;
+  uint32_t settle_cycles_;
   // DRAM ticks owed, in units of 1/(2 x core_clock): each core cycle adds the
   // data rate, each DRAM tick (half the data rate) takes 2 x core_clock.
   uint64_t clock_credit_;
+
+  // DRAM cycles after a channel's last command past which no timing
+  // constraint binds. Each of Ramulator's constraints for these standards is a
+  // sum of distinct scheduler timings plus at most 4 clocks, so their total
+  // bounds every one. Refresh never issues (channel_config), so its timings
+  // are left out.
+  static uint32_t settle_cycles(const Config& config) {
+    auto t = dram_timing::clocks(config.type, config.data_rate);
+    return t.BL + t.CCDS + t.CCDL + t.CL + t.CWL + t.RCDRD + t.RCDWR + t.RP + t.RAS + t.RC + t.RTP + t.WR +
+           t.RRDS + t.RRDL + t.FAW + t.WTRS + t.WTRL + 4;
+  }
 
   static void set_hbm_device(YAML::Node dram, const Config& config) {
     // Ramulator's 8 Gb organization: 2 pseudo-channels x 4 bank groups x 4
@@ -193,6 +252,9 @@ private:
     // channel ~9% of its time instead.
     controller["RefreshManager"]["impl"] = "AllBank";
     controller["RowPolicy"]["impl"] = "OpenRowPolicy";
+    YAML::Node drain_tracker;
+    drain_tracker["ControllerPlugin"]["impl"] = "VortexDrainTracker";
+    controller["plugins"].push_back(drain_tracker);
     // Per-command DRAM trace recording is a debugging aid only: it writes an
     // entry for every DRAM command and dominates simulation time (100s of MB
     // of I/O for even tiny workloads). Keep it opt-in via the DRAM_TRACE env
@@ -259,9 +321,11 @@ private:
     if (!tx.is_write) {
       callback = [this, &channel, request = tx.request](Ramulator::Request& /*dram_req*/) {
         channel.read_rsps.push_back({request, this->cycle_ + 1 + this->config_.latency});
+        ++channel.reads_done;
       };
     }
     if (channel.frontend->receive_external_requests(req_type, tx.addr, 0, callback)) {
+      ++channel.accepted;
       // Ramulator does not handle write responses, so we handle the callback ourselves.
       if (tx.is_write) {
         channel.write_rsps.push_back({tx.request, cycle_});
@@ -273,7 +337,8 @@ private:
 public:
   RamulatorDram(const Config& config)
     : config_(config)
-    , channels_(config.num_channels) {
+    , channels_(config.num_channels)
+    , settle_cycles_(settle_cycles(config)) {
     auto geometry = dram_timing::geometry(config.type);
     row_visit_bits_ = geometry.log2_visit;
     bank_bits_ = geometry.bank_bits();
@@ -285,6 +350,9 @@ public:
       channel.memory_system = Ramulator::Factory::create_memory_system(ramulator_config);
       channel.frontend->connect_memory_system(channel.memory_system);
       channel.memory_system->connect_frontend(channel.frontend);
+      auto& trackers = Ramulator::VortexDrainTracker::registry();
+      channel.tracker = trackers.at(channel.memory_system);
+      trackers.erase(channel.memory_system);
     }
     this->reset();
   }
@@ -308,6 +376,7 @@ public:
       channel.read_rsps.clear();
       channel.write_rsps.clear();
       channel.inflight = 0;
+      channel.idle_cycles = 0;
     }
   }
 
@@ -320,8 +389,19 @@ public:
     }
     while (clock_credit_ >= 2 * config_.core_clock) {
       for (auto& channel : channels_) {
+        if (channel.idle_cycles > settle_cycles_) {
+          if (channel.pending_txs.empty()) {
+            continue;
+          }
+          channel.idle_cycles = 0;
+        }
         this->issue(channel);
         channel.memory_system->tick();
+        if (channel.pending_txs.empty() && channel.controller_empty()) {
+          ++channel.idle_cycles;
+        } else {
+          channel.idle_cycles = 0;
+        }
       }
       clock_credit_ -= 2 * config_.core_clock;
     }

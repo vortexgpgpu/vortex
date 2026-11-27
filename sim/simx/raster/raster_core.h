@@ -52,12 +52,12 @@ public:
   // Cluster-level inbound request / outbound response (one lane per cluster).
   // RasterBusArbiter fans per-core inputs into this lane and routes
   // responses back per-core.
-  std::vector<SimChannel<RasterReq>>  raster_req_in;
-  std::vector<SimChannel<RasterRsp>>  raster_rsp_out;
+  SimPortInArray<RasterReq>  raster_req_in;
+  SimPortOutArray<RasterRsp>  raster_rsp_out;
 
   // Memory ports to the rcache. Size = RCACHE_NUM_REQS.
-  std::vector<SimChannel<MemReq>>     rcache_req_out;
-  std::vector<SimChannel<MemRsp>>     rcache_rsp_in;
+  SimPortOutArray<MemReq>     rcache_req_out;
+  SimPortInArray<MemRsp>     rcache_rsp_in;
 
   // Fragment-work-distributor control links: one arm strobe per owned core;
   // every core reports its drain back on the shared done link.

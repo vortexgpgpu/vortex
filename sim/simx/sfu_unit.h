@@ -57,13 +57,13 @@ class RtuCore;
 // `tex_req_out` and the SFU does NOT push the trace onto its writeback
 // output — TexCore owns the trace until it returns it via `tex_rsp_in`,
 // at which point on_tick() forwards it to the original writeback lane.
-class SfuUnit : public FuncUnit<VX_CFG_NUM_SFU_BLOCKS> {
+class SfuUnit : public FuncUnit<SfuUnit, VX_CFG_NUM_SFU_BLOCKS> {
 public:
 	SfuUnit(const SimContext& ctx, const char* name, Core*);
 
 	// Resolved warp-control op of a stalled warp, registered toward the
 	// scheduler.
-	SimChannel<WarpCtl> warp_ctl_out;
+	SimPortOut<WarpCtl> warp_ctl_out;
 
 	CsrUnit& csr_unit() { return *csr_unit_; }
 
@@ -71,28 +71,28 @@ public:
 	// Outbound DXA request channel — bound by Cluster to
 	// DxaCore::dxa_req_in[cid]. Owned here (SfuUnit is the SimObject;
 	// DxaUnit is a plain helper sub-class).
-	SimChannel<DxaReq> dxa_req_out;
+	SimPortOut<DxaReq> dxa_req_out;
 #endif
 
 #ifdef VX_CFG_EXT_TEX_ENABLE
 	// Outbound TEX request / inbound TEX response channels. Cluster binds
 	// these to the cluster-level TexBus arbiter (which fans into TexCore).
-	SimChannel<TexReq> tex_req_out;
-	SimChannel<TexRsp> tex_rsp_in;
+	SimPortOut<TexReq> tex_req_out;
+	SimPortIn<TexRsp> tex_rsp_in;
 #endif
 
 #ifdef VX_CFG_EXT_OM_ENABLE
 	// Outbound OM request channel. Cluster binds to OmCore::om_req_in[cid].
 	// vx_om has no return value — there is no rsp channel; OmCore drives
 	// the R-M-W asynchronously through the ocache.
-	SimChannel<OmReq> om_req_out;
+	SimPortOut<OmReq> om_req_out;
 #endif
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 	// Outbound RASTER request / inbound response channels. Cluster binds
 	// these to the cluster-level RasterBus arbiter (which fans into RasterCore).
-	SimChannel<RasterReq> raster_req_out;
-	SimChannel<RasterRsp> raster_rsp_in;
+	SimPortOut<RasterReq> raster_req_out;
+	SimPortIn<RasterRsp> raster_rsp_in;
 #endif
 
 #ifdef VX_CFG_EXT_RTU_ENABLE
@@ -103,12 +103,12 @@ public:
 	// RtuCore. On rsp arrival, SfuUnit applies the response into
 	// RtuUnit's register file and forwards the trace to writeback with
 	// the terminal status word.
-	SimChannel<RtuReq> rtu_req_out;
-	SimChannel<RtuRsp> rtu_rsp_in;
+	SimPortOut<RtuReq> rtu_req_out;
+	SimPortIn<RtuRsp> rtu_rsp_in;
 	// Async ray pool: Cluster calls this after RtuCore is created
 	// so RtuUnit can pre-allocate slot handles at vx_rt_trace time and
 	// free them at vx_rt_wait completion (the alloc/free path is a
-	// direct C++ call, not a SimChannel hop).
+	// direct C++ call, not a port hop).
 	void set_rtu_core(RtuCore* core);
 
 	// Claim this warp's ray-pool slot for a TRACE2 macro head; false when the
@@ -122,9 +122,9 @@ public:
 	// fragment work distributor at warp launch; the FS reads it back with GETW.
 #endif
 
-protected:
-	void on_reset() override;
-	void on_tick() override;
+	void on_reset();
+	void on_tick();
+	bool busy() const;
 
 private:
 	uint32_t latency_of(const instr_trace_t* trace) const;

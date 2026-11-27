@@ -32,7 +32,7 @@ static constexpr uint32_t kEventApplyLag = 2;
 
 BarrierUnit::BarrierUnit(const SimContext& ctx, const char* name, Core* core, Scheduler* scheduler)
   : SimObject<BarrierUnit>(ctx, name)
-  , unlock_out(this, VX_CFG_NUM_WARPS)
+  , unlock_out(this)
   , gbar_send_next_(0)
   , core_(core)
   , scheduler_(scheduler)

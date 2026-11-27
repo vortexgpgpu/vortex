@@ -25,6 +25,14 @@
 
 using namespace vortex;
 
+// Tick until done() holds, testing it first: `while (!done()) tick();`.
+template <typename Done>
+static void tick_until(Done&& done) {
+  if (!done()) {
+    SimPlatform::instance().run_until(done);
+  }
+}
+
 static void simx_print_backtrace() {
   void* addrs[64];
   int count = ::backtrace(addrs, int(std::size(addrs)));
@@ -153,8 +161,8 @@ ProcessorImpl::ProcessorImpl()
   // connect L3 core interfaces
   for (uint32_t i = 0; i < VX_CFG_NUM_CLUSTERS; ++i) {
     for (uint32_t j = 0; j < VX_CFG_L2_MEM_PORTS; ++j) {
-      clusters_.at(i)->mem_req_out.at(j).bind(&l3cache_->core_req_in.at(i * VX_CFG_L2_MEM_PORTS + j));
-      l3cache_->core_rsp_out.at(i * VX_CFG_L2_MEM_PORTS + j).bind(&clusters_.at(i)->mem_rsp_in.at(j));
+      clusters_.at(i)->mem_req_out.at(j)->bind(l3cache_->core_req_in.at(i * VX_CFG_L2_MEM_PORTS + j));
+      l3cache_->core_rsp_out.at(i * VX_CFG_L2_MEM_PORTS + j)->bind(clusters_.at(i)->mem_rsp_in.at(j));
     }
   }
 
@@ -175,8 +183,8 @@ ProcessorImpl::ProcessorImpl()
     dev_ptw_->MemReqOut.bind(&clusters_.at(0)->ptw_mem_req_in());
     clusters_.at(0)->ptw_mem_rsp_out().bind(&dev_ptw_->MemRspIn);
   } else {
-    dev_ptw_->MemReqOut.bind(&l3cache_->core_req_in.at(VX_CFG_L3_PTW_IDX));
-    l3cache_->core_rsp_out.at(VX_CFG_L3_PTW_IDX).bind(&dev_ptw_->MemRspIn);
+    dev_ptw_->MemReqOut.bind(l3cache_->core_req_in.at(VX_CFG_L3_PTW_IDX));
+    l3cache_->core_rsp_out.at(VX_CFG_L3_PTW_IDX)->bind(&dev_ptw_->MemRspIn);
   }
 #endif
 
@@ -188,29 +196,15 @@ ProcessorImpl::ProcessorImpl()
       cp_llc_port_->MemReqOut.bind(&clusters_.at(0)->cp_mem_req_in());
       clusters_.at(0)->cp_mem_rsp_out().bind(&cp_llc_port_->MemRspIn);
     } else {
-      cp_llc_port_->MemReqOut.bind(&l3cache_->core_req_in.at(L3_CP_IDX));
-      l3cache_->core_rsp_out.at(L3_CP_IDX).bind(&cp_llc_port_->MemRspIn);
+      cp_llc_port_->MemReqOut.bind(l3cache_->core_req_in.at(L3_CP_IDX));
+      l3cache_->core_rsp_out.at(L3_CP_IDX)->bind(&cp_llc_port_->MemRspIn);
     }
   }
 
   // connect L3 memory interfaces
   for (uint32_t i = 0; i < VX_CFG_L3_MEM_PORTS; ++i) {
-    l3cache_->mem_req_out.at(i).bind(&memsim_->mem_req_in.at(i));
-    memsim_->mem_rsp_out.at(i).bind(&l3cache_->mem_rsp_in.at(i));
-  }
-
-  // set up memory profiling
-  for (uint32_t i = 0; i < VX_CFG_L3_MEM_PORTS; ++i) {
-    memsim_->mem_req_in.at(i).tx_callback([&](const MemReq& req, uint64_t cycle){
-      __unused (cycle);
-      perf_mem_reads_  += !req.is_write();
-      perf_mem_writes_ += req.is_write();
-      perf_mem_pending_reads_ += !req.is_write();
-    });
-    memsim_->mem_rsp_out.at(i).tx_callback([&](const MemRsp&, uint64_t cycle){
-      __unused (cycle);
-      --perf_mem_pending_reads_;
-    });
+    l3cache_->mem_req_out.at(i)->bind(memsim_->mem_req_in.at(i));
+    memsim_->mem_rsp_out.at(i)->bind(l3cache_->mem_rsp_in.at(i));
   }
 
 #ifndef NDEBUG
@@ -264,7 +258,7 @@ void ProcessorImpl::flush_caches(uint32_t fence_op) {
     cluster->rtcache_flush_begin();
 #endif
   }
-  while (true) {
+  tick_until([&]() {
     bool all_done = true;
     for (auto& cluster : clusters_) {
       if (!cluster->dcache_flush_done()) { all_done = false; break; }
@@ -282,30 +276,25 @@ void ProcessorImpl::flush_caches(uint32_t fence_op) {
       if (!cluster->rtcache_flush_done()) { all_done = false; break; }
 #endif
     }
-    if (all_done && SimPlatform::instance().idle())
-      break;
-    SimPlatform::instance().tick();
-  }
+    return all_done && SimPlatform::instance().idle();
+  });
 
   // L2 caches.
   for (auto& cluster : clusters_) {
     cluster->l2_flush_begin(fence_op);
   }
-  while (true) {
-    bool all_done = true;
+  tick_until([&]() {
     for (auto& cluster : clusters_) {
-      if (!cluster->l2_flush_done()) { all_done = false; break; }
+      if (!cluster->l2_flush_done()) {
+        return false;
+      }
     }
-    if (all_done && SimPlatform::instance().idle())
-      break;
-    SimPlatform::instance().tick();
-  }
+    return SimPlatform::instance().idle();
+  });
 
   // L3 cache (single instance at processor level).
   l3cache_->flush_begin(fence_op);
-  while (!l3cache_->flush_done() || !SimPlatform::instance().idle()) {
-    SimPlatform::instance().tick();
-  }
+  tick_until([&]() { return l3cache_->flush_done() && SimPlatform::instance().idle(); });
 }
 
 int ProcessorImpl::run() {
@@ -313,10 +302,13 @@ int ProcessorImpl::run() {
   kmu_->start();
   this->forward_delegated_launch();
 
-  bool done;
   int exitcode = 0;
-  do {
-    SimPlatform::instance().tick();
+  // Evaluated after every cycle (see SimPlatform::run_until). busy: a core
+  // still runs, so the launch cannot end.
+  auto stop = [&](bool busy) {
+    if (busy) {
+      return false;
+    }
     bool any_running = false;
     for (auto cluster : clusters_) {
       if (cluster->running()) {
@@ -338,12 +330,30 @@ int ProcessorImpl::run() {
     // latched and the fabric is quiet, and let the host read the report.
     bool faulted = this->mmu_fault_pending();
     // Stop only when cores are idle AND the platform holds no undelivered
-    // work: cache pipelines wrap a SimChannel inside TFifo, so cache-pipe
+    // work: a cache bank's pipeline is one of its own ports, so cache-pipe
     // state (and any in-flight cache→memory writethrough) shows up in
     // idle(), as do launch-lane CTAs and barrier hops between domains.
-    done = (!any_running || faulted) && SimPlatform::instance().idle();
-    perf_mem_latency_ += perf_mem_pending_reads_;
-  } while (!done);
+    return (!any_running || faulted) && SimPlatform::instance().idle();
+  };
+
+  // With one cluster, a running core leaves no idle cluster whose exit code
+  // the check would collect, so the launch can let its cores vote. With
+  // several clusters, or with VM (a latched fault ends the launch while cores
+  // run), every cycle takes the full check.
+#ifdef VX_CFG_VM_ENABLE
+  constexpr bool voted = false;
+#else
+  constexpr bool voted = (VX_CFG_NUM_CLUSTERS == 1);
+#endif
+  if constexpr (voted) {
+    std::vector<Core*> cores;
+    for (uint32_t c = 0; c < NUM_SOCKETS * VX_CFG_SOCKET_SIZE; ++c) {
+      cores.push_back(clusters_.at(0)->get_core(c));
+    }
+    SimPlatform::instance().run_until(stop, cores, [](Core* core) { return core->running(); });
+  } else {
+    SimPlatform::instance().run_until([&]() { return stop(false); });
+  }
 
   return exitcode;
 }
@@ -374,9 +384,7 @@ void ProcessorImpl::cp_mem_transfer(uint64_t addr, const uint8_t* src, uint8_t* 
       dst += n;
     }
   }
-  while (!cp_llc_port_->idle()) {
-    SimPlatform::instance().tick();
-  }
+  tick_until([&]() { return cp_llc_port_->idle(); });
 }
 
 void ProcessorImpl::launch_reset() {
@@ -393,12 +401,9 @@ void ProcessorImpl::launch_reset() {
     if (cp_llc_port_->writes_pending()) {
       cp_llc_port_->fence();
     }
-    while (!cp_llc_port_->idle()) {
-      SimPlatform::instance().tick();
-    }
+    tick_until([&]() { return cp_llc_port_->idle(); });
   }
   SimPlatform::instance().reset_launch();
-  // The perf_mem_* counters survive: the MPM counters run from device reset.
   is_cycle_initialized_ = false;
 }
 
@@ -423,8 +428,6 @@ void ProcessorImpl::forward_delegated_launch() {
 void ProcessorImpl::reset() {
   SimPlatform::instance().reset();
   platform_reset_ = true;
-  // The perf_mem_* counters survive: the MPM counters run from device reset.
-  perf_mem_pending_reads_ = 0;
   is_cycle_initialized_ = false;
 }
 
@@ -440,7 +443,6 @@ bool ProcessorImpl::cycle() {
     is_cycle_initialized_ = true;
   }
   SimPlatform::instance().tick();
-  perf_mem_latency_ += perf_mem_pending_reads_;
   return this->any_running();
 }
 
@@ -541,9 +543,9 @@ bool ProcessorImpl::any_running() const {
 
 ProcessorImpl::PerfStats ProcessorImpl::perf_stats() const {
   ProcessorImpl::PerfStats perf;
-  perf.mem_reads   = perf_mem_reads_;
-  perf.mem_writes  = perf_mem_writes_;
-  perf.mem_latency = perf_mem_latency_;
+  perf.mem_reads   = memsim_->perf_stats().reads;
+  perf.mem_writes  = memsim_->perf_stats().writes;
+  perf.mem_latency = memsim_->perf_stats().latency;
   perf.l3cache     = l3cache_->perf_stats();
   perf.memsim      = memsim_->perf_stats();
 #ifdef VX_CFG_VM_ENABLE

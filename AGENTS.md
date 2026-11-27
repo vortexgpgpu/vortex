@@ -23,6 +23,7 @@ This is the canonical entry point for **both human contributors and AI coding ag
 - [docs/coding_guidelines_verilog.md](docs/coding_guidelines_verilog.md) — Verilog/SystemVerilog style
 
 ### Simulation & test
+- [docs/simobject.md](docs/simobject.md) — SimX framework: units, ports, timing rules, library units
 - [docs/simulation.md](docs/simulation.md) — driver modes (simx, rtlsim, opae, xrt) and blackbox usage
 - [docs/testing.md](docs/testing.md) — test and regression flow
 - [docs/debugging.md](docs/debugging.md) — debug traces (`--debug`), VCD (`--vcd`), scope, trace_csv
@@ -144,7 +145,7 @@ python3 ci/roofline.py --app=sgemm --driver=simx --args="-n128" --flops=4194304 
   - A change must move together: `C_Latency`, the matching `VX_CFG_*_LATENCY` in `VX_config.toml` (checked by the `STATIC_ASSERT`s in `hw/rtl/fpu/VX_f*_unit.sv`), and the SimX timing that reads it.
   - This applies only to `FPU_TYPE_DSP`. The STD FPU's div/sqrt latency is fixed by its SRT stage count, and only its FMA latency is configurable.
 
-- **SimX Cardinal Rule — modules communicate *only* through channels.** A `SimObject` may observe or mutate another module's state *only* via its bound `SimChannel` ports (`MemReq`/`MemRsp`, `result_if`, …). **Never reach across the ownership hierarchy** to touch another object directly (`core_->processor()->memsim()`, `parent()->child()->field`, a leaf unit grabbing the global `Memory`). See [docs/designs/simobject.md](docs/designs/simobject.md#the-cardinal-rule).
+- **SimX Cardinal Rule — units communicate *only* through their ports and event links.** A `SimObject` may observe or mutate another unit's state *only* via its own bound `SimPortIn`/`SimPortOut` ports (`MemReq`/`MemRsp`, results, credits, …) or a `SimEventLink`. **Never reach across the ownership hierarchy** to touch another unit directly (`core_->processor()->memsim()`, `parent()->child()->field`, a leaf unit grabbing the global `Memory`). See [docs/simobject.md](docs/simobject.md#the-cardinal-rule).
 
 ---
 

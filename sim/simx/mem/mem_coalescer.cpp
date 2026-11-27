@@ -30,8 +30,8 @@ MemCoalescer::MemCoalescer(
   // second request waits upstream rather than in local queue slack.
   , ReqIn(this, 1)
   , RspOut(this)
-  , ReqOut(output_size, this)
-  , RspIn(output_size, SimChannel<MemRsp>(this, kRspInSize))
+  , ReqOut(this, output_size)
+  , RspIn(this, output_size, kRspInSize)
   , input_size_(input_size)
   , output_size_(output_size)
   , output_ratio_(input_size / output_size)
@@ -143,17 +143,6 @@ void MemCoalescer::on_tick() {
 
   // process incoming requests
   if (ReqIn.empty()) {
-    // sleep when idle: no queued or in-flight input on either direction and
-    // no partial round to drain (out_round_ was handled above). Outstanding
-    // fills in pending_rd_reqs_ re-arm the tick when their response is
-    // reserved toward RspIn.
-    bool idle = (ReqIn.size() == 0);
-    for (uint32_t o = 0; idle && o < output_size_; ++o) {
-      idle = (RspIn.at(o).size() == 0);
-    }
-    if (idle) {
-      this->tick_sleep();
-    }
     return;
   }
 

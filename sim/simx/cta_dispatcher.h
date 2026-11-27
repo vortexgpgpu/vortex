@@ -46,12 +46,13 @@ struct cta_warp_record_t {
 class CtaDispatcher : public SimObject<CtaDispatcher> {
 public:
   // Launch-lane endpoint (capacity 1): the CTA the KMU has committed to this
-  // core. An unadmitted CTA stays here, holding the lane's credit.
-  SimChannel<kmu_req_t> bus_in;
+  // core. An unadmitted CTA stays here, holding the lane's credit; the core
+  // reads it, and admits it from within its own tick.
+  SimPortIn<kmu_req_t> bus_in;
 
   // Credit return to the KMU: one message per admitted CTA, so launch pacing
   // rests on explicit slot accounting rather than transport back-pressure.
-  SimChannel<uint8_t> credit_out;
+  SimPortOut<uint8_t> credit_out;
 
   CtaDispatcher(const SimContext& ctx, const char* name, Core* core);
   ~CtaDispatcher();

@@ -19,10 +19,11 @@ namespace vortex {
 
 class CacheCluster : public SimObject<CacheCluster> {
 public:
-	std::vector<std::vector<SimChannel<MemReq>>> core_req_in;
-	std::vector<std::vector<SimChannel<MemRsp>>> core_rsp_out;
-	std::vector<SimChannel<MemReq>> mem_req_out;
-	std::vector<SimChannel<MemRsp>> mem_rsp_in;
+	// The ports of the arbiters inside that carry each interface.
+	std::vector<std::vector<SimPortIn<MemReq>*>> core_req_in;
+	std::vector<std::vector<SimPortOut<MemRsp>*>> core_rsp_out;
+	std::vector<SimPortOut<MemReq>*> mem_req_out;
+	std::vector<SimPortIn<MemRsp>*> mem_rsp_in;
 
 	CacheCluster(const SimContext& ctx,
 							const char* name,

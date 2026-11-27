@@ -23,8 +23,8 @@ class Core;
 // Operand collection stage. One instance per issue lane.
 class Operands : public SimObject<Operands> {
 public:
-  SimChannel<instr_trace_t*> Input;
-  SimChannel<instr_trace_t*> Output;
+  SimPortIn<instr_trace_t*> Input;
+  SimPortOut<instr_trace_t*> Output;
 
   Operands(const SimContext &ctx, const char* name, Core* core);
 
@@ -47,17 +47,20 @@ public:
   Word& dtm_ireg(uint32_t wid, uint32_t reg);
 
 protected:
-  virtual void on_reset();
-  virtual void on_tick();
+  void on_reset();
+  void on_tick();
+  bool busy() const;
 
 private:
   Core* core_;
-  std::vector<OpcUnit::Ptr> opc_units_;
-  TraceArbiter::Ptr rsp_arb_;
-  bool head_offered_ = false;
-
-  void offer_head(instr_trace_t* trace, uint64_t delay);
-  void on_head_consumed();
+  std::vector<std::unique_ptr<OpcUnit>> opc_units_;
+  // With several collectors, their outputs ahead of the round-robin merge,
+  // which registers its output.
+  SimPortInArray<instr_trace_t*> merge_in_;
+  Arbiter merge_arb_;
+  // First cycle the buffer's head is offered: the cycle after the previous
+  // head left.
+  uint64_t head_ready_ = 0;
 
   friend class SimObject<Operands>;
 };

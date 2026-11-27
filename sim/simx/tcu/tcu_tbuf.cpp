@@ -205,8 +205,8 @@ private:
 
 TcuTbuf::TcuTbuf(const SimContext& ctx, const char* name)
   : SimObject<TcuTbuf>(ctx, name)
-  , lmem_req_out(LMEM_PORTS, this)
-  , lmem_rsp_in(LMEM_PORTS, this)
+  , lmem_req_out(this, LMEM_PORTS)
+  , lmem_rsp_in(this, LMEM_PORTS, 2)
   , impl_(new Impl(this))
 {}
 

@@ -38,6 +38,7 @@
 #include <future>
 #include <map>
 #include <mutex>
+#include <utility>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -209,10 +210,18 @@ private:
     };
     h.vortex_start = [this]() {
       future_ = std::async(std::launch::async, [&] { processor_.run(); });
+      launch_unseen_ = true;
     };
+    // The CP retires a launch once it has seen Vortex busy and then idle. A
+    // run that ends before the CP's first look still reads busy once, or the
+    // CP would wait for it to start forever.
     h.vortex_busy = [this]() -> bool {
       if (!future_.valid()) return false;
-      return future_.wait_for(std::chrono::seconds(0)) != std::future_status::ready;
+      if (future_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+        launch_unseen_ = false;
+        return true;
+      }
+      return std::exchange(launch_unseen_, false);
     };
     // ProcessorImpl decodes the MMU fault-report DCRs.
     h.mmu_fault_report = true;
@@ -222,6 +231,7 @@ private:
   RAM ram_;
   Processor processor_;
   std::future<void> future_;
+  bool launch_unseen_ = false;   // started, and not yet seen busy by the CP
   vortex::CommandProcessor cp_;
   std::mutex host_mu_;
   std::map<uint64_t, uint64_t> host_regions_;   // base -> size

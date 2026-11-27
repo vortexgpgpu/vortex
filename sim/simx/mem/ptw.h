@@ -46,12 +46,12 @@ public:
   };
 
   // Miss/fill link to the cluster TLB.
-  SimChannel<TlbReq> ReqIn;
-  SimChannel<TlbRsp> RspOut;
+  SimPortIn<TlbReq> ReqIn;
+  SimPortOut<TlbRsp> RspOut;
 
   // PTE-fetch port into the cluster cache.
-  SimChannel<MemReq> MemReqOut;
-  SimChannel<MemRsp> MemRspIn;
+  SimPortOut<MemReq> MemReqOut;
+  SimPortIn<MemRsp> MemRspIn;
 
   Ptw(const SimContext& ctx, const char* name);
   ~Ptw();
@@ -119,12 +119,12 @@ public:
   using Ptr = std::shared_ptr<PtwMux>;
 
   // Cluster side.
-  std::vector<SimChannel<TlbReq>> ReqIn;
-  std::vector<SimChannel<TlbRsp>> RspOut;
+  SimPortInArray<TlbReq> ReqIn;
+  SimPortOutArray<TlbRsp> RspOut;
 
   // Walker side.
-  SimChannel<TlbReq> ReqOut;
-  SimChannel<TlbRsp> RspIn;
+  SimPortOut<TlbReq> ReqOut;
+  SimPortIn<TlbRsp> RspIn;
 
   PtwMux(const SimContext& ctx, const char* name, uint32_t num_inputs);
   ~PtwMux();
