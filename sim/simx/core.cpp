@@ -13,6 +13,7 @@
 
 #include "core.h"
 
+#include <array>
 #include <vector>
 #include <list>
 #include <queue>
@@ -475,6 +476,11 @@ public:
     }
 
     std::fill(ibuf_inflight_.begin(), ibuf_inflight_.end(), 0);
+  #if VX_CFG_ICACHE_L0_LINES != 0
+    for (auto& l0 : l0_) {
+      l0.hit = nullptr;
+    }
+  #endif
     std::fill(ibuf_full_r_.begin(), ibuf_full_r_.end(), false);
     std::fill(ibuf_queued_.begin(), ibuf_queued_.end(), 0);
     std::fill(ibuf_queue_full_r_.begin(), ibuf_queue_full_r_.end(), false);
@@ -614,8 +620,26 @@ public:
   #endif
     auto& icache_req = (f == 0) ? icache_flush_buf_->In : icache_port;
 
+  #if VX_CFG_ICACHE_L0_LINES != 0
+    // An L0 hit reaches decode the cycle after its lookup, ahead of the icache.
+    auto& l0 = l0_.at(f);
+    bool l0_delivered = false;
+    if (l0.hit != nullptr) {
+      auto trace = l0.hit;
+      if (!ibuf_queue_full_r_.at(trace->wid) && decode_latch.try_push(trace)) {
+        l0.hit = nullptr;
+        ++ibuf_queued_.at(trace->wid);
+        DT(3, simobject_->name() << " l0-hit: addr=0x" << std::hex << trace->PC << std::dec << ", " << *trace);
+        l0_delivered = true;
+      } else {
+        ++perf_stats_.ibuf_stalls;
+      }
+    }
+    if (!icache_rsp.empty() && !l0_delivered){
+  #else
     // handle icache response — extract instruction word from the TLM line payload
     if (!icache_rsp.empty()){
+  #endif
       auto& mem_rsp = icache_rsp.peek();
       auto trace = pending_icache.at(mem_rsp.tag);
       assert(mem_rsp.data && "icache response must carry line payload");
@@ -637,31 +661,9 @@ public:
       bool emit = true;
       bool progressed = false;
       if (ibuf_room && decode_latch.try_push(trace)) {
-        uint32_t offset = trace->PC & (VX_CFG_MEM_BLOCK_SIZE - 1);
-        std::memcpy(&trace->code, mem_rsp.data->data() + offset, sizeof(uint32_t));
-      #ifdef VX_CFG_EXT_RWIN_ENABLE
-        // A vx_rwin or vx_rpfx fuses with the next word of its 8-byte fetch
-        // word, as in the RTL (RWIN_FUSE_STUDY: anywhere in the line;
-        // RWIN_NO_FUSE: never). RWIN_PREFIX64_STUDY fuses every vx_rpfx, to
-        // model 64-bit instructions.
-        trace->code2 = 0;
-        auto rw = Decoder::decode_rwin(trace->code);
-      #if defined(RWIN_PREFIX64_STUDY)
-        bool fuse = rw.prefix;
-      #else
-        bool fuse = false;
-      #endif
-      #if defined(RWIN_FUSE_STUDY)
-        fuse |= rw.valid;
-      #elif !defined(RWIN_NO_FUSE)
-        fuse |= rw.valid && (offset & 4) == 0;
-      #endif
-        if (fuse && offset + 2 * sizeof(uint32_t) <= VX_CFG_MEM_BLOCK_SIZE) {
-          std::memcpy(&trace->code2, mem_rsp.data->data() + offset + 4, sizeof(uint32_t));
-          if (Decoder::decode_rwin(trace->code2).valid) {
-            trace->code2 = 0;
-          }
-        }
+        this->fill_code(trace, mem_rsp.data->data());
+      #if VX_CFG_ICACHE_L0_LINES != 0
+        this->l0_install(f, trace->PC, mem_rsp.data->data());
       #endif
         progressed = true;
       }
@@ -709,6 +711,20 @@ public:
     if (trace == nullptr)
       return;
 
+  #if VX_CFG_ICACHE_L0_LINES != 0
+    if (auto line = this->l0_lookup(f, trace->PC)) {
+      // one hit at a time: a second waits for the first to reach decode
+      if (l0.hit != nullptr) {
+        ++perf_stats_.fetch_stalls;
+        return;
+      }
+      this->fill_code(trace, line);
+      l0.hit = trace;
+      fetch_latch.pop();
+      return;
+    }
+  #endif
+
     // Avoid leaking icache tags when the request port back-pressures.
     if (pending_icache.full()) {
       ++perf_stats_.fetch_stalls;
@@ -739,6 +755,62 @@ public:
       ++perf_stats_.fetch_stalls;
     }
   }
+
+#ifndef VX_CFG_EXT_C_ENABLE
+  // The instruction word at trace->PC in its fetched line, and the word fused
+  // with it.
+  void fill_code(instr_trace_t* trace, const uint8_t* line) {
+    uint32_t offset = trace->PC & (VX_CFG_MEM_BLOCK_SIZE - 1);
+    std::memcpy(&trace->code, line + offset, sizeof(uint32_t));
+  #ifdef VX_CFG_EXT_RWIN_ENABLE
+    // A vx_rwin or vx_rpfx fuses with the next word of its 8-byte fetch
+    // word, as in the RTL (RWIN_FUSE_STUDY: anywhere in the line;
+    // RWIN_NO_FUSE: never). RWIN_PREFIX64_STUDY fuses every vx_rpfx, to
+    // model 64-bit instructions.
+    trace->code2 = 0;
+    auto rw = Decoder::decode_rwin(trace->code);
+  #if defined(RWIN_PREFIX64_STUDY)
+    bool fuse = rw.prefix;
+  #else
+    bool fuse = false;
+  #endif
+  #if defined(RWIN_FUSE_STUDY)
+    fuse |= rw.valid;
+  #elif !defined(RWIN_NO_FUSE)
+    fuse |= rw.valid && (offset & 4) == 0;
+  #endif
+    if (fuse && offset + 2 * sizeof(uint32_t) <= VX_CFG_MEM_BLOCK_SIZE) {
+      std::memcpy(&trace->code2, line + offset + 4, sizeof(uint32_t));
+      if (Decoder::decode_rwin(trace->code2).valid) {
+        trace->code2 = 0;
+      }
+    }
+  #endif
+  }
+#endif
+
+#if VX_CFG_ICACHE_L0_LINES != 0
+  const uint8_t* l0_lookup(uint32_t f, Word pc) const {
+    Word tag = pc / VX_CFG_MEM_BLOCK_SIZE;
+    for (auto& l : l0_.at(f).lines) {
+      if (l.valid && l.tag == tag)
+        return l.data.data();
+    }
+    return nullptr;
+  }
+
+  // a line an icache response brings, unless an earlier response already did
+  void l0_install(uint32_t f, Word pc, const uint8_t* line) {
+    if (this->l0_lookup(f, pc))
+      return;
+    auto& l0 = l0_.at(f);
+    auto& l = l0.lines.at(l0.victim);
+    l.valid = true;
+    l.tag = pc / VX_CFG_MEM_BLOCK_SIZE;
+    std::memcpy(l.data.data(), line, VX_CFG_MEM_BLOCK_SIZE);
+    l0.victim = (l0.victim + 1) % VX_CFG_ICACHE_L0_LINES;
+  }
+#endif
 
   void decode() {
     for (uint32_t f = 0; f < VX_CFG_FETCH_WIDTH; ++f) {
@@ -1072,6 +1144,18 @@ public:
         ++perf_stats_.scrb_stalls;
       }
     }
+  }
+
+  // the icache is invalidated, and with it every slice's L0
+  void icache_l0_flush() {
+  #if VX_CFG_ICACHE_L0_LINES != 0
+    for (auto& l0 : l0_) {
+      for (auto& l : l0.lines) {
+        l.valid = false;
+      }
+      l0.victim = 0;
+    }
+  #endif
   }
 
   void ibuf_release(uint32_t wid) {
@@ -1537,6 +1621,22 @@ private:
   // windows of an unfused vx_rpfx (it ended a line), per warp; -1 = none
   std::vector<int32_t> pending_pfx_ = std::vector<int32_t>(VX_CFG_NUM_WARPS, -1);
 #endif
+#if VX_CFG_ICACHE_L0_LINES != 0
+  static_assert(!VX_CFG_EXT_C_ENABLED, "the L0 serves the fixed-length fetch path");
+  // per fetch slice: whole icache lines, replaced round-robin, and the one hit
+  // on its way to decode
+  struct L0 {
+    struct Line {
+      bool valid = false;
+      Word tag = 0;
+      std::array<uint8_t, VX_CFG_MEM_BLOCK_SIZE> data;
+    };
+    std::array<Line, VX_CFG_ICACHE_L0_LINES> lines;
+    uint32_t victim = 0;
+    instr_trace_t* hit = nullptr;
+  };
+  std::vector<L0> l0_ = std::vector<L0>(VX_CFG_FETCH_WIDTH);
+#endif
 
   // [iw][fu] commit staging: FU outputs land here one registered stage
   // before retirement; commit() grants among them fixed-priority.
@@ -1664,6 +1764,10 @@ bool Core::has_pending_instrs(uint32_t wid) const {
 
 bool Core::lsu_drained() const {
   return impl_->lsu_drained();
+}
+
+void Core::icache_l0_flush() {
+  impl_->icache_l0_flush();
 }
 
 void Core::resume(uint32_t wid) {

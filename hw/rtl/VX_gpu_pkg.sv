@@ -2023,15 +2023,18 @@ package VX_gpu_pkg;
 
     ////////////////////////// Icache Parameters //////////////////////////////
 
+    // Block size in bytes
+    localparam ICACHE_LINE_SIZE	    = `VX_CFG_L1_LINE_SIZE;
+
+    // Lines in each fetch slice's L0, which needs whole lines from the icache
+    localparam ICACHE_L0_LINES      = `VX_CFG_ICACHE_L0_LINES;
+
     // Word size in bytes
     // Register windows fetch 8 bytes, so a vx_rwin and the instruction after it
     // in the same aligned pair reach decode together.
     localparam RWIN_FUSED_FETCH     = `VX_CFG_EXT_RWIN_ENABLED && !`VX_CFG_EXT_C_ENABLED;
-    localparam ICACHE_WORD_SIZE	    = RWIN_FUSED_FETCH ? 8 : 4;
+    localparam ICACHE_WORD_SIZE	    = (ICACHE_L0_LINES != 0) ? ICACHE_LINE_SIZE : (RWIN_FUSED_FETCH ? 8 : 4);
     localparam ICACHE_ADDR_WIDTH	= (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(ICACHE_WORD_SIZE));
-
-    // Block size in bytes
-    localparam ICACHE_LINE_SIZE	    = `VX_CFG_L1_LINE_SIZE;
 
     // Request ports per core: one per frontend slice, each fetching its own warps
     localparam ICACHE_NUM_REQS  = `VX_CFG_FETCH_WIDTH;

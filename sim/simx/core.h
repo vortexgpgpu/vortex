@@ -106,6 +106,9 @@ public:
 
   void resume(uint32_t wid);
 
+  // the icache is invalidated: so is the fetch L0
+  void icache_l0_flush();
+
   bool has_pending_instrs(uint32_t wid) const;
   bool lsu_drained() const;
 

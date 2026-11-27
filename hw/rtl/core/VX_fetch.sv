@@ -30,6 +30,8 @@ module VX_fetch import VX_gpu_pkg::*; #(
 
     // Icache interface
     VX_mem_bus_if.master    icache_bus_if,
+    // the icache is being invalidated: so is the L0
+    input wire              icache_flush,
 
     // inputs
     VX_schedule_if.slave    schedule_if,
@@ -92,6 +94,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
         ("invalid PC=0x%0h, wid=%0d, tmask=%b (#%0d)", to_fullPC(schedule_if.data.PC), schedule_if.data.wid, schedule_if.data.tmask, schedule_if.data.uuid))
 
 `ifdef VX_CFG_EXT_C_ENABLE
+    `UNUSED_VAR (icache_flush)
     // ------------------------------------------------------------------------
     // RVC path: VX_decompressor + follow-up request mux
     // ------------------------------------------------------------------------
@@ -198,36 +201,151 @@ module VX_fetch import VX_gpu_pkg::*; #(
 
 `else // !VX_CFG_EXT_C_ENABLE
     // ------------------------------------------------------------------------
-    // Direct path (no RVC): scheduler PC → icache request → fetch_if.
+    // Direct path (no RVC): scheduler PC → L0 or icache request → fetch_if.
     // ------------------------------------------------------------------------
 
-    assign icache_req_valid = schedule_if.valid;
-    assign icache_req_addr  = schedule_if.data.PC[`CLOG2(ICACHE_WORD_SIZE)-(`VX_CFG_XLEN-PC_BITS) +: ICACHE_ADDR_WIDTH];
+    localparam PC_LSB    = `VX_CFG_XLEN - PC_BITS;
+    localparam FW_WORDS  = ICACHE_WORD_SIZE / 4;
+    localparam FW_WORDSW = `CLOG2(FW_WORDS);
+
+    assign icache_req_addr  = schedule_if.data.PC[`CLOG2(ICACHE_WORD_SIZE)-PC_LSB +: ICACHE_ADDR_WIDTH];
     assign icache_req_wid   = sched_wid;
     assign icache_req_uuid  = schedule_if.data.uuid;
     assign icache_req_tag   = {icache_req_uuid, icache_req_wid};
     assign schedule_if.ibuf_pop = fetch_if.ibuf_pop;
-    assign schedule_if.ready = icache_req_ready;
 
-    assign fetch_if.valid       = icache_bus_if.rsp_valid;
-    assign fetch_if.data.tmask  = rsp_tmask;
-    assign fetch_if.data.wid    = NW_WIDTH'(rsp_tag);
-    assign fetch_if.data.cta_id = rsp_cta_id;
-    assign fetch_if.data.PC     = rsp_PC;
-    if (RWIN_FUSED_FETCH) begin : g_fused_fetch
-        // 8-byte fetch word: the instruction at PC, and the word after it when
-        // PC is the first of the pair
-        wire rsp_hi = rsp_PC[2-(`VX_CFG_XLEN-PC_BITS)];
-        assign fetch_if.data.instr  = rsp_hi ? icache_bus_if.rsp_data.data[32 +: 32] : icache_bus_if.rsp_data.data[0 +: 32];
-        assign fetch_if.data.instr2 = rsp_hi ? 32'd0 : icache_bus_if.rsp_data.data[32 +: 32];
-    end else begin : g_word_fetch
-        assign fetch_if.data.instr  = icache_bus_if.rsp_data.data[0 +: 32];
-    `ifdef VX_CFG_EXT_RWIN_ENABLE
-        assign fetch_if.data.instr2 = 32'd0;
-    `endif
+    // The instruction at a PC in a fetch word, and the word after it when PC is
+    // the first of an aligned pair (a vx_rwin fuses with it).
+    wire [31:0] rsp_instr, rsp_instr2;
+    if (FW_WORDS > 1) begin : g_rsp_words
+        wire [FW_WORDSW-1:0] rsp_idx  = rsp_PC[2-PC_LSB +: FW_WORDSW];
+        wire [FW_WORDSW-1:0] rsp_idx2 = rsp_idx | FW_WORDSW'(1);
+        assign rsp_instr  = icache_bus_if.rsp_data.data[rsp_idx * 32 +: 32];
+        assign rsp_instr2 = rsp_idx[0] ? 32'd0 : icache_bus_if.rsp_data.data[rsp_idx2 * 32 +: 32];
+    end else begin : g_rsp_word
+        assign rsp_instr  = icache_bus_if.rsp_data.data[0 +: 32];
+        assign rsp_instr2 = 32'd0;
     end
-    assign fetch_if.data.uuid   = rsp_uuid;
-    assign icache_bus_if.rsp_ready = fetch_if.ready;
+
+    if (ICACHE_L0_LINES != 0) begin : g_l0
+        // L0: whole icache lines (the fetch word is a line), fully associative,
+        // round-robin replacement. A hit skips the icache and reaches decode the
+        // next cycle, ahead of icache responses; a miss installs the line its
+        // response brings.
+        localparam N  = ICACHE_L0_LINES;
+        localparam NW = `LOG2UP(N);
+        localparam LW = ICACHE_WORD_SIZE * 8;
+        `STATIC_ASSERT (ICACHE_WORD_SIZE == ICACHE_LINE_SIZE, ("the L0 fetches whole lines"))
+
+        reg [N-1:0]                         l0_valid;
+        reg [N-1:0][ICACHE_ADDR_WIDTH-1:0]  l0_tag;
+        reg [N-1:0][LW-1:0]                 l0_data;
+        reg [NW-1:0]                        l0_victim;
+
+        wire [N-1:0] sched_match, rsp_match;
+        wire [ICACHE_ADDR_WIDTH-1:0] rsp_line = rsp_PC[`CLOG2(ICACHE_WORD_SIZE)-PC_LSB +: ICACHE_ADDR_WIDTH];
+        for (genvar i = 0; i < N; ++i) begin : g_match
+            assign sched_match[i] = l0_valid[i] && (l0_tag[i] == icache_req_addr);
+            assign rsp_match[i]   = l0_valid[i] && (l0_tag[i] == rsp_line);
+        end
+        wire sched_hit = (| sched_match);
+
+        reg [LW-1:0] hit_line;
+        always @(*) begin
+            hit_line = '0;
+            for (integer i = 0; i < N; ++i) begin
+                if (sched_match[i]) hit_line |= l0_data[i];
+            end
+        end
+        wire [FW_WORDSW-1:0] hit_idx  = schedule_if.data.PC[2-PC_LSB +: FW_WORDSW];
+        wire [FW_WORDSW-1:0] hit_idx2 = hit_idx | FW_WORDSW'(1);
+        wire [31:0] hit_instr  = hit_line[hit_idx * 32 +: 32];
+        wire [31:0] hit_instr2 = hit_idx[0] ? 32'd0 : hit_line[hit_idx2 * 32 +: 32];
+
+        // one hit on its way to decode
+        reg                            hit_valid_r;
+        reg [31:0]                     hit_instr_r, hit_instr2_r;
+        reg [PC_BITS-1:0]              hit_PC_r;
+        reg [`VX_CFG_NUM_THREADS-1:0]  hit_tmask_r;
+        reg [NCTA_WIDTH-1:0]           hit_cta_id_r;
+        reg [WID_W-1:0]                hit_wid_r;
+        reg [UUID_WIDTH-1:0]           hit_uuid_r;
+
+        wire hit_fire = hit_valid_r && fetch_if.ready;
+        wire hit_room = ~hit_valid_r || hit_fire;
+        wire hit_take = schedule_if.valid && sched_hit && hit_room;
+
+        assign icache_req_valid  = schedule_if.valid && ~sched_hit;
+        assign schedule_if.ready = sched_hit ? hit_room : icache_req_ready;
+
+        wire rsp_fire = icache_bus_if.rsp_valid && icache_bus_if.rsp_ready;
+        wire rsp_install = rsp_fire && ~(| rsp_match);
+
+        always @(posedge clk) begin
+            if (reset || icache_flush) begin
+                l0_valid  <= '0;
+                l0_victim <= '0;
+            end else if (rsp_install) begin
+                l0_valid[l0_victim] <= 1'b1;
+                l0_victim <= (l0_victim == NW'(N-1)) ? '0 : (l0_victim + NW'(1));
+            end
+            if (rsp_install) begin
+                l0_tag[l0_victim]  <= rsp_line;
+                l0_data[l0_victim] <= icache_bus_if.rsp_data.data;
+            end
+        end
+
+        always @(posedge clk) begin
+            if (reset) begin
+                hit_valid_r <= 1'b0;
+            end else if (hit_take) begin
+                hit_valid_r <= 1'b1;
+            end else if (hit_fire) begin
+                hit_valid_r <= 1'b0;
+            end
+            if (hit_take) begin
+                hit_instr_r  <= hit_instr;
+                hit_instr2_r <= hit_instr2;
+                hit_PC_r     <= schedule_if.data.PC;
+                hit_tmask_r  <= schedule_if.data.tmask;
+                hit_cta_id_r <= schedule_if.data.cta_id;
+                hit_wid_r    <= sched_wid;
+                hit_uuid_r   <= schedule_if.data.uuid;
+            end
+        end
+
+        assign fetch_if.valid       = hit_valid_r || icache_bus_if.rsp_valid;
+        assign fetch_if.data.tmask  = hit_valid_r ? hit_tmask_r : rsp_tmask;
+        assign fetch_if.data.wid    = NW_WIDTH'(hit_valid_r ? hit_wid_r : rsp_tag);
+        assign fetch_if.data.cta_id = hit_valid_r ? hit_cta_id_r : rsp_cta_id;
+        assign fetch_if.data.PC     = hit_valid_r ? hit_PC_r : rsp_PC;
+        assign fetch_if.data.instr  = hit_valid_r ? hit_instr_r : rsp_instr;
+    `ifdef VX_CFG_EXT_RWIN_ENABLE
+        assign fetch_if.data.instr2 = hit_valid_r ? hit_instr2_r : rsp_instr2;
+    `else
+        `UNUSED_VAR ({hit_instr2_r, rsp_instr2})
+    `endif
+        assign fetch_if.data.uuid   = hit_valid_r ? hit_uuid_r : rsp_uuid;
+        assign icache_bus_if.rsp_ready = fetch_if.ready && ~hit_valid_r;
+    end else begin : g_no_l0
+        `UNUSED_VAR (icache_flush)
+        assign icache_req_valid  = schedule_if.valid;
+        assign schedule_if.ready = icache_req_ready;
+
+        assign fetch_if.valid       = icache_bus_if.rsp_valid;
+        assign fetch_if.data.tmask  = rsp_tmask;
+        assign fetch_if.data.wid    = NW_WIDTH'(rsp_tag);
+        assign fetch_if.data.cta_id = rsp_cta_id;
+        assign fetch_if.data.PC     = rsp_PC;
+        assign fetch_if.data.instr  = rsp_instr;
+    `ifdef VX_CFG_EXT_RWIN_ENABLE
+        assign fetch_if.data.instr2 = rsp_instr2;
+    `else
+        `UNUSED_VAR (rsp_instr2)
+    `endif
+        assign fetch_if.data.uuid   = rsp_uuid;
+        assign icache_bus_if.rsp_ready = fetch_if.ready;
+    end
 `endif
 
     // ------------------------------------------------------------------------

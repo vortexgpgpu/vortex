@@ -505,7 +505,12 @@ public:
 
   void dcache_flush_begin(uint32_t fence_op) { dcaches_->flush_begin(fence_op); }
   bool dcache_flush_done() const { return dcaches_->flush_done(); }
-  void icache_flush_begin() { icaches_->flush_begin(); }
+  void icache_flush_begin() {
+    icaches_->flush_begin();
+    for (auto& core : cores_) {
+      core->icache_l0_flush();
+    }
+  }
   bool icache_flush_done() const { return icaches_->flush_done(); }
 #ifdef VX_CFG_EXT_TEX_ENABLE
   void tcache_flush_begin() { tcache_->flush_begin(); }

@@ -69,6 +69,12 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
   no deeper logic path.
   *Limits:* the compiler is the LLVM fork's `feature/register-windows`; CI's prebuilt LLVM cannot build window kernels yet, so the
   `isa` window cases are marked known issues.
+- **Fetch L0 (`VX_CFG_ICACHE_L0_LINES`, 4 with register windows).** Each fetch slice keeps whole icache lines in a small fully
+  associative buffer; a fetch that hits reaches decode the next cycle instead of after the icache's ~6, and a miss fetches and keeps
+  the whole line. A warp fetches again only after decode has seen its instruction, so with few warps per slice the icache latency
+  bounded issue. *Why:* with windows, SimX on compute-bound kernels: -43% to -51% cycles at 2 warps per slice, up to -42% at 4,
+  unchanged at 8 or more; it lets 4 warps x 256 registers beat 32 warps x 32 at equal register-file size. Off without windows, so
+  other configurations do not change.
 - **Zfinx (`VX_CFG_EXT_ZFINX_ENABLE`).** FP operands live in the x registers: no f registers and no FP loads, stores or moves, with
   Zhinxmin conversions. Combined with windows, integer and FP values share up to 256 registers. *Limits:* the TCU and
   `ldst_matrix` are not supported under Zfinx.

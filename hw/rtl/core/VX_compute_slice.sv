@@ -43,6 +43,7 @@ import VX_tcu_pkg::*;
     // core scheduler and icache
     VX_slice_sched_if.slave slice_sched_if,
     VX_mem_bus_if.master    icache_bus_if,
+    input wire              icache_flush,
     output wire [PER_ISSUE_WARPS-1:0] committed_wis,
 
     // core scheduler state
@@ -198,6 +199,7 @@ import VX_tcu_pkg::*;
     `endif
         .slice_sched_if    (fs_sched_if),
         .icache_bus_if     (icache_bus_if),
+        .icache_flush      (icache_flush),
         .decode_if         (decode_if),
         .branch            (branch),
         .wctl              (wctl),

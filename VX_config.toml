@@ -276,6 +276,11 @@ VX_CFG_ICACHE_NUM_BANKS = "expr: pow(2, clog2($VX_CFG_FETCH_WIDTH))"
 # bank access; the response goes to every merged slice, each with its word.
 VX_CFG_ICACHE_READ_MERGE = 1
 VX_CFG_ICACHE_LATENCY = "expr: 2 + max(0, clog2($VX_CFG_ICACHE_SIZE) - clog2(16384))"
+# Lines in each fetch slice's L0, a buffer of whole icache lines that a fetch
+# hits in a cycle instead of the icache's ~6. A warp fetches again only after
+# its instruction is decoded, so with few warps per slice the icache latency
+# bounds issue; register windows trade warps for registers. 0 = no L0.
+VX_CFG_ICACHE_L0_LINES = "expr: 4 if ($VX_CFG_EXT_RWIN_ENABLE and not $VX_CFG_EXT_C_ENABLE) else 0"
 
 VX_CFG_DCACHE_SIZE = 16384
 VX_CFG_DCACHE_NUM_WAYS = 4

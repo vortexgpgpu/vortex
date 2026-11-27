@@ -75,6 +75,38 @@ fetch round trip, which fewer warps (larger register budgets) hide less well.
 Decode applies each field's window as it extracts the field, beside the opcode
 decode, so the windows add no logic depth after it.
 
+### Fetch L0
+
+A warp fetches again only after decode has seen its instruction, so each warp
+gets one instruction per round trip: about 9 cycles, 6 of them in the icache
+path. A slice with fewer than about 8 ready warps cannot fill its issue slot,
+and that is where windows put a register-heavy kernel. Each fetch slice
+therefore has an L0 (`VX_CFG_ICACHE_L0_LINES`, 4 with windows): whole icache
+lines, fully associative, replaced round-robin. A fetch that hits reaches
+decode the next cycle without an icache request; a miss requests the whole line
+(the icache word is the line) and installs it. The DCR flush that invalidates
+the icache clears it. One fetch per warp stays in flight, so nothing changes
+behind fetch. Cost per slice: 4 x (512 data + line tag) bits and a 4-way tag
+compare.
+
+SimX, Zfinx, one issue slot, against the same configuration without the L0:
+
+| Warps per slice | Cycles |
+|---|---|
+| 2 | -43% to -51% |
+| 4 | -1% to -42% (most -15% to -36%) |
+| 8, 16, 32 | within 0.5% |
+
+At 4 warps this is the gain of a Muon-style fetch-ahead front end (fetch while
+the instruction buffer has room, discard after a control instruction), within
+2%; at 2 warps fetch-ahead gains a further 5 to 13 points. Two lines come within
+2% of four; one line loses 13% to 26%. With the L0, 4 warps x 256 registers beats
+32 warps x 32 at equal register-file bytes on all four new kernels (-12% to
+-23%), and `vx_rwin` costs at most 1.6% against ideal 64-bit fetch at 4 warps,
+except where a kernel switches windows on almost every instruction (64-key
+bitonic sort at 128 registers, +24%; with prefixes, +0.9%). RTL parity: exact
+instruction counts, cycles within 1.7%.
+
 Per-warp state grows by 4 x (log2(R) - 5) bits, 12 at 256 registers. Register numbers widen from 6 to 8 bits through
 the pipeline; a tag-based scoreboard keeps its cost independent of the register
 count.
@@ -240,5 +272,4 @@ file grows with the register count (dynamic warp allocation is not merged here).
    warps; a tag-based scoreboard for 256 registers.
 2. TMEM intrinsics with register-group operands, then the TMEM FlashAttention
    kernel.
-3. A `model_parity` case for windows and fused fetch.
-4. Write-up.
+3. Write-up.

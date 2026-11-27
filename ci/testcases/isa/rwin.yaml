@@ -8,7 +8,7 @@ defaults:
   configs: -DVX_CFG_EXT_RWIN_ENABLE
   xlen: [32]
   tier: smoke
-  touches: [hw/rtl/core/VX_decode.sv, hw/rtl/VX_define.vh, sim/simx/decode.cpp, sim/simx/instr.h, sim/simx/core.cpp]
+  touches: [hw/rtl/core/VX_decode.sv, hw/rtl/core/VX_fetch.sv, hw/rtl/VX_define.vh, sim/simx/decode.cpp, sim/simx/instr.h, sim/simx/core.cpp]
   known_issue: "window codegen (-riscv-vortex-max-regs, -riscv-vortex-rwin-prefix) is not in the prebuilt LLVM until the TOOLCHAIN_REV refresh"
 tests:
 - id: rwin
@@ -33,3 +33,12 @@ tests:
   app: rp_softmax
   args: -r32 -n256
   env: {CHUNK: 64, RWIN_LLVM_FLAGS: "-mllvm -riscv-vortex-rwin-prefix"}
+# Few warps per fetch slice, so the fetch L0 carries the run: hits, misses
+# that install lines, and hits that wait behind an icache response.
+- id: parity-rwin-l0
+  check: model_parity
+  via: blackbox
+  app: rp_keccak
+  args: -n64 -p1
+  configs: -DVX_CFG_EXT_RWIN_ENABLE -DVX_CFG_NUM_RV_REGS=128 -DVX_CFG_NUM_WARPS=4
+  shape: {warps: 4}

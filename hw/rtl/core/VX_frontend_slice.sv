@@ -38,6 +38,7 @@ module VX_frontend_slice import VX_gpu_pkg::*; #(
 
     // instruction fetch, tagged with the core's flush select bit (the LSB)
     VX_mem_bus_if.master    icache_bus_if,
+    input wire              icache_flush,
 
     // decoded instructions
     VX_decode_if.master     decode_if,
@@ -134,6 +135,7 @@ module VX_frontend_slice import VX_gpu_pkg::*; #(
         .fetch_perf     (fetch_perf),
     `endif
         .icache_bus_if  (fetch_bus_if),
+        .icache_flush   (icache_flush),
         .schedule_if    (schedule_if),
         .fetch_if       (fetch_if)
     );

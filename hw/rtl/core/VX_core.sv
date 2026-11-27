@@ -451,6 +451,7 @@ import VX_tcu_pkg::*;
             `endif
                 .slice_sched_if       (slice_sched_if[i]),
                 .icache_bus_if        (fetch_icache_if[i]),
+                .icache_flush         (dcr_flush_icache_if.req),
                 .committed_wis        (committed_wis),
                 .cycles               (sched_cycles),
                 .instret              (sched_instret),
@@ -606,6 +607,7 @@ import VX_tcu_pkg::*;
             `endif
                 .slice_sched_if    (slice_sched_if[f]),
                 .icache_bus_if     (fetch_icache_if[f]),
+                .icache_flush      (dcr_flush_icache_if.req),
                 .decode_if         (fs_decode_if[f]),
                 .branch            (fs_branch[f]),
                 .wctl              (fs_wctl[f]),
