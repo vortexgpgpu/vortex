@@ -34,17 +34,16 @@ module VX_alu_int import VX_gpu_pkg::*; #(
 
     localparam LANE_BITS      = `CLOG2(NUM_LANES);
     localparam LANE_WIDTH     = `UP(LANE_BITS);
-    localparam SHIFT_IMM_BITS = `CLOG2(`VX_CFG_XLEN);
 
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] add_result;
     wire [NUM_LANES-1:0][`VX_CFG_XLEN:0]   sub_result; // +1 bit for branch compare
-    reg  [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] shr_zic_result;
-    reg  [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] msc_result;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] shr_zic_result;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] msc_result;
 
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] add_result_w;
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] sub_result_w;
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] shr_result_w;
-    reg  [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] msc_result_w;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] msc_result_w;
     reg  [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] vote_result;
     wire  [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] shfl_result;
 
@@ -102,37 +101,6 @@ module VX_alu_int import VX_gpu_pkg::*; #(
         assign sub_result_w[i] = `VX_CFG_XLEN'($signed(alu_in1[i][31:0] - alu_in2_imm[i][31:0]));
     end
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_shr_result
-        wire [`VX_CFG_XLEN:0] shr_in1 = {is_signed && alu_in1[i][`VX_CFG_XLEN-1], alu_in1[i]};
-        always @(*) begin
-            case (alu_op[1:0])
-            `ifdef VX_CFG_EXT_ZICOND_ENABLE
-                2'b10, 2'b11: begin // CZERO
-                    shr_zic_result[i] = alu_in1[i] & {`VX_CFG_XLEN{alu_op[0] ^ (| alu_in2[i])}};
-                end
-            `endif
-                default: begin // SRL, SRA, SRLI, SRAI
-                    shr_zic_result[i] = `VX_CFG_XLEN'($signed(shr_in1) >>> alu_in2_imm[i][SHIFT_IMM_BITS-1:0]);
-                end
-            endcase
-        end
-        wire [32:0] shr_in1_w = {is_signed && alu_in1[i][31], alu_in1[i][31:0]};
-        wire [31:0] shr_res_w = 32'($signed(shr_in1_w) >>> alu_in2_imm[i][4:0]);
-        assign shr_result_w[i] = `VX_CFG_XLEN'($signed(shr_res_w));
-    end
-
-    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_msc_result
-        always @(*) begin
-            case (alu_op[1:0])
-                2'b00: msc_result[i] = alu_in1[i] & alu_in2_imm[i]; // AND
-                2'b01: msc_result[i] = alu_in1[i] | alu_in2_imm[i]; // OR
-                2'b10: msc_result[i] = alu_in1[i] ^ alu_in2_imm[i]; // XOR
-                2'b11: msc_result[i] = alu_in1[i] << alu_in2_imm[i][SHIFT_IMM_BITS-1:0]; // SLL
-            endcase
-        end
-        assign msc_result_w[i] = `VX_CFG_XLEN'($signed(alu_in1[i][31:0] << alu_in2_imm[i][4:0])); // SLLW
-    end
-
     // VOTE
     wire [NUM_LANES-1:0] vote_true, vote_false;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_vote_calc
@@ -162,30 +130,41 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     // WGATHER — each group of 4 lanes operates independently. Source lane =
     // nominal (group_base | wg_src_offset), falling back to the last active lane
     // (branch's last_tid) when the nominal lane is masked — partial-warp safe.
+    // The fallback lane is shared by all lanes, so its operands are read once.
+    localparam WG_SIZE = (NUM_LANES < 4) ? NUM_LANES : 4;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_in3 = execute_if.data.rs3_data;
+    wire [`VX_CFG_XLEN-1:0] last_in1 = alu_in1[last_tid];
+    wire [`VX_CFG_XLEN-1:0] last_in2 = alu_in2[last_tid];
+    wire [`VX_CFG_XLEN-1:0] last_in3 = alu_in3[last_tid];
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] wgather_result;
-    if (NUM_LANES > 1) begin : g_wgather
-        wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_in3 = execute_if.data.rs3_data;
-        // The fallback lane is shared by all lanes, so its operands are read
-        // once; each lane's own source is then a group-local select.
-        wire [`VX_CFG_XLEN-1:0] last_in1 = alu_in1[last_tid];
-        wire [`VX_CFG_XLEN-1:0] last_in2 = alu_in2[last_tid];
-        wire [`VX_CFG_XLEN-1:0] last_in3 = alu_in3[last_tid];
-        for (genvar i = 0; i < NUM_LANES; ++i) begin : g_i
-            wire [LANE_BITS-1:0] nominal = (LANE_BITS'(i) & ~LANE_BITS'(3)) | LANE_BITS'(wg_src_offset);
-            wire [1:0]           offset  = 2'(i) - wg_src_offset; // (i - src) mod 4
-            // offset 0 = source lane (write-suppressed)
-            wire [`VX_CFG_XLEN-1:0] nominal_val = (offset == 2'd1) ? alu_in1[nominal]
-                                                : (offset == 2'd2) ? alu_in2[nominal]
-                                                : (offset == 2'd3) ? alu_in3[nominal]
-                                                : `VX_CFG_XLEN'(0);
-            wire [`VX_CFG_XLEN-1:0] last_val    = (offset == 2'd1) ? last_in1
-                                                : (offset == 2'd2) ? last_in2
-                                                : (offset == 2'd3) ? last_in3
-                                                : `VX_CFG_XLEN'(0);
-            assign wgather_result[i] = execute_if.data.header.tmask[nominal] ? nominal_val : last_val;
-        end
-    end else begin : g_wgather_0
-        assign wgather_result[0] = alu_in1[0];
+
+    // shifts, logic ops and WGATHER
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_lane_ops
+        localparam WG_BASE = i - (i % WG_SIZE);
+
+        VX_alu_int_lane #(
+            .NUM_LANES (NUM_LANES)
+        ) lane_ops (
+            .wg_pos         (2'(i)),
+            .op             (alu_op[1:0]),
+            .is_signed      (is_signed),
+            .wg_src_offset  (wg_src_offset),
+            .in1            (alu_in1[i]),
+            .in2            (alu_in2[i]),
+            .in2_imm        (alu_in2_imm[i]),
+            .wg_in1         (alu_in1[WG_BASE +: WG_SIZE]),
+            .wg_in2         (alu_in2[WG_BASE +: WG_SIZE]),
+            .wg_in3         (alu_in3[WG_BASE +: WG_SIZE]),
+            .wg_tmask       (execute_if.data.header.tmask[WG_BASE +: WG_SIZE]),
+            .last_in1       (last_in1),
+            .last_in2       (last_in2),
+            .last_in3       (last_in3),
+            .shr_zic_result (shr_zic_result[i]),
+            .shr_result_w   (shr_result_w[i]),
+            .msc_result     (msc_result[i]),
+            .msc_result_w   (msc_result_w[i]),
+            .wgather_result (wgather_result[i])
+        );
     end
 
     // SHFL. The lane-select operands are packed into rs2 at fixed 6-bit strides,
