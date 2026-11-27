@@ -561,15 +561,15 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         `UNUSED_VAR ({stk_wr, stk_wdata, path_wr, path_wlvl, path_wdata, lvl_wr, lvl_wdata})
     end
 
-    reg [COLL_SIZE-1:0]                     coll_busy;
-    reg [COLL_SIZE-1:0]                     coll_proc;
-    reg [COLL_SIZE-1:0][CTX_TAG_W-1:0]      coll_ctx;
-    reg [COLL_SIZE-1:0][RTU_CHILD_BITS-1:0] coll_cnt;
-    reg [COLL_SIZE-1:0][RTU_CHILD_BITS-1:0] coll_last;
-    reg [COLL_SIZE-1:0][RTU_CHILD_BITS-1:0] coll_ordcnt;
-    reg [COLL_SIZE-1:0][NODE_W-1:0][31:0]   coll_ordoff;
-    reg [COLL_SIZE-1:0][NODE_W-1:0][31:0]   coll_ordt;
-    reg [COLL_SIZE-1:0]                     coll_prochit;
+    wire [COLL_SIZE-1:0]                     coll_busy;
+    wire [COLL_SIZE-1:0]                     coll_proc;
+    reg  [COLL_SIZE-1:0][CTX_TAG_W-1:0]      coll_ctx;
+    wire [COLL_SIZE-1:0][RTU_CHILD_BITS-1:0] coll_cnt;
+    reg  [COLL_SIZE-1:0][RTU_CHILD_BITS-1:0] coll_last;
+    wire [COLL_SIZE-1:0][RTU_CHILD_BITS-1:0] coll_ordcnt;
+    wire [COLL_SIZE-1:0][NODE_W-1:0][31:0]   coll_ordoff;
+    wire [COLL_SIZE-1:0][NODE_W-1:0][31:0]   coll_ordt;
+    wire [COLL_SIZE-1:0]                     coll_prochit;
 
     wire [31:0] cand_ki_al = cs_word.in_blas ? cs_word.inst_id : 32'd0;
     wire        key_gt_floor_al = {cand_ki_al, cs_word.cur_off} > {cs_word.floor_ki, cs_word.floor_ko};
@@ -2243,74 +2243,31 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         end
     end
 
-    // Each row decodes its own write enables and insertion slot, so the
-    // ordering write is one mux per entry. The admit bits are a prefix of ones
-    // (the list is sorted ascending and the count mask is a prefix), so the
-    // insertion slot is the first zero: a neighbouring-bit decode.
+    // Allocation and release name one row by index; each row owns its update.
     for (genvar c = 0; c < COLL_SIZE; ++c) begin : g_coll_upd
-        wire alloc_c = x_valid && coll_alloc_r && (coll_alloc_idx == COLL_IDW'(c));
-        wire free_c  = x_valid && coll_free_r && (word_x.coll_id == COLL_IDW'(c));
-        wire box_c   = box_valid_out && box_coll_hot[c];
-        wire proc_c  = box_c && coll_proc[c];
-        wire tree_c  = box_c && ~coll_proc[c];
-        wire ins_c   = tree_c && coll_pushable;
-
-        always_ff @(posedge clk) begin
-            if (reset) begin
-                coll_busy[c] <= 1'b0;
-            end else begin
-                if (free_c) begin
-                    coll_busy[c] <= 1'b0;
-                end else if (alloc_c) begin
-                    coll_busy[c] <= 1'b1;
-                end
-                if (alloc_c) begin
-                    coll_proc[c] <= box_raw_r;
-                end
-                if (tree_c) begin
-                    coll_cnt[c] <= coll_cnt[c] + RTU_CHILD_BITS'(1);
-                end else if (alloc_c) begin
-                    coll_cnt[c] <= '0;
-                end
-                if (ins_c) begin
-                    coll_ordcnt[c] <= coll_ordcnt[c] + RTU_CHILD_BITS'(1);
-                end else if (alloc_c) begin
-                    coll_ordcnt[c] <= '0;
-                end
-                if (proc_c) begin
-                    coll_prochit[c] <= box_hit;
-                end
-            end
-        end
-
-        wire [NODE_W-1:0] ins_le;
-        for (genvar oc = 0; oc < NODE_W; ++oc) begin : g_le
-            assign ins_le[oc] = (RTU_CHILD_BITS'(oc) < coll_ordcnt[c]) && ins_t_le[oc];
-        end
-
-        // a procedural box stores its t in slot 0
-        for (genvar oc = 0; oc < NODE_W; ++oc) begin : g_slot
-            localparam PREV = (oc != 0) ? (oc - 1) : 0;
-            wire ins_here  = ~ins_le[oc] && ((oc == 0) || ins_le[PREV]);
-            wire ins_shift = (oc != 0) && ~ins_le[PREV];
-            wire set_t   = ((oc == 0) && proc_c) || (ins_c && ins_here);
-            wire set_off = ins_c && ins_here;
-            wire shift_c = ins_c && ins_shift;
-            always_ff @(posedge clk) begin
-                if (~reset) begin
-                    if (set_t) begin
-                        coll_ordt[c][oc] <= box_t_near;
-                    end else if (shift_c) begin
-                        coll_ordt[c][oc] <= coll_ordt[c][PREV];
-                    end
-                    if (set_off) begin
-                        coll_ordoff[c][oc] <= box_childoff;
-                    end else if (shift_c) begin
-                        coll_ordoff[c][oc] <= coll_ordoff[c][PREV];
-                    end
-                end
-            end
-        end
+        VX_rtu_coll_entry #(
+            .NODE_W (NODE_W)
+        ) coll_entry (
+            .clk          (clk),
+            .reset        (reset),
+            .alloc        (x_valid && coll_alloc_r && (coll_alloc_idx == COLL_IDW'(c))),
+            .alloc_proc   (box_raw_r),
+            .free         (x_valid && coll_free_r && (word_x.coll_id == COLL_IDW'(c))),
+            .box_valid    (box_valid_out),
+            .box_sel      (box_coll_hot[c]),
+            .box_hit      (box_hit),
+            .box_pushable (coll_pushable),
+            .box_t_near   (box_t_near),
+            .box_childoff (box_childoff),
+            .ins_t_le     (ins_t_le),
+            .busy         (coll_busy[c]),
+            .proc         (coll_proc[c]),
+            .cnt          (coll_cnt[c]),
+            .ordcnt       (coll_ordcnt[c]),
+            .prochit      (coll_prochit[c]),
+            .ordt         (coll_ordt[c]),
+            .ordoff       (coll_ordoff[c])
+        );
     end
 
     // ── barrier walker FSM ────────────────────────────────────────────

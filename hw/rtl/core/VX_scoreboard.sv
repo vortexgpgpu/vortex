@@ -31,7 +31,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({writeback_if.data.sop, writeback_if.data.eop, writeback_if.data.wis})
 
-    localparam NUM_OPDS  = NUM_SRC_OPDS + 1;
     localparam IN_DATAW  = $bits(ibuffer_t);
     localparam OUT_DATAW = $bits(scoreboard_t) - ISSUE_WIS_W;
     localparam OUT_BUF   = 3; // Use skid buffer (SIZE=2, OUT_REG=1)
@@ -95,186 +94,33 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         );
     end
 
+    wire [NUM_REGS-1:0] wb_rd_onehot = NUM_REGS'(1) << writeback_if.data.rd;
+
     for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_scoreboard
-        reg [NUM_REGS-1:0] inuse_regs, inuse_regs_n;
-        reg [NUM_XREGS-1:0] inuse_xregs, inuse_xregs_n;
-
-        wire ibuffer_fire = ibuffer_if[w].valid && ibuffer_if[w].ready;
-        wire staging_fire = staging_if[w].valid && staging_if[w].ready;
-
-        wire writeback_fire = writeback_if.valid && writeback_if.data.eop_wis[w];
-
-        wire [NUM_OPDS-1:0] [NUM_REGS_BITS-1:0] ibf_opds, stg_opds;
-        assign ibf_opds = {ibuffer_if[w].data.rs3, ibuffer_if[w].data.rs2, ibuffer_if[w].data.rs1, ibuffer_if[w].data.rd};
-        assign stg_opds = {staging_if[w].data.rs3, staging_if[w].data.rs2, staging_if[w].data.rs1, staging_if[w].data.rd};
-
-        wire [NUM_OPDS-1:0] ibf_used_rs = {ibuffer_if[w].data.used_rs, ibuffer_if[w].data.wb};
-        wire [NUM_OPDS-1:0] stg_used_rs = {staging_if[w].data.used_rs, staging_if[w].data.wb};
-
-        // Special-register dependency masks
-        wire [NUM_XREGS-1:0] ibf_xregs_mask = ibuffer_if[w].data.rd_xregs | ibuffer_if[w].data.wr_xregs;
-        wire [NUM_XREGS-1:0] stg_xregs_mask = staging_if[w].data.rd_xregs | staging_if[w].data.wr_xregs;
-
-        wire [NUM_OPDS-1:0][REG_TYPES-1:0][RV_REGS-1:0] ibf_opd_mask, stg_opd_mask;
-
-        for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_opd_masks
-            for (genvar j = 0; j < REG_TYPES; ++j) begin : g_j
-                assign ibf_opd_mask[i][j] = (1 << get_reg_idx(ibf_opds[i])) & {RV_REGS{ibf_used_rs[i] && get_reg_type(ibf_opds[i]) == j}};
-                assign stg_opd_mask[i][j] = (1 << get_reg_idx(stg_opds[i])) & {RV_REGS{stg_used_rs[i] && get_reg_type(stg_opds[i]) == j}};
-            end
-        end
-
-        // Writeback release feeds wb_inuse_regs; the staging reserve is added on
-        // top to form the next state, inuse_regs_n.
-        reg [NUM_REGS-1:0]  wb_inuse_regs;
-        reg [NUM_XREGS-1:0] wb_inuse_xregs;
-        always @(*) begin
-            wb_inuse_regs  = inuse_regs;
-            wb_inuse_xregs = inuse_xregs;
-            if (writeback_fire) begin
-                if (writeback_if.data.wb) begin
-                    wb_inuse_regs[writeback_if.data.rd] = 0; // release rd
-                end
-                wb_inuse_xregs &= ~writeback_if.data.wr_xregs; // release special regs
-            end
-        end
-
-        always @(*) begin
-            inuse_regs_n  = wb_inuse_regs;
-            inuse_xregs_n = wb_inuse_xregs;
-            if (staging_fire) begin
-                if (staging_if[w].data.wb) begin
-                    inuse_regs_n |= stg_opd_mask[0]; // reserve rd
-                end
-                inuse_xregs_n |= staging_if[w].data.wr_xregs; // reserve special regs
-            end
-        end
-
-        // Readiness folds data hazards and FU-congestion into one flop; FU-lock
-        // is enforced downstream by masking the arbiter requests.
-        //
-        // Whether this warp issues this cycle is decided by the out_arb grant,
-        // which depends on every warp's operands_ready_r. Computing readiness
-        // after that decision puts the whole arbitration in front of a
-        // NUM_REGS-wide hazard reduction. Instead both outcomes are evaluated from state that
-        // does not depend on the grant, and staging_fire only selects:
-        //   hold: staging keeps its instr (or, if empty, takes the ibuffer's)
-        //   fire: staging hands off, its rd is reserved, the ibuffer instr moves in
-        // Either way the flop gets the value a post-grant evaluation would.
-        //
-        // Either outcome checks one of only two instrs, so each is checked
-        // once and the outcomes select bits.
-        wire [NUM_REGS-1:0] ibf_regs_mask = ibf_opd_mask[0] | ibf_opd_mask[1] | ibf_opd_mask[2] | ibf_opd_mask[3];
-        wire [NUM_REGS-1:0] stg_regs_mask = stg_opd_mask[0] | stg_opd_mask[1] | stg_opd_mask[2] | stg_opd_mask[3];
-        // Each operand reads its in-use bit by index and compares its index with
-        // this cycle's release, which is shallower than reducing the operand
-        // masks against the whole released set.
-        wire wb_release = writeback_fire && writeback_if.data.wb;
-        wire [NUM_OPDS-1:0] ibf_opd_busy, stg_opd_busy;
-        for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_opd_busy
-            assign ibf_opd_busy[i] = ibf_used_rs[i] && inuse_regs[ibf_opds[i]]
-                                  && ~(wb_release && (writeback_if.data.rd == ibf_opds[i]));
-            assign stg_opd_busy[i] = stg_used_rs[i] && inuse_regs[stg_opds[i]]
-                                  && ~(wb_release && (writeback_if.data.rd == stg_opds[i]));
-        end
-        wire ibf_busy  = | ibf_opd_busy;
-        wire stg_busy  = | stg_opd_busy;
-        wire ibf_xbusy = | (wb_inuse_xregs & ibf_xregs_mask);
-        wire stg_xbusy = | (wb_inuse_xregs & stg_xregs_mask);
-
-        // On fire the staging instr also reserves its rd and wr_xregs. Its
-        // successor sees that reservation only through a register it names,
-        // and a lone staging instr always names its own rd.
-        wire [NUM_OPDS-1:0] ibf_reads_rd;
-        for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_ibf_reads_rd
-            assign ibf_reads_rd[i] = ibf_used_rs[i] && (ibf_opds[i] == stg_opds[0]);
-        end
-        wire stg_rsv_rd = staging_if[w].data.wb;
-        wire ibf_rsv    = (stg_rsv_rd && (| ibf_reads_rd))
-                       || (| (staging_if[w].data.wr_xregs & ibf_xregs_mask));
-        wire stg_rsv    = stg_rsv_rd
-                       || (| (staging_if[w].data.wr_xregs & stg_xregs_mask));
-
-        wire hold_ibf = ibuffer_if[w].valid && ~staging_if[w].valid;
-        wire fire_ibf = ibuffer_if[w].valid;
-
-        wire hold_busy = hold_ibf ? (ibf_busy || ibf_xbusy)
-                                  : (stg_busy || stg_xbusy);
-        wire fire_busy = fire_ibf ? (ibf_busy || ibf_xbusy || ibf_rsv)
-                                  : (stg_busy || stg_xbusy || stg_rsv);
-
-        wire ibf_goingfull = fu_goingfull[ibuffer_if[w].data.ex_type];
-        wire stg_goingfull = fu_goingfull[staging_if[w].data.ex_type];
-
-        wire hold_ready = ~hold_busy && ~(hold_ibf ? ibf_goingfull : stg_goingfull);
-        wire fire_ready = ~fire_busy && ~(fire_ibf ? ibf_goingfull : stg_goingfull);
-
-        wire operands_ready_n = staging_fire ? fire_ready : hold_ready;
-        reg operands_ready_r;
-
-    `ifdef SIMULATION
-        // Per-operand busy view of the selected outcome, for the stall trace.
-        wire [NUM_REGS-1:0] regs_mask = ibuffer_fire ? ibf_regs_mask : stg_regs_mask;
-        wire [REG_TYPES-1:0][RV_REGS-1:0] in_use_mask = inuse_regs_n & regs_mask;
-        wire [NUM_OPDS-1:0] operands_busy;
-        for (genvar i = 0; i < NUM_OPDS; ++i) begin : g_operands_busy
-            wire [REG_TYPE_BITS-1:0] rtype = get_reg_type(stg_opds[i]);
-            assign operands_busy[i] = | (in_use_mask[rtype] & stg_opd_mask[i][rtype]);
-        end
-        wire xregs_busy = | (inuse_xregs_n & (ibuffer_fire ? ibf_xregs_mask : stg_xregs_mask));
-        `UNUSED_VAR (xregs_busy)
-    `else
-        `UNUSED_VAR (ibuffer_fire)
-        `UNUSED_VAR ({ibf_regs_mask, stg_regs_mask})
-    `endif
-
-        always @(posedge clk) begin
-            if (reset) begin
-                inuse_regs  <= '0;
-                inuse_xregs <= '0;
-            end else begin
-                inuse_regs  <= inuse_regs_n;
-                inuse_xregs <= inuse_xregs_n;
-            end
-            operands_ready_r <= operands_ready_n;
-        end
-
-        assign operands_ready[w] = operands_ready_r;
-
-    `ifdef SIMULATION
-        reg [31:0] timeout_ctr;
-
-        always @(posedge clk) begin
-            if (reset) begin
-                timeout_ctr <= '0;
-            end else begin
-                if (staging_if[w].valid && ~staging_if[w].ready) begin
-                `ifdef DBG_TRACE_PIPELINE
-                    `TRACE(4, ("%t: *** %s-stall: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, opds_busy=%b, xregs_busy=%b (#%0d)\n",
-                        $time, INSTANCE_ID, w, to_fullPC(staging_if[w].data.PC), staging_if[w].data.tmask, timeout_ctr,
-                        operands_busy, xregs_busy, staging_if[w].data.uuid))
-                `endif
-                    timeout_ctr <= timeout_ctr + 1;
-                end else if (ibuffer_fire) begin
-                    timeout_ctr <= '0;
-                end
-            end
-        end
-
-        `RUNTIME_ASSERT((timeout_ctr < STALL_TIMEOUT),
-            ("timeout: wid=%0d, PC=0x%0h, tmask=%b, cycles=%0d, inuse=%b (#%0d)",
-                w, to_fullPC(staging_if[w].data.PC), staging_if[w].data.tmask, timeout_ctr,
-                operands_busy, staging_if[w].data.uuid))
-
-        `RUNTIME_ASSERT(~(writeback_fire && writeback_if.data.wb) || inuse_regs[writeback_if.data.rd] != 0,
-            ("invalid writeback register: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d (#%0d)",
-                w, to_fullPC(writeback_if.data.PC), writeback_if.data.tmask, writeback_if.data.rd, writeback_if.data.uuid))
-
-        `RUNTIME_ASSERT(~writeback_fire || ((writeback_if.data.wr_xregs & ~inuse_xregs) == '0),
-            ("invalid writeback special register: wid=%0d, PC=0x%0h, tmask=%b, xregs=%b (#%0d)",
-                w, to_fullPC(writeback_if.data.PC), writeback_if.data.tmask, writeback_if.data.wr_xregs, writeback_if.data.uuid))
-    `endif
-
+        VX_scoreboard_table #(
+            .INSTANCE_ID (INSTANCE_ID)
+        ) inuse_table (
+            .clk            (clk),
+            .reset          (reset),
+            .wid            (ISSUE_WIS_W'(w)),
+            .fu_goingfull   (fu_goingfull),
+            .ibf_valid      (ibuffer_if[w].valid),
+            .ibf_ready      (ibuffer_if[w].ready),
+            .ibf_data       (ibuffer_if[w].data),
+            .stg_valid      (staging_if[w].valid),
+            .stg_ready      (staging_if[w].ready),
+            .stg_data       (staging_if[w].data),
+            .wb_valid       (writeback_if.valid),
+            .wb_eop         (writeback_if.data.eop_wis[w]),
+            .wb_wb          (writeback_if.data.wb),
+            .wb_rd          (writeback_if.data.rd),
+            .wb_rd_onehot   (wb_rd_onehot),
+            .wb_wr_xregs    (writeback_if.data.wr_xregs),
+            .wb_PC          (writeback_if.data.PC),
+            .wb_tmask       (writeback_if.data.tmask),
+            .wb_uuid        (writeback_if.data.uuid),
+            .operands_ready (operands_ready[w])
+        );
     end
 
     wire [PER_ISSUE_WARPS-1:0] arb_valid_in;
