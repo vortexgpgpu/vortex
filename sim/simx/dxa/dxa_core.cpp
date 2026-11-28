@@ -721,6 +721,12 @@ private:
 
     constexpr uint64_t kRowMask = ~uint64_t(DxaCore::LMEM_ROW_SIZE - 1);
     uint64_t beat_row = UINT64_MAX;
+  #ifdef VX_CFG_DXA_SCATTER_COALESCE
+    // Each LMEM DMA channel takes one block write per beat; a tiled scatter
+    // beat ends at beat_e_end, the first element past its run.
+    uint32_t used_halves = 0;
+    uint32_t beat_e_end  = UINT32_MAX;
+  #endif
 
     for (uint32_t emitted = 0; emitted < DxaCore::LMEM_PORTS_PER_CORE; ++emitted) {
       slot = w.drain_slot;
@@ -787,6 +793,12 @@ private:
       if (lmem_ch.full()) {
         break; // backpressure
       }
+    #ifdef VX_CFG_DXA_SCATTER_COALESCE
+      if ((used_halves >> half) & 1u) {
+        break; // this row half's channel already carries a write this beat
+      }
+      used_halves |= (1u << half);
+    #endif
 
       // Build LMEM MemReq with TLM payload.
       MemReq req;
@@ -801,7 +813,28 @@ private:
 
       // A contiguous span is one write; a scatter span writes element e0.
       const bool     beat_scatter = lw.scatter;
+    #ifdef VX_CFG_DXA_SCATTER_COALESCE
+      // Tiled (Flat/BlockMajor) destinations advance by a power-of-two step
+      // (Flat only within an n-block), so a beat carries the run of
+      // consecutive elements that land in this LMEM row, as the RTL drains
+      // it; K-major keeps one element per beat. The loop below also stops at
+      // the end of this block.
+      const bool coalesce = beat_scatter && tiled;
+      if (beat_e_end == UINT32_MAX) {
+        beat_e_end = num_elems;
+        if (beat_scatter && !tiled) {
+          beat_e_end = e0 + 1;
+        } else if (coalesce && DestLayout(lw.dest_layout) == DestLayout::Flat) {
+          uint32_t n_in = (lw.tile_n_base + e0) % t_tcN;
+          beat_e_end = std::min(num_elems, e0 + (t_tcN - n_in));
+        }
+      } else if (e0 >= beat_e_end) {
+        break; // the run ended at an n-block boundary
+      }
+      const uint32_t e_end = beat_scatter ? std::min(num_elems, beat_e_end) : num_elems;
+    #else
       const uint32_t e_end = beat_scatter ? (e0 + 1) : num_elems;
+    #endif
       uint32_t ee = e0;
       for (; ee < e_end; ++ee) {
         uint64_t dest_byte = dest_byte_of(ee);
@@ -868,9 +901,18 @@ private:
           w.drain_slot = UINT32_MAX;
         }
       }
+    #ifndef VX_CFG_DXA_SCATTER_COALESCE
       if (beat_scatter) {
         break; // a scatter beat writes one element
       }
+    #else
+      // A coalesced run goes on to its next block if that lies in the same
+      // LMEM row and on a free channel (checked above); it never spans two
+      // lines or two multicast receivers.
+      if (beat_scatter && (!coalesce || is_last_elem)) {
+        break;
+      }
+    #endif
     } // per-tick row-beat emission loop
   }
 

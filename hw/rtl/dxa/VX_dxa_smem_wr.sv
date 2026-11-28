@@ -197,6 +197,21 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         intra_klo_mask_q <= (16'd1 << (is_flat_w ? lg_ratio_q : lg_bkK_q)) - 16'd1;
         esize_q          <= esize;
     end
+`ifdef VX_CFG_DXA_SCATTER_COALESCE
+    // Per-transfer coalescing constants (see the coalesced drain below).
+    reg [3:0]                 co_lg_k_q;      // log2(step / elem_bytes)
+    reg [DXA_SMEM_ADDR_W-1:0] co_inc_const_q; // Flat: wrap - step; BlockMajor: 0
+    reg [FILL_W-1:0]          co_cap_full_q;  // bytes in a beat after a CL's first
+    always @(posedge clk) begin
+        co_lg_k_q      <= is_flat_w ? lg_ratio_q : lg_bkK_q;
+        co_inc_const_q <= is_flat_w ? (DXA_SMEM_ADDR_W'(wrap_elems_w << step_sh_w) - (DXA_SMEM_ADDR_W'(1) << step_sh_w)) : '0;
+        // A whole word: BlockMajor word/bkK bytes (one element per step group,
+        // at least one element); Flat one n-block, tcN elements.
+        co_cap_full_q  <= is_flat_w ? (FILL_W'(tcn_mask_w + 16'd1) << esize)
+                        : ((step_sh_w >= 5'(SMEM_OFF_W)) ? FILL_W'(elem_bytes_q)
+                                                         : FILL_W'(SMEM_WORD_SIZE >> lg_bkK_q));
+    end
+`endif
 
     // ════════════════════════════════════════════════════════════════════
     // Cfill replication (for OOB CLs)
@@ -289,7 +304,17 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire has_full_word    = (fb_level_r >= drain_q_bytes);
     wire has_last_partial = !scatter && !has_full_word && (fb_level_r > 0);
     wire drain_valid      = fb_active_r && (has_full_word || has_last_partial);
+`ifdef VX_CFG_DXA_SCATTER_COALESCE
+    // A coalesced beat drains min(fb_level_r, cap) bytes; cap is registered
+    // (first beat of a CL vs a full word), so the size test stays shallow.
+    reg               co_first_r;
+    reg  [FILL_W-1:0] co_cap_first_r;
+    wire [FILL_W-1:0] co_cap = co_first_r ? co_cap_first_r : co_cap_full_q;
+    wire co_en = scatter && dest_tiled;
+    wire drain_will_empty = (fb_level_r <= (co_en ? co_cap : drain_q_bytes));
+`else
     wire drain_will_empty = (fb_level_r <= drain_q_bytes);
+`endif
 
     wire smem_wr_ready_internal;
     wire drain_fire = drain_valid && smem_wr_ready_internal;
@@ -316,8 +341,61 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [SMEM_DATAW-1:0] km_elem_data_shifted =
         SMEM_DATAW'(km_elem_bytes_slice) << ({3'b000, km_in_word_off} << 3);
 
+`ifdef VX_CFG_DXA_SCATTER_COALESCE
+    // Coalesced tiled drain: a beat carries the run of consecutive elements
+    // that land in the current SMEM word. Tiled destinations advance by a
+    // power-of-two step (Flat only within an n-block, whose end also ends the
+    // run), so the run is the window at the read pointer spread to that step
+    // and shifted to the in-word offset of its first element. An element never
+    // straddles a step group (its in-group offset is r_in*elem_bytes), so the
+    // run never straddles the word.
+    localparam CO_WIN_BYTES = (CL_SIZE < SMEM_WORD_SIZE) ? CL_SIZE : SMEM_WORD_SIZE;
+
+    // Runs are regular: BlockMajor puts one element per step group, so after a
+    // CL's first beat every beat fills a whole word (word/step elements);
+    // Flat runs are n-blocks of tcN elements, step-aligned within a word.
+    wire [4:0] co_lg_step = intra_n_sh_q;  // log2(step bytes), per transfer
+    wire [FILL_W-1:0] co_bytes = (fb_level_r < co_cap) ? fb_level_r : co_cap;
+    // Next element's destination: a BlockMajor beat ends at a word boundary
+    // (+bytes*bkK lands on the next word at the same step offset); a Flat beat
+    // ends an n-block (+bytes*ratio, less one step, plus the wrap step).
+    wire [DXA_SMEM_ADDR_W-1:0] co_addr_inc =
+        (DXA_SMEM_ADDR_W'(co_bytes) << co_lg_k_q) + co_inc_const_q;
+
+    // Spread: stage u moves each 2^u-byte block from 2^u*i to 2^(u+1)*i; the
+    // stages from log2(elem_bytes) to log2(step) take element i to step*i.
+    wire [SMEM_OFF_W:0][SMEM_DATAW-1:0]     co_sd;
+    wire [SMEM_OFF_W:0][SMEM_WORD_SIZE-1:0] co_sm;
+    assign co_sd[0] = SMEM_DATAW'(fb_data_r[km_rd_bit +: CO_WIN_BYTES*8]);
+    for (genvar j = 0; j < SMEM_WORD_SIZE; ++j) begin : g_co_mask
+        assign co_sm[0][j] = (FILL_W'(j) < co_bytes);
+    end
+    for (genvar u = 0; u < SMEM_OFF_W; ++u) begin : g_co_spread
+        wire co_stage_en = (5'(u) >= 5'(esize_q)) && (5'(u) < co_lg_step);
+        wire [SMEM_DATAW-1:0]     sd;
+        wire [SMEM_WORD_SIZE-1:0] sm;
+        for (genvar j = 0; j < SMEM_WORD_SIZE; ++j) begin : g_byte
+            localparam integer SRC = ((j >> (u + 1)) << u) + (j & ((1 << (u + 1)) - 1));
+            if ((j & ((1 << (u + 1)) - 1)) < (1 << u)) begin : g_keep
+                assign sd[j*8 +: 8] = co_sd[u][SRC*8 +: 8];
+                assign sm[j]        = co_sm[u][SRC];
+            end else begin : g_gap
+                assign sd[j*8 +: 8] = 8'd0;
+                assign sm[j]        = 1'b0;
+            end
+        end
+        assign co_sd[u+1] = co_stage_en ? sd : co_sd[u];
+        assign co_sm[u+1] = co_stage_en ? sm : co_sm[u];
+    end
+    wire [SMEM_DATAW-1:0]     co_word_data   = co_sd[SMEM_OFF_W] << {km_in_word_off, 3'b000};
+    wire [SMEM_WORD_SIZE-1:0] co_word_byteen = co_sm[SMEM_OFF_W] << km_in_word_off;
+
+    wire [SMEM_DATAW-1:0] fb_word_data = scatter ? (co_en ? co_word_data : km_elem_data_shifted)
+                                                 : fb_data_r[SMEM_DATAW-1:0];
+`else
     wire [SMEM_DATAW-1:0] fb_word_data = scatter ? km_elem_data_shifted
                                                  : fb_data_r[SMEM_DATAW-1:0];
+`endif
 
     // K-major byteen: `elem_bytes` contiguous bytes at km_in_word_off.
     wire [SMEM_WORD_SIZE-1:0] km_elem_mask_raw =
@@ -334,7 +412,11 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             assign rm_byteen[i] = byte_has_data;
         end
     end
+`ifdef VX_CFG_DXA_SCATTER_COALESCE
+    wire [SMEM_WORD_SIZE-1:0] fb_word_byteen = scatter ? (co_en ? co_word_byteen : km_byteen) : rm_byteen;
+`else
     wire [SMEM_WORD_SIZE-1:0] fb_word_byteen = scatter ? km_byteen : rm_byteen;
+`endif
 
     // ════════════════════════════════════════════════════════════════════
     // sw-channel accept + load scheduling
@@ -402,6 +484,17 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [15:0]                fb_load_n_in            = use_pend_for_fb ? pend_n_in_r : defer_n_in_r;
 
     wire [SMEM_OFF_W-1:0]      new_smem_byte_off = fb_load_smem_byte_addr[SMEM_OFF_W-1:0];
+`ifdef VX_CFG_DXA_SCATTER_COALESCE
+    // First beat of a CL: BlockMajor runs from the first element's step group
+    // to the end of its word; Flat from its n-block phase to the n-block end.
+    wire [SMEM_OFF_W-1:0] co_load_off   = fb_load_dest_addr[SMEM_OFF_W-1:0];
+    wire [SMEM_OFF_W:0]   co_load_grp   = (SMEM_OFF_W+1)'(co_load_off) & ~((SMEM_OFF_W+1)'(tiled_step_q) - (SMEM_OFF_W+1)'(1));
+    wire [FILL_W-1:0]     co_load_room  = FILL_W'(SMEM_WORD_SIZE) - FILL_W'(co_load_grp);
+    wire [FILL_W-1:0]     co_load_cap_first = is_flat_w
+        ? (FILL_W'((tcn_mask_q - fb_load_n_in) + 16'd1) << esize_q)
+        : ((intra_n_sh_q >= 5'(SMEM_OFF_W)) ? FILL_W'(elem_bytes_q)
+                                            : (co_load_room >> co_lg_k_q));
+`endif
     wire [SMEM_ADDR_WIDTH-1:0] new_start_word    = SMEM_ADDR_WIDTH'(fb_load_smem_byte_addr >> SMEM_OFF_W);
     //   Row-major fill level = leading-offset padding + valid bytes.
     //   K-major fill level   = exactly valid_length (each elem drained alone).
@@ -489,9 +582,21 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             fb_n_wrap_r      <= 1'b0;
             fb_tag_r         <= '0;
             fb_last_r        <= 1'b0;
+        `ifdef VX_CFG_DXA_SCATTER_COALESCE
+            co_first_r       <= 1'b0;
+            co_cap_first_r   <= '0;
+        `endif
         end else begin
             // ── Drain advance (mid-CL beat) ──
             if (drain_fire && ~drain_will_empty) begin
+            `ifdef VX_CFG_DXA_SCATTER_COALESCE
+                if (co_en) begin
+                    km_rd_off_r    <= km_rd_off_r + CL_OFF_BITS'(co_bytes);
+                    fb_level_r     <= fb_level_r - co_bytes;
+                    fb_byte_addr_r <= fb_byte_addr_r + co_addr_inc;
+                    co_first_r     <= 1'b0;
+                end else
+            `endif
                 if (scatter) begin
                     // Read pointer advances; fb_data_r is NOT shifted. K-major
                     // strides the dest uniformly; tiled advances it by the
@@ -528,6 +633,10 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 fb_tag_r         <= fb_load_tag;
                 fb_last_r        <= fb_load_last;
                 fb_active_r      <= 1'b1;
+            `ifdef VX_CFG_DXA_SCATTER_COALESCE
+                co_first_r       <= 1'b1;
+                co_cap_first_r   <= co_load_cap_first;
+            `endif
             end else if (drain_emptying_now) begin
                 fb_data_r   <= '0;
                 fb_level_r  <= '0;
