@@ -1,12 +1,12 @@
 {
   "vm": {
     "clock_mhz": 250,
-    "config_hash": "c2b42591a2ccef18",
+    "config_hash": "f85d1aba38818071",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_CORES=2",
     "dut": "vm",
     "result": {
       "bram": 159.0,
-      "build_time_s": 40,
+      "build_time_s": 55,
       "deep_endpoints": 3153,
       "deepest_paths": [
         "21  ptw/rsp_arb/g_input_select.g_arbiter.g_out_buf_0.out_buf/g_eb2.stream_buffer/g_buffer.buffer_r[30] -> l2tlb/set_mru_r.d[2]",
@@ -21,17 +21,17 @@
         "21  ptw/rsp_arb/g_input_select.g_arbiter.g_out_buf_0.out_buf/g_eb2.stream_buffer/g_buffer.buffer_r[30] -> l2tlb/set_mru_r.d[19]"
       ],
       "dsp": 0,
-      "endpoints": 156743,
+      "endpoints": 156749,
       "env": {
         "beacon": "beacon 4060e3af4",
-        "circt": "CIRCT ab733d13d",
+        "circt": "CIRCT 90c5fd313",
         "device": "xcu55c-fsvh2892-2L-e",
         "xlen": 32
       },
-      "ff": 150728,
+      "ff": 150739,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 192593,
+      "lut": 192639,
       "lutram": 13996,
       "max_levels": 21,
       "pred_fmax_mhz": 251.5,
@@ -137,6 +137,7 @@
         "l2tlb/lookup_pipe/g_register_g_pipe_regs_*_pipe_register": 11,
         "l2tlb/mega": 13,
         "l2tlb/mshr": 12,
+        "l2tlb/mshr/issue_buf/g_register_g_pipe_regs_*_pipe_register": 9,
         "l2tlb/mshr/reqpool": 12,
         "l2tlb/rsp_arb/g_input_select_g_arbiter_arbiter/g_round_robin_rr_arbiter": 9,
         "l2tlb/rsp_arb/g_input_select_g_arbiter_g_out_buf_*_out_buf/g_eb2_stream_buffer": 10,
@@ -145,7 +146,7 @@
         "tlb_cluster_arb/g_arb_req_arb/g_input_select_g_arbiter_g_out_buf_*_out_buf/g_eb2_stream_buffer": 10
       },
       "uram": 0,
-      "watch_endpoints": 24432,
+      "watch_endpoints": 24458,
       "watch_levels": 8
     }
   }

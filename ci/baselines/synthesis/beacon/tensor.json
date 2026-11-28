@@ -1,18 +1,7 @@
 {
   "tcu": {
-    "accepted": {
-      "against": "2221ee286312a48673d11f32257a664fcfb5a34c",
-      "regressions": [
-        {
-          "after": 16,
-          "before": null,
-          "kind": "new",
-          "name": "tcu_shared/wgmma/tbuf/bbuf/km_word_off_req_r.d"
-        }
-      ]
-    },
     "clock_mhz": 300,
-    "config_hash": "05869d786de11e57",
+    "config_hash": "5e2fd380287c364a",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_TCU_FP16_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DVX_CFG_TCU_INT8_ENABLE -DVX_CFG_TCU_INT4_ENABLE -DVX_CFG_TCU_TF32_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE",
     "dut": "tcu",
     "result": {
@@ -20,33 +9,33 @@
       "build_time_s": 50,
       "deep_endpoints": 2307,
       "deepest_paths": [
-        "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[6]",
-        "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[9]",
-        "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[10]",
-        "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[11]",
-        "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[12]",
-        "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[13]",
-        "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[14]",
-        "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[15]",
-        "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[16]",
-        "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[17]"
+        "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[14]",
+        "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[17]",
+        "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[18]",
+        "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[19]",
+        "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[20]",
+        "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[21]",
+        "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[22]",
+        "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.pe/fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.pe/fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[14]",
+        "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.pe/fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.pe/fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[17]",
+        "25  tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.pe/fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.pe/fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[18]"
       ],
       "dsp": 513,
-      "endpoints": 41865,
+      "endpoints": 41353,
       "env": {
         "beacon": "beacon 4060e3af4",
-        "circt": "CIRCT ab733d13d",
+        "circt": "CIRCT 90c5fd313",
         "device": "xcu55c-fsvh2892-2L-e",
         "xlen": 32
       },
       "ff": 44482,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 117210,
+      "lut": 117340,
       "lutram": 2083,
       "max_levels": 25,
-      "pred_fmax_mhz": 277.6,
-      "risk_endpoints": 17,
+      "pred_fmax_mhz": 266.9,
+      "risk_endpoints": 33,
       "tied_bits": 0,
       "tied_ports": [],
       "units": {
@@ -54,13 +43,13 @@
         "tcu_shared/wgmma/tbuf/bbuf": 16,
         "tcu_shared/wgmma/tbuf/g_abufs_*_abuf": 11,
         "tcu_unit/g_blocks_*_tcu_block/tcu_core": 10,
-        "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/pipe_acc": 15,
-        "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/pipe_aln/g_merged_pipe_merged": 9,
-        "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/pipe_mul/g_merged_pipe_merged": 11,
-        "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/pipe_norm_round": 25,
-        "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/shared_mul/g_mul_f8_sf_*_mul_f8/g_lane_*_pipe_ctrl": 8,
-        "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/shared_mul/pipe_seam": 13,
-        "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_pipe_fedp": 9,
+        "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_pe/fedp/pipe_acc": 15,
+        "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_pe/fedp/pipe_aln/g_merged_pipe_merged": 9,
+        "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_pe/fedp/pipe_mul/g_merged_pipe_merged": 11,
+        "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_pe/fedp/pipe_norm_round": 25,
+        "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_pe/fedp/shared_mul/g_mul_f8_sf_*_mul_f8/g_lane_*_pipe_ctrl": 8,
+        "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_pe/fedp/shared_mul/pipe_seam": 14,
+        "tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_pe/pipe_fedp": 8,
         "tcu_unit/g_blocks_*_tcu_block/tcu_core/landq_credits": 12,
         "tcu_unit/g_blocks_*_tcu_block/tcu_core/mdata_queue": 11,
         "tcu_unit/g_blocks_*_tcu_block/tcu_core/mdata_queue/g_depth_n_dp_ram": 9,
@@ -68,47 +57,47 @@
         "tcu_unit/lane_dispatch/g_blocks_*_buf_out/g_eb2_stream_buffer": 10
       },
       "uram": 0,
-      "watch_endpoints": 13718,
+      "watch_endpoints": 14214,
       "watch_levels": 8
     }
   },
   "tensor": {
     "clock_mhz": 250,
-    "config_hash": "8879cc0588d4ab38",
+    "config_hash": "63a1e63bc4311d40",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "tensor",
     "result": {
       "bram": 114.5,
-      "build_time_s": 65,
+      "build_time_s": 91,
       "deep_endpoints": 4761,
       "deepest_paths": [
-        "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[14]",
-        "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[17]",
-        "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[18]",
-        "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[19]",
-        "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[20]",
-        "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[21]",
-        "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[22]",
-        "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[14]",
-        "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[17]",
-        "25  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_1.fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[18]"
+        "24  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[0]",
+        "24  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[1]",
+        "24  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[2]",
+        "24  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[3]",
+        "24  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[4]",
+        "24  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[5]",
+        "24  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[6]",
+        "24  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[7]",
+        "24  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[8]",
+        "24  g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_acc/g_pipe.g_no_reset.pipe[39] -> g_cores_0.tcu_unit/g_blocks_0.tcu_block/tcu_core/g_i_0.g_j_0.pe/fedp/pipe_norm_round/g_pipe.g_no_reset.pipe.d[9]"
       ],
       "dsp": 267,
-      "endpoints": 170669,
+      "endpoints": 170157,
       "env": {
         "beacon": "beacon 4060e3af4",
-        "circt": "CIRCT ab733d13d",
+        "circt": "CIRCT 90c5fd313",
         "device": "xcu55c-fsvh2892-2L-e",
         "xlen": 32
       },
       "ff": 161545,
       "fix_levels": 12,
       "interfaces": {},
-      "lut": 259890,
+      "lut": 260380,
       "lutram": 12675,
-      "max_levels": 25,
+      "max_levels": 24,
       "pred_fmax_mhz": 253.4,
-      "risk_endpoints": 411,
+      "risk_endpoints": 379,
       "tied_bits": 4,
       "tied_ports": [
         {
@@ -153,16 +142,16 @@
         "g_cores_*_mem_unit/g_lmem_dma_dxa_completion_detect/compl_fifo": 9,
         "g_cores_*_mem_unit/g_lmem_dma_dxa_completion_detect/compl_fifo/pending_size": 10,
         "g_cores_*_mem_unit/lmem_unit/engine_a": 9,
-        "g_cores_*_mem_unit/lmem_unit/g_data_store_*_g_single_port_lmem_store": 9,
+        "g_cores_*_mem_unit/lmem_unit/g_data_store_*_bank/g_single_port_lmem_store": 9,
         "g_cores_*_tcu_shared/wgmma": 12,
         "g_cores_*_tcu_shared/wgmma/tbuf/bbuf": 16,
         "g_cores_*_tcu_shared/wgmma/tbuf/bbuf/storage_a_ram": 10,
         "g_cores_*_tcu_shared/wgmma/tbuf/g_abufs_*_abuf": 15,
         "g_cores_*_tcu_unit/g_blocks_*_tcu_block/tcu_core": 11,
-        "g_cores_*_tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/pipe_acc": 15,
-        "g_cores_*_tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/pipe_aln/g_merged_pipe_merged": 9,
-        "g_cores_*_tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/pipe_norm_round": 25,
-        "g_cores_*_tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_fedp/shared_mul/pipe_seam": 11,
+        "g_cores_*_tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_pe/fedp/pipe_acc": 15,
+        "g_cores_*_tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_pe/fedp/pipe_aln/g_merged_pipe_merged": 9,
+        "g_cores_*_tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_pe/fedp/pipe_norm_round": 24,
+        "g_cores_*_tcu_unit/g_blocks_*_tcu_block/tcu_core/g_i_*_g_j_*_pe/fedp/shared_mul/pipe_seam": 10,
         "g_cores_*_tcu_unit/g_blocks_*_tcu_block/tcu_core/landq_credits": 12,
         "g_cores_*_tcu_unit/g_blocks_*_tcu_block/tcu_core/mdata_queue": 12,
         "g_cores_*_tcu_unit/g_blocks_*_tcu_block/tcu_core/mdata_queue/g_depth_n_dp_ram": 10,
@@ -198,7 +187,7 @@
         "l2cache/g_cache_cache/g_core_req_skid_*_req_skid": 9
       },
       "uram": 0,
-      "watch_endpoints": 26352,
+      "watch_endpoints": 25264,
       "watch_levels": 8
     }
   }

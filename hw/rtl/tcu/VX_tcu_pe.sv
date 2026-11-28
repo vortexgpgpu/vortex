@@ -51,7 +51,9 @@ module VX_tcu_pe import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // read by the debug traces only
     input wire                          array_issue,
-    input tcu_header_t                  header,
+    input wire [UUID_WIDTH-1:0]         uuid,
+    input wire [NW_WIDTH-1:0]           wid,
+    input wire [NCTA_WIDTH-1:0]         cta_id,
     input wire [3:0]                    step_m,
     input wire [3:0]                    step_n,
     input wire [ROW_W-1:0]              row_i,
@@ -61,7 +63,7 @@ module VX_tcu_pe import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (FEDP_SF)
-    `UNUSED_VAR ({array_issue, header, step_m, step_n, row_i, col_j})
+    `UNUSED_VAR ({array_issue, uuid, wid, cta_id, step_m, step_n, row_i, col_j})
 
     wire [FEDP_K-1:0][31:0] b_col;
 
@@ -91,7 +93,7 @@ module VX_tcu_pe import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         if (array_issue && is_sparse) begin
             for (int kk = 0; kk < TCU_TC_K; ++kk) begin
                 $write("GATHER,%0d,%0d,%0d,%0d,%0d,0x%08h,0x%08h,?,?,0x%08h\n",
-                    header.wid, step_m, step_n,
+                    wid, step_m, step_n,
                     row_i, int'(col_j)*TCU_TC_K + kk,
                     b_col_1[kk], b_col_2[kk], b_col_sparse[kk]);
             end
@@ -260,11 +262,11 @@ module VX_tcu_pe import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `ifdef DBG_TRACE_TCU
     always @(posedge clk) begin
         if (array_issue) begin
-            `TRACE(3, ("%t: %s FEDP-enq: wid=%0d, cta_id=%0d, i=%0d, j=%0d, m=%0d, n=%0d, a_row=", $time, INSTANCE_ID, header.wid, header.cta_id, row_i, col_j, step_m, step_n))
+            `TRACE(3, ("%t: %s FEDP-enq: wid=%0d, cta_id=%0d, i=%0d, j=%0d, m=%0d, n=%0d, a_row=", $time, INSTANCE_ID, wid, cta_id, row_i, col_j, step_m, step_n))
             `TRACE_ARRAY1D(2, "0x%0h", a_row, FEDP_K)
             `TRACE(3, (", b_col="));
             `TRACE_ARRAY1D(2, "0x%0h", b_col, FEDP_K)
-            `TRACE(3, (", c_val=0x%0h (#%0d)\n", c_val, header.uuid));
+            `TRACE(3, (", c_val=0x%0h (#%0d)\n", c_val, uuid));
         end
     end
 `endif

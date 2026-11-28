@@ -1,12 +1,12 @@
 {
   "dxa": {
     "clock_mhz": 300,
-    "config_hash": "81e17d8fd4f39432",
+    "config_hash": "85b9b5b5bf269162",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "dxa",
     "result": {
       "bram": 0.0,
-      "build_time_s": 10,
+      "build_time_s": 15,
       "deep_endpoints": 2081,
       "deepest_paths": [
         "15  dxa_core/g_workers_0.worker/addr_gen/gmem_cursor_r[0] -> dxa_core/g_workers_0.worker/addr_gen/smem_byte_addr_r.d[8]",
@@ -24,7 +24,7 @@
       "endpoints": 11408,
       "env": {
         "beacon": "beacon 4060e3af4",
-        "circt": "CIRCT ab733d13d",
+        "circt": "CIRCT 90c5fd313",
         "device": "xcu55c-fsvh2892-2L-e",
         "xlen": 32
       },

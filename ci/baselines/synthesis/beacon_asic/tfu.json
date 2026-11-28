@@ -1,16 +1,16 @@
 {
   "tfu": {
     "clock_mhz": 1000,
-    "config_hash": "922adf0806d7b31e",
+    "config_hash": "178f8d77a6269e68",
     "configs": "",
     "dut": "tfu",
     "result": {
-      "build_time_s": 10,
+      "build_time_s": 15,
       "cells": 15150,
       "endpoints": 2340,
       "env": {
         "beacon": "beacon 4060e3af4",
-        "circt": "CIRCT ab733d13d",
+        "circt": "CIRCT 90c5fd313",
         "pdk": "asap7",
         "xlen": 32
       },

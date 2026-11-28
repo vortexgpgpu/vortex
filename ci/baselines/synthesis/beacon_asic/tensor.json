@@ -1,25 +1,25 @@
 {
   "tcu": {
     "clock_mhz": 1000,
-    "config_hash": "c28f4e9dfe759863",
+    "config_hash": "8c7019c964989df5",
     "configs": "",
     "dut": "tcu",
     "result": {
-      "build_time_s": 65,
-      "cells": 1309038,
-      "endpoints": 44425,
+      "build_time_s": 105,
+      "cells": 1306990,
+      "endpoints": 43913,
       "env": {
         "beacon": "beacon 4060e3af4",
-        "circt": "CIRCT ab733d13d",
+        "circt": "CIRCT 90c5fd313",
         "pdk": "asap7",
         "xlen": 32
       },
       "ff": 66554,
-      "fmax_mhz": 893.7,
+      "fmax_mhz": 913.2,
       "macros": 0,
-      "max_stages": 37,
+      "max_stages": 36,
       "overhead_ps": 231,
-      "period_ps": 1119,
+      "period_ps": 1095,
       "stage_ps": 24,
       "tied_bits": 0,
       "tied_ports": []
@@ -27,16 +27,16 @@
   },
   "tensor": {
     "clock_mhz": 1000,
-    "config_hash": "6af5784a4bffd332",
+    "config_hash": "01f9fdb6826efe3c",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "tensor",
     "result": {
-      "build_time_s": 55,
-      "cells": 860482,
-      "endpoints": 89490,
+      "build_time_s": 80,
+      "cells": 860566,
+      "endpoints": 89362,
       "env": {
         "beacon": "beacon 4060e3af4",
-        "circt": "CIRCT ab733d13d",
+        "circt": "CIRCT 90c5fd313",
         "pdk": "asap7",
         "xlen": 32
       },

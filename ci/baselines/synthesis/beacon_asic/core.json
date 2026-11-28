@@ -1,16 +1,16 @@
 {
   "cache": {
     "clock_mhz": 1000,
-    "config_hash": "2299e406c8761fcb",
+    "config_hash": "29d5b3f25ae608c6",
     "configs": "",
     "dut": "cache",
     "result": {
-      "build_time_s": 20,
+      "build_time_s": 25,
       "cells": 282045,
       "endpoints": 32477,
       "env": {
         "beacon": "beacon 4060e3af4",
-        "circt": "CIRCT ab733d13d",
+        "circt": "CIRCT 90c5fd313",
         "pdk": "asap7",
         "xlen": 32
       },
@@ -27,16 +27,16 @@
   },
   "core": {
     "clock_mhz": 1000,
-    "config_hash": "892336cc3d59267e",
+    "config_hash": "a67f8f50e6ef6b69",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "core",
     "result": {
-      "build_time_s": 30,
-      "cells": 744108,
+      "build_time_s": 50,
+      "cells": 745488,
       "endpoints": 66017,
       "env": {
         "beacon": "beacon 4060e3af4",
-        "circt": "CIRCT ab733d13d",
+        "circt": "CIRCT 90c5fd313",
         "pdk": "asap7",
         "xlen": 32
       },
@@ -64,16 +64,16 @@
   },
   "lmem": {
     "clock_mhz": 1000,
-    "config_hash": "5c570bf3ee13b525",
+    "config_hash": "eecee44477eae0fb",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_A_ENABLE",
     "dut": "lmem",
     "result": {
-      "build_time_s": 15,
-      "cells": 120238,
+      "build_time_s": 25,
+      "cells": 120296,
       "endpoints": 18134,
       "env": {
         "beacon": "beacon 4060e3af4",
-        "circt": "CIRCT ab733d13d",
+        "circt": "CIRCT 90c5fd313",
         "pdk": "asap7",
         "xlen": 32
       },
@@ -96,22 +96,22 @@
   },
   "top": {
     "clock_mhz": 1000,
-    "config_hash": "c428bc0aa4bab064",
+    "config_hash": "e9d0d44e605f9783",
     "configs": "-DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4",
     "dut": "top",
     "result": {
-      "build_time_s": 45,
-      "cells": 1397739,
-      "endpoints": 167852,
+      "build_time_s": 75,
+      "cells": 1337054,
+      "endpoints": 168378,
       "env": {
         "beacon": "beacon 4060e3af4",
-        "circt": "CIRCT ab733d13d",
+        "circt": "CIRCT 90c5fd313",
         "pdk": "asap7",
         "xlen": 32
       },
-      "ff": 302680,
+      "ff": 270442,
       "fmax_mhz": 777.0,
-      "macros": 82,
+      "macros": 83,
       "max_stages": 44,
       "overhead_ps": 231,
       "period_ps": 1287,

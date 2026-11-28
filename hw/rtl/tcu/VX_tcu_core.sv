@@ -604,7 +604,9 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .sf_b        (sf_b),
             `endif
                 .array_issue (array_issue),
-                .header      (execute_if.data.header),
+                .uuid        (execute_if.data.header.uuid),
+                .wid         (execute_if.data.header.wid),
+                .cta_id      (execute_if.data.header.cta_id),
                 .step_m      (step_m),
                 .step_n      (step_n),
                 .row_i       (row_i),

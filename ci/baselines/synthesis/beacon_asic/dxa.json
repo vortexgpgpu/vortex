@@ -1,16 +1,16 @@
 {
   "dxa": {
     "clock_mhz": 1000,
-    "config_hash": "80573a9bcba42ef4",
+    "config_hash": "11b60f263b37f97c",
     "configs": "",
     "dut": "dxa",
     "result": {
-      "build_time_s": 15,
+      "build_time_s": 20,
       "cells": 85182,
       "endpoints": 11408,
       "env": {
         "beacon": "beacon 4060e3af4",
-        "circt": "CIRCT ab733d13d",
+        "circt": "CIRCT 90c5fd313",
         "pdk": "asap7",
         "xlen": 32
       },

@@ -1,20 +1,20 @@
 {
   "vm": {
     "clock_mhz": 1000,
-    "config_hash": "81d5538a1f8002d4",
+    "config_hash": "6e11915f22bd258c",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "vm",
     "result": {
-      "build_time_s": 40,
-      "cells": 1130502,
-      "endpoints": 115499,
+      "build_time_s": 55,
+      "cells": 1130863,
+      "endpoints": 115505,
       "env": {
         "beacon": "beacon 4060e3af4",
-        "circt": "CIRCT ab733d13d",
+        "circt": "CIRCT 90c5fd313",
         "pdk": "asap7",
         "xlen": 32
       },
-      "ff": 297476,
+      "ff": 297487,
       "fmax_mhz": 807.1,
       "macros": 66,
       "max_stages": 42,
