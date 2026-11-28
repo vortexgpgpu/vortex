@@ -389,12 +389,13 @@ _DRIVER_PATHS = [
 
 
 def drivers_for_changes(changed):
-    """Set of execution-driver names a diff forces in (path->driver escalation)."""
+    """Driver markers a diff forces in (path->driver escalation): the names
+    `matrix --drivers` selects cells by."""
     out = set()
     for f in changed:
         for prefix, drvs in _DRIVER_PATHS:
             if f.startswith(prefix):
-                out.update(drvs)
+                out.update(driver_marker(d) for d in drvs)
     return out
 
 

@@ -575,9 +575,19 @@ The event policy is a floor. Two conditions raise it:
 |---|---|---|
 | the toolchain cache missed | every driver, every tier | the toolchain will be rebuilt, which affects everything |
 | the diff touches RTL, DPI models, a simulator's own sources, or a configuration TOML | the driver that elaborates it is added | SimX is a separate C++ model and cannot exercise the RTL; an RTL change with SimX-only coverage is untested |
-| the diff is indeterminate — a new branch, a force-push | every driver | there is no base to compare against |
+| the diff is indeterminate — no passing run to compare against | every driver | there is no base to compare against |
 
-AFU paths additionally force the `xrt` and `opae` drivers.
+AFU paths additionally force the `xrtsim` and `opaesim` drivers.
+
+A push diffs from the last commit CI passed (`ci/last_green.py`), not from
+the previous push. A run that failed, was cancelled, or stopped before a
+driver verified nothing, so the changes it carried stay in the diff until a
+run passes. Diffing from the previous push lets an RTL change escape: its own
+run fails before rtlsim, the next push touches only SimX, plans simx alone and
+passes, and master reads green over RTL that never elaborated. Only push and
+schedule runs on commits that carry `ci/last_green.py` count: a dispatch run
+may have narrowed its drivers, and an older run was planned from the previous
+push.
 
 `touches` supports path-scaled selection of cases as well
 (`matrix --changed-from`, `select`). `ci.yml` applies the diff to driver

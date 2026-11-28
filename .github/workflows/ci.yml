@@ -99,8 +99,10 @@ jobs:
           IN_DRIVERS: ${{ github.event.inputs.drivers }}
           IN_TIER: ${{ github.event.inputs.tier }}
           TOOLCHAIN_CACHE_HIT: ${{ steps.tc.outputs.cache-matched-key != '' }}
-          PUSH_BEFORE: ${{ github.event.before }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
+          GH_TOKEN: ${{ github.token }}
+          REF_NAME: ${{ github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
           # Driver/tier policy by event (workflow_dispatch overrides).
@@ -126,10 +128,17 @@ jobs:
           # Change-aware driver escalation: simx is a separate C++ model and cannot
           # exercise the RTL, so a change under hw/rtl, hw/dpi, sim/rtlsim|xrtsim|
           # opaesim, or vendored RTL must force the matching sim driver in even on a
-          # push (which is otherwise simx-only). An indeterminate diff (zero/missing
-          # base, e.g. a new branch or force-push) escalates to full coverage.
+          # push (which is otherwise simx-only). A push diffs from the last commit
+          # CI passed, not from the previous push: a failed or cancelled run
+          # verified nothing, so its changes must stay in the diff. An
+          # indeterminate diff (no such commit, no base) escalates to full coverage.
           if { [ "$EVENT" = "push" ] || [ "$EVENT" = "pull_request" ]; } && [ -n "$DRIVERS" ]; then
-            BASE="$PUSH_BEFORE"; [ "$EVENT" = "pull_request" ] && BASE="$PR_BASE"
+            BASE="$PR_BASE"
+            if [ "$EVENT" = "push" ]; then
+              BASE=$(python3 ci/last_green.py --repo "$GITHUB_REPOSITORY" \
+                       --branch "$REF_NAME" --branch "$DEFAULT_BRANCH" || true)
+              echo "last green commit: ${BASE:-none}"
+            fi
             ESC=$(python3 ci/testcase.py drivers --changed-from="$BASE" || echo ALL)
             if [ "$ESC" = "ALL" ]; then
               echo "indeterminate diff -> full driver coverage"; DRIVERS=""
