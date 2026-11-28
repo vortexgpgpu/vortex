@@ -98,14 +98,14 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
         float local_max = P_row[threadIdx.x];
         for (uint32_t i = 1; i < sp_count; ++i) {
             float v = P_row[threadIdx.x + i * num_threads];
-            local_max = (v > local_max) ? v : local_max;
+            local_max = __builtin_fmaxf(local_max, v);
         }
         float rowmax = warp_reduce_max(local_max, num_threads);
 
         float local_sum = 0.0f;
         for (uint32_t i = 0; i < sp_count; ++i) {
             uint32_t c = threadIdx.x + i * num_threads;
-            float p = expf(P_row[c] - rowmax);
+            float p = expf_fast(P_row[c] - rowmax);
             P_row[c] = p;
             local_sum += p;
         }
@@ -113,8 +113,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
         __syncthreads();
 
         // Compute new m and l
-        float new_m = (m > rowmax) ? m : rowmax;
-        float old_weight = expf(m - new_m), new_weight = expf(rowmax - new_m);
+        float new_m = __builtin_fmaxf(m, rowmax);
+        float old_weight = expf_fast(m - new_m), new_weight = expf_fast(rowmax - new_m);
         float new_l = old_weight * l + new_weight * rowsum;
 
         // Update O
